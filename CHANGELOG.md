@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.4
+
+- Live listen now plays through Web Audio from a raw PCM stream, so browsers actually hear the capture.
+- Stopped stuffing silence into the live stream, which made the player go quiet between packets.
+- Lower live latency by joining nearer the capture edge and skipping ahead if the browser buffer grows.
+
 ## 1.1.3
 
 - Live website stream of the same audio FUBAR is capturing, shared by all listeners from one ring buffer.

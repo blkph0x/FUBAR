@@ -72,17 +72,18 @@ std::size_t LiveAudioHub::pull(Cursor& cursor, std::int16_t* out, std::size_t ma
   }
   if (cursor.generation != generation_) {
     cursor.generation = generation_;
-    const std::uint64_t preroll = sampleRate_ / 5;
+    const std::uint64_t preroll = std::max<std::uint32_t>(sampleRate_ / 12, 160);
     cursor.pos = writePos_ > preroll ? writePos_ - preroll : 0;
   }
   if (cursor.pos > writePos_) cursor.pos = writePos_;
   const std::uint64_t behind = writePos_ - cursor.pos;
-  if (behind > buffer_.size()) cursor.pos = writePos_ - (buffer_.size() / 2);
+  if (behind > buffer_.size()) cursor.pos = writePos_ - (buffer_.size() / 4);
   std::size_t copied = 0;
   while (copied < maxSamples && cursor.pos < writePos_) {
     out[copied++] = buffer_[static_cast<std::size_t>(cursor.pos % buffer_.size())];
     ++cursor.pos;
   }
+  if (cursor.pos >= writePos_) ResetEvent(event_);
   LeaveCriticalSection(&lock_);
   return copied;
 }
@@ -130,4 +131,17 @@ void LiveAudioHub::writeWavHeader(std::uint8_t header[44], std::uint32_t sampleR
   header[34] = 16;
   std::memcpy(header + 36, "data", 4);
   header[40] = header[41] = header[42] = header[43] = 0xFF;
+}
+
+void LiveAudioHub::writePcmHeader(std::uint8_t header[16], std::uint32_t sampleRate) {
+  if (!sampleRate) sampleRate = 48000;
+  std::memcpy(header, "FUBARPCM", 8);
+  header[8] = static_cast<std::uint8_t>(sampleRate);
+  header[9] = static_cast<std::uint8_t>(sampleRate >> 8);
+  header[10] = static_cast<std::uint8_t>(sampleRate >> 16);
+  header[11] = static_cast<std::uint8_t>(sampleRate >> 24);
+  header[12] = 1;
+  header[13] = 0;
+  header[14] = 16;
+  header[15] = 0;
 }

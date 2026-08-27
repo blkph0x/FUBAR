@@ -56,7 +56,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.3 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.4 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -208,7 +208,7 @@ int runSelfTest() {
   LiveAudioHub::Cursor cursor;
   std::vector<std::int16_t> pulled(800);
   const std::size_t got = hub.pull(cursor, pulled.data(), pulled.size(), 0);
-  if (got < 400 || pulled[10] != 10) {
+  if (got < 100 || pulled[got - 1] != 799) {
     std::wcerr << L"Self-test failed: live audio hub\n";
     return 1;
   }
@@ -218,7 +218,13 @@ int runSelfTest() {
     std::wcerr << L"Self-test failed: live WAV header\n";
     return 1;
   }
-  if (!CaptureWebServer::handlePathForTest("GET", "/live.wav", webDir, &status, &type) ||
+  std::uint8_t pcmHeader[16];
+  LiveAudioHub::writePcmHeader(pcmHeader, 8000);
+  if (std::memcmp(pcmHeader, "FUBARPCM", 8) != 0) {
+    std::wcerr << L"Self-test failed: live PCM header\n";
+    return 1;
+  }
+  if (!CaptureWebServer::handlePathForTest("GET", "/live.pcm", webDir, &status, &type) ||
       status != 200) {
     std::wcerr << L"Self-test failed: live stream path\n";
     return 1;
@@ -238,7 +244,7 @@ int runSelfTest() {
     DWORD timeout = 1500;
     setsockopt(liveSock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout),
                sizeof(timeout));
-    const char liveReq[] = "GET /live.wav HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+    const char liveReq[] = "GET /live.pcm HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
     send(liveSock, liveReq, sizeof(liveReq) - 1, 0);
     hub.pushInterleaved(tone.data(), tone.size(), 1);
     char buf[1024];
@@ -249,9 +255,8 @@ int runSelfTest() {
   }
   if (liveSock != INVALID_SOCKET) closesocket(liveSock);
   server.stop();
-  if (!liveConnected || liveHead.find("audio/wav") == std::string::npos ||
-      liveHead.find("RIFF") == std::string::npos) {
-    std::wcerr << L"Self-test failed: live stream did not send WAV audio\n";
+  if (!liveConnected || liveHead.find("FUBARPCM") == std::string::npos) {
+    std::wcerr << L"Self-test failed: live stream did not send PCM audio\n";
     return 1;
   }
   std::wcout << L"Self-test passed: CLI, WAV writer, website, and live stream are operational.\n";

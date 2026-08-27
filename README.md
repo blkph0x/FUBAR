@@ -69,8 +69,9 @@ silence for two seconds, FUBAR tries the next physical input automatically.
 
 The website is off until an admin enables it. While it is on, FUBAR serves a capture player at
 `http://<this-pc>:80/`. Visitors can **Listen live** to the same audio the app is capturing, and
-play saved WAV clips. Live audio is sent as a continuous mono WAV from a shared ring buffer, so
-many listeners do not recapture the device. Disable the checkbox to take the site offline.
+play saved WAV clips. Live audio is a shared mono PCM stream of the current capture — tap
+**Listen live** (the browser cannot play an endless WAV file, so FUBAR uses Web Audio). Disable
+the checkbox to take the site offline.
 
 Port 80 is the standard web port, so no extra port number is required. If Windows Firewall
 prompts, allow FUBAR so other devices on the network can connect.

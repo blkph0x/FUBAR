@@ -27,6 +27,7 @@ class LiveAudioHub {
   bool live() const;
 
   static void writeWavHeader(std::uint8_t header[44], std::uint32_t sampleRate);
+  static void writePcmHeader(std::uint8_t header[16], std::uint32_t sampleRate);
 
  private:
   void resizeLocked(std::uint32_t sampleRate);

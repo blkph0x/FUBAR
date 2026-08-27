@@ -210,7 +210,7 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   brandClass.lpszClassName = kBrandClass;
   RegisterClassExW(&brandClass);
 
-  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.3", WS_OVERLAPPEDWINDOW,
+  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.4", WS_OVERLAPPEDWINDOW,
                             CW_USEDEFAULT, CW_USEDEFAULT, 780, 780, nullptr, nullptr, instance_,
                             this);
   if (!window_) return 1;

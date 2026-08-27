@@ -41,7 +41,8 @@ h1{ margin:.2rem 0; font-size:clamp(2.2rem,7vw,4.4rem); letter-spacing:.04em; }
 .livebox{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:16px 0 8px; padding:14px; background:var(--card); border:1px solid var(--line); border-radius:16px; }
 .livebox button{ border:0; border-radius:999px; padding:10px 18px; font-weight:800; cursor:pointer; background:var(--live); color:#fff; }
 .livebox button.on{ background:var(--green); color:#111; }
-.livebox audio{ flex:1; min-width:220px; }
+.level{ width:160px; height:8px; background:#1a2218; border-radius:99px; overflow:hidden; }
+.level > span{ display:block; height:100%; width:0; background:var(--green); }
 .dot{ width:9px; height:9px; border-radius:50%; background:var(--muted); }
 .dot.live{ background:var(--live); box-shadow:0 0 12px var(--live); }
 .dot.on{ background:var(--green); box-shadow:0 0 12px var(--green); }
@@ -72,7 +73,7 @@ button.play.playing{ background:var(--blue); }
       <div class="name">Live monitor</div>
       <div class="when" id="liveHint">Same audio the app is capturing right now</div>
     </div>
-    <audio id="liveAudio" controls preload="none"></audio>
+    <div class="level" title="Live level"><span id="liveLevel"></span></div>
   </div>
 </header>
 <main>
@@ -122,7 +123,7 @@ function play(id){
   const item = items.find(x => x.id === id);
   if (!item) return;
   if (current === id && !audio.paused){ audio.pause(); return; }
-  liveAudio.pause();
+  stopLive();
   current = id;
   now.textContent = 'Playing ' + item.name;
   audio.src = '/audio/' + encodeURIComponent(item.id);
@@ -136,16 +137,93 @@ list.addEventListener('click', e => {
 audio.addEventListener('pause', render);
 audio.addEventListener('play', render);
 const liveBtn = document.getElementById('liveBtn');
-const liveAudio = document.getElementById('liveAudio');
 const liveHint = document.getElementById('liveHint');
-liveBtn.addEventListener('click', () => {
-  if (!liveAudio.paused && liveAudio.src) { liveAudio.pause(); return; }
+const liveLevel = document.getElementById('liveLevel');
+let liveAbort = null;
+let livePlaying = false;
+function setLiveUi(on, text){
+  livePlaying = on;
+  liveBtn.textContent = on ? 'Stop live' : 'Listen live';
+  liveBtn.classList.toggle('on', on);
+  liveHint.textContent = text;
+  if (!on) liveLevel.style.width = '0';
+}
+function stopLive(){
+  livePlaying = false;
+  if (liveAbort) { liveAbort.abort(); liveAbort = null; }
+  setLiveUi(false, 'Same audio the app is capturing right now');
+}
+async function startLive(){
   audio.pause();
-  liveAudio.src = '/live.wav?t=' + Date.now();
-  liveAudio.play();
+  stopLive();
+  liveAbort = new AbortController();
+  setLiveUi(true, 'Connecting to live capture…');
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  await ac.resume();
+  const res = await fetch('/live.pcm?t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
+  if (!res.ok || !res.body) throw new Error('live unavailable');
+  const reader = res.body.getReader();
+  let buf = new Uint8Array(0);
+  const readMore = async () => {
+    const {done, value} = await reader.read();
+    if (done) return false;
+    const next = new Uint8Array(buf.length + value.length);
+    next.set(buf);
+    next.set(value, buf.length);
+    buf = next;
+    return true;
+  };
+  const take = async (n) => {
+    while (buf.length < n) {
+      if (!await readMore()) throw new Error('live ended');
+    }
+    const out = buf.slice(0, n);
+    buf = buf.slice(n);
+    return out;
+  };
+  const hdr = await take(16);
+  if (new TextDecoder().decode(hdr.slice(0,8)) !== 'FUBARPCM') throw new Error('bad live header');
+  const rate = new DataView(hdr.buffer, hdr.byteOffset, 16).getUint32(8, true);
+  let nextTime = ac.currentTime + 0.08;
+  setLiveUi(true, 'Live · ' + rate + ' Hz');
+  livePlaying = true;
+  while (livePlaying) {
+    if (buf.length < 512 && !await readMore()) break;
+    const maxBytes = Math.max(512, Math.floor(rate / 10) * 2);
+    let bytes = buf.length - (buf.length % 2);
+    if (bytes > maxBytes) bytes = maxBytes;
+    if (bytes < 2) continue;
+    const chunk = buf.slice(0, bytes);
+    buf = buf.slice(bytes);
+    const samples = new Int16Array(chunk.buffer, chunk.byteOffset, chunk.byteLength / 2);
+    const audioBuf = ac.createBuffer(1, samples.length, rate);
+    const data = audioBuf.getChannelData(0);
+    let peak = 0;
+    for (let i = 0; i < samples.length; i++) {
+      const v = samples[i] / 32768;
+      data[i] = v;
+      const a = v < 0 ? -v : v;
+      if (a > peak) peak = a;
+    }
+    liveLevel.style.width = Math.min(100, Math.round(peak * 140)) + '%';
+    if (nextTime < ac.currentTime + 0.04) nextTime = ac.currentTime + 0.04;
+    if (nextTime > ac.currentTime + 0.35) {
+      nextTime = ac.currentTime + 0.08;
+    }
+    const src = ac.createBufferSource();
+    src.buffer = audioBuf;
+    src.connect(ac.destination);
+    src.start(nextTime);
+    nextTime += audioBuf.duration;
+  }
+}
+liveBtn.addEventListener('click', () => {
+  if (livePlaying) { stopLive(); return; }
+  startLive().catch((err) => {
+    if (err && err.name === 'AbortError') return;
+    setLiveUi(false, 'Live stream dropped — tap Listen live');
+  });
 });
-liveAudio.addEventListener('play', () => { liveBtn.textContent = 'Stop live'; liveBtn.classList.add('on'); liveHint.textContent = 'Streaming the live capture'; });
-liveAudio.addEventListener('pause', () => { liveBtn.textContent = 'Listen live'; liveBtn.classList.remove('on'); liveHint.textContent = 'Same audio the app is capturing right now'; });
 async function refresh(){
   try {
     const [statusRes, listRes] = await Promise.all([
@@ -464,6 +542,11 @@ bool CaptureWebServer::handlePathForTest(const std::string& method, const std::s
     *contentType = "audio/wav";
     return true;
   }
+  if (path == "/live.pcm") {
+    *status = 200;
+    *contentType = "application/octet-stream";
+    return true;
+  }
   if (path == "/api/status" || path == "/api/captures") {
     *status = 200;
     *contentType = "application/json";
@@ -616,11 +699,11 @@ void CaptureWebServer::acceptLoop() {
   }
 }
 
-void CaptureWebServer::streamLive(std::uintptr_t clientHandle) {
+void CaptureWebServer::streamLive(std::uintptr_t clientHandle, bool wavContainer) {
   const SOCKET client = static_cast<SOCKET>(clientHandle);
   const BOOL nodelay = TRUE;
   setsockopt(client, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&nodelay), sizeof(nodelay));
-  DWORD sendTimeout = 4000;
+  DWORD sendTimeout = 5000;
   setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&sendTimeout),
              sizeof(sendTimeout));
 
@@ -628,34 +711,36 @@ void CaptureWebServer::streamLive(std::uintptr_t clientHandle) {
   LiveAudioHub* hub = liveHub_;
   LeaveCriticalSection(&lock_);
 
+  for (int wait = 0; hub && !hub->live() && wait < 40 && !stop_; ++wait) Sleep(25);
   const std::uint32_t rate = (hub && hub->sampleRate()) ? hub->sampleRate() : 48000;
-  std::uint8_t wav[44];
-  LiveAudioHub::writeWavHeader(wav, rate);
-  const char* prelude =
-      "HTTP/1.0 200 OK\r\n"
-      "Content-Type: audio/wav\r\n"
-      "Cache-Control: no-store, no-cache\r\n"
-      "Pragma: no-cache\r\n"
-      "Connection: close\r\n"
-      "icy-name: FUBAR Live\r\n"
-      "\r\n";
+  const char* prelude = wavContainer
+      ? "HTTP/1.0 200 OK\r\nContent-Type: audio/wav\r\nCache-Control: no-store\r\nConnection: close\r\nicy-name: FUBAR Live\r\n\r\n"
+      : "HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
   if (!sendAll(client, prelude, static_cast<int>(std::strlen(prelude)))) return;
-  if (!sendAll(client, reinterpret_cast<const char*>(wav), 44)) return;
+  if (wavContainer) {
+    std::uint8_t wav[44];
+    LiveAudioHub::writeWavHeader(wav, rate);
+    if (!sendAll(client, reinterpret_cast<const char*>(wav), 44)) return;
+  } else {
+    std::uint8_t pcmHeader[16];
+    LiveAudioHub::writePcmHeader(pcmHeader, rate);
+    if (!sendAll(client, reinterpret_cast<const char*>(pcmHeader), 16)) return;
+  }
 
   LiveAudioHub::Cursor cursor;
-  std::int16_t pcm[2048];
+  std::int16_t pcm[1024];
   std::uint32_t generation = hub ? hub->generation() : 0;
   while (!stop_) {
     if (hub && hub->sampleRate() && hub->sampleRate() != rate) break;
-    if (hub && hub->live() && hub->generation() != generation) {
+    if (hub && hub->generation() != generation) {
+      if (!hub->live()) break;
       generation = hub->generation();
       cursor = {};
     }
-    std::size_t got = hub ? hub->pull(cursor, pcm, 2048, 40) : 0;
+    const std::size_t got = hub ? hub->pull(cursor, pcm, 1024, 25) : 0;
     if (got == 0) {
-      got = static_cast<std::size_t>(std::max<std::uint32_t>(rate / 50, 160));
-      if (got > 2048) got = 2048;
-      std::memset(pcm, 0, got * sizeof(std::int16_t));
+      Sleep(5);
+      continue;
     }
     if (!sendAll(client, reinterpret_cast<const char*>(pcm),
                  static_cast<int>(got * sizeof(std::int16_t)))) {
@@ -711,7 +796,11 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     return;
   }
   if (path == "/live" || path == "/live.wav") {
-    streamLive(static_cast<std::uintptr_t>(client));
+    streamLive(static_cast<std::uintptr_t>(client), true);
+    return;
+  }
+  if (path == "/live.pcm") {
+    streamLive(static_cast<std::uintptr_t>(client), false);
     return;
   }
   if (path.rfind("/audio/", 0) == 0) {

@@ -49,7 +49,7 @@ class CaptureWebServer {
  private:
   void acceptLoop();
   void handleClient(std::uintptr_t client);
-  void streamLive(std::uintptr_t client);
+  void streamLive(std::uintptr_t client, bool wavContainer);
   std::filesystem::path rootLocked() const;
   std::string statusJson() const;
   std::string capturesJson() const;
