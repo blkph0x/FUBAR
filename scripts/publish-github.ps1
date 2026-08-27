@@ -1,6 +1,6 @@
 param(
   [string]$RepositoryName = "AudioVox",
-  [string]$Tag = "v1.0.1"
+  [string]$Tag = "v1.0.2"
 )
 
 $ErrorActionPreference = "Stop"

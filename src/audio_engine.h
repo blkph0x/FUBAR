@@ -15,6 +15,8 @@ struct AudioDeviceInfo {
   bool isDefault = false;
 };
 
+bool testAudioSampleDecoder();
+
 class AudioEngine {
  public:
   using StatusCallback = std::function<void(const std::wstring&)>;

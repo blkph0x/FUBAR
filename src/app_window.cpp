@@ -1,5 +1,7 @@
 #include "app_window.h"
 
+#include "audio_safety.h"
+
 #include <commctrl.h>
 #include <mmsystem.h>
 #include <shellapi.h>
@@ -159,7 +161,7 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   replayClass.lpszClassName = kReplayClass;
   RegisterClassExW(&replayClass);
 
-  window_ = CreateWindowExW(0, kMainClass, L"AudioVox VOX V1.0.1", WS_OVERLAPPEDWINDOW,
+  window_ = CreateWindowExW(0, kMainClass, L"AudioVox VOX V1.0.2", WS_OVERLAPPEDWINDOW,
                             CW_USEDEFAULT, CW_USEDEFAULT, 780, 735, nullptr, nullptr, instance_,
                             this);
   if (!window_) return 1;
@@ -448,6 +450,9 @@ void AppWindow::startEngine() {
   AudioOptions requestedOptions = optionsFromControls();
   engine_.stop();
   options_ = std::move(requestedOptions);
+  const bool virtualInput = isVirtualAudioEndpoint(options_.deviceName);
+  EnableWindow(monitorCheck_, !virtualInput);
+  SetWindowTextW(monitorCheck_, virtualInput ? L"Monitor safety lock" : L"Live monitor");
   if (autoSelectInput_) inputProbeStarted_ = std::chrono::steady_clock::now();
   EnableWindow(splitCheck_, options_.mode == ChannelMode::Stereo);
   EnableWindow(appendCheck_, !options_.forceRecord);
@@ -532,6 +537,10 @@ void AppWindow::updateMeters() {
 void AppWindow::updateStatus(const std::wstring& status) {
   std::wstring text = status;
   if (status == L"Recording") text = L"● RECORDING — signal above threshold";
+  else if (status == L"LISTENING - live monitor disabled for virtual-cable capture safety") {
+    text = L"LISTENING — " + options_.deviceName +
+           L" — monitor safety lock; capture remains active";
+  }
   else if (status == L"Listening") {
     text = L"LISTENING — " +
            (options_.deviceName.empty() ? std::wstring(L"default input") : options_.deviceName) +

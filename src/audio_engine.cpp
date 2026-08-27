@@ -1,5 +1,6 @@
 #include "audio_engine.h"
 
+#include "audio_safety.h"
 #include "wav_writer.h"
 #include "vox_gate.h"
 
@@ -12,11 +13,13 @@
 #include <propvarutil.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <deque>
 #include <iomanip>
+#include <limits>
 #include <memory>
 #include <span>
 #include <sstream>
@@ -57,44 +60,142 @@ std::wstring hresultText(const wchar_t* operation, HRESULT result) {
 }
 
 float peakToDb(float peak) {
-  return peak <= 0.0000316228f ? -90.0f : std::clamp(20.0f * std::log10(peak), -90.0f, 0.0f);
+  if (!std::isfinite(peak) || peak <= 0.0000316228f) return -90.0f;
+  return std::clamp(20.0f * std::log10(std::min(peak, 1.0f)), -90.0f, 0.0f);
 }
 
 std::int16_t floatToPcm16(float sample) {
-  const float clipped = std::clamp(sample, -1.0f, 1.0f);
+  const float clipped = sanitizeAudioSample(sample);
   return static_cast<std::int16_t>(std::lrint(clipped * 32767.0f));
 }
 
-float sampleAt(const BYTE* data, UINT32 frame, WORD channel, const WAVEFORMATEX* format,
-               bool silent) {
-  if (silent || data == nullptr) return 0.0f;
-  const WORD channels = std::max<WORD>(format->nChannels, 1);
-  const std::size_t index = static_cast<std::size_t>(frame) * channels + channel;
-  bool isFloat = format->wFormatTag == WAVE_FORMAT_IEEE_FLOAT;
-  bool isPcm = format->wFormatTag == WAVE_FORMAT_PCM;
-  if (format->wFormatTag == WAVE_FORMAT_EXTENSIBLE && format->cbSize >= 22) {
-    const auto* extensible = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(format);
-    isFloat = extensible->SubFormat.Data1 == WAVE_FORMAT_IEEE_FLOAT;
-    isPcm = extensible->SubFormat.Data1 == WAVE_FORMAT_PCM;
+enum class SampleEncoding {
+  Unsupported,
+  Unsigned8,
+  Signed16,
+  Signed24,
+  Signed32,
+  Float32,
+  Float64
+};
+
+class SampleDecoder {
+ public:
+  explicit SampleDecoder(const WAVEFORMATEX* format) {
+    if (!format || format->nChannels == 0 || format->nBlockAlign == 0 ||
+        format->nBlockAlign % format->nChannels != 0) {
+      return;
+    }
+    channels_ = format->nChannels;
+    blockAlign_ = format->nBlockAlign;
+    sampleStride_ = static_cast<WORD>(format->nBlockAlign / format->nChannels);
+    sampleRate_ = format->nSamplesPerSec;
+    bitsPerSample_ = format->wBitsPerSample;
+    bool isFloat = format->wFormatTag == WAVE_FORMAT_IEEE_FLOAT;
+    bool isPcm = format->wFormatTag == WAVE_FORMAT_PCM;
+    if (format->wFormatTag == WAVE_FORMAT_EXTENSIBLE && format->cbSize >= 22) {
+      const auto* extensible = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(format);
+      isFloat = extensible->SubFormat.Data1 == WAVE_FORMAT_IEEE_FLOAT;
+      isPcm = extensible->SubFormat.Data1 == WAVE_FORMAT_PCM;
+    }
+    if (isFloat && bitsPerSample_ == 32 && sampleStride_ >= 4) {
+      encoding_ = SampleEncoding::Float32;
+    } else if (isFloat && bitsPerSample_ == 64 && sampleStride_ >= 8) {
+      encoding_ = SampleEncoding::Float64;
+    } else if (isPcm && bitsPerSample_ == 8 && sampleStride_ >= 1) {
+      encoding_ = SampleEncoding::Unsigned8;
+    } else if (isPcm && bitsPerSample_ == 16 && sampleStride_ >= 2) {
+      encoding_ = SampleEncoding::Signed16;
+    } else if (isPcm && bitsPerSample_ == 24 && sampleStride_ >= 3) {
+      encoding_ = SampleEncoding::Signed24;
+    } else if (isPcm && bitsPerSample_ == 32 && sampleStride_ >= 4) {
+      encoding_ = SampleEncoding::Signed32;
+    }
   }
-  if (isFloat && format->wBitsPerSample == 32) {
-    return reinterpret_cast<const float*>(data)[index];
+
+  bool valid() const { return encoding_ != SampleEncoding::Unsupported; }
+  WORD channels() const { return channels_; }
+
+  std::wstring description() const {
+    std::wostringstream stream;
+    stream << sampleRate_ << L" Hz, " << channels_ << L" channel";
+    if (channels_ != 1) stream << L"s";
+    stream << L", " << bitsPerSample_ << L"-bit ";
+    switch (encoding_) {
+      case SampleEncoding::Float32:
+      case SampleEncoding::Float64: stream << L"float"; break;
+      case SampleEncoding::Unsigned8:
+      case SampleEncoding::Signed16:
+      case SampleEncoding::Signed24:
+      case SampleEncoding::Signed32: stream << L"PCM"; break;
+      case SampleEncoding::Unsupported: stream << L"unsupported format"; break;
+    }
+    stream << L", block align " << blockAlign_;
+    return stream.str();
   }
-  if (isPcm && format->wBitsPerSample == 16) {
-    return static_cast<float>(reinterpret_cast<const std::int16_t*>(data)[index]) / 32768.0f;
+
+  float read(const BYTE* data, UINT32 frame, WORD channel, bool silent) const {
+    if (silent || !data || !valid()) return 0.0f;
+    const WORD safeChannel = std::min<WORD>(channel, static_cast<WORD>(channels_ - 1));
+    const BYTE* sample = data + static_cast<std::size_t>(frame) * blockAlign_ +
+                         static_cast<std::size_t>(safeChannel) * sampleStride_;
+    switch (encoding_) {
+      case SampleEncoding::Unsigned8:
+        return sanitizeAudioSample((static_cast<int>(*sample) - 128) / 128.0);
+      case SampleEncoding::Signed16: {
+        std::int16_t value = 0;
+        std::memcpy(&value, sample, sizeof(value));
+        return sanitizeAudioSample(value / 32768.0);
+      }
+      case SampleEncoding::Signed24: {
+        std::int32_t value = static_cast<std::int32_t>(sample[0]) |
+                             (static_cast<std::int32_t>(sample[1]) << 8) |
+                             (static_cast<std::int32_t>(sample[2]) << 16);
+        if (value & 0x00800000) value |= static_cast<std::int32_t>(0xff000000);
+        return sanitizeAudioSample(value / 8388608.0);
+      }
+      case SampleEncoding::Signed32: {
+        std::int32_t value = 0;
+        std::memcpy(&value, sample, sizeof(value));
+        return sanitizeAudioSample(value / 2147483648.0);
+      }
+      case SampleEncoding::Float32: {
+        float value = 0.0f;
+        std::memcpy(&value, sample, sizeof(value));
+        return sanitizeAudioSample(value);
+      }
+      case SampleEncoding::Float64: {
+        double value = 0.0;
+        std::memcpy(&value, sample, sizeof(value));
+        return sanitizeAudioSample(value);
+      }
+      case SampleEncoding::Unsupported: return 0.0f;
+    }
+    return 0.0f;
   }
-  if (isPcm && format->wBitsPerSample == 32) {
-    return static_cast<float>(reinterpret_cast<const std::int32_t*>(data)[index] / 2147483648.0);
+
+ private:
+  SampleEncoding encoding_ = SampleEncoding::Unsupported;
+  WORD channels_ = 0;
+  WORD blockAlign_ = 0;
+  WORD sampleStride_ = 0;
+  DWORD sampleRate_ = 0;
+  WORD bitsPerSample_ = 0;
+};
+
+std::wstring friendlyName(IMMDevice* device, const std::wstring& fallback = L"Audio device") {
+  if (!device) return fallback;
+  ComPtr<IPropertyStore> properties;
+  if (FAILED(device->OpenPropertyStore(STGM_READ, properties.put()))) return fallback;
+  PROPVARIANT value;
+  PropVariantInit(&value);
+  std::wstring name = fallback;
+  if (SUCCEEDED(properties->GetValue(PKEY_Device_FriendlyName, &value)) &&
+      value.vt == VT_LPWSTR && value.pwszVal) {
+    name = value.pwszVal;
   }
-  if (isPcm && format->wBitsPerSample == 24) {
-    const BYTE* sample = data + index * 3;
-    std::int32_t value = static_cast<std::int32_t>(sample[0]) |
-                         (static_cast<std::int32_t>(sample[1]) << 8) |
-                         (static_cast<std::int32_t>(sample[2]) << 16);
-    if (value & 0x00800000) value |= static_cast<std::int32_t>(0xff000000);
-    return static_cast<float>(value / 8388608.0);
-  }
-  return 0.0f;
+  PropVariantClear(&value);
+  return name;
 }
 
 std::filesystem::path recordingPath(const AudioOptions& options,
@@ -116,20 +217,14 @@ std::filesystem::path recordingPath(const AudioOptions& options,
   return options.outputDirectory / name.str();
 }
 
-void CALLBACK waveOutCallback(HWAVEOUT output, UINT message, DWORD_PTR, DWORD_PTR first,
-                              DWORD_PTR) {
-  if (message != WOM_DONE || first == 0) return;
-  auto* header = reinterpret_cast<WAVEHDR*>(first);
-  waveOutUnprepareHeader(output, header, sizeof(WAVEHDR));
-  delete[] header->lpData;
-  delete header;
-}
-
 class MonitorOutput {
  public:
   ~MonitorOutput() { close(); }
 
   bool open(DWORD sampleRate) {
+    close();
+    event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!event_) return false;
     WAVEFORMATEX format{};
     format.wFormatTag = WAVE_FORMAT_PCM;
     format.nChannels = 2;
@@ -138,38 +233,158 @@ class MonitorOutput {
     format.nBlockAlign = 4;
     format.nAvgBytesPerSec = sampleRate * format.nBlockAlign;
     const MMRESULT result = waveOutOpen(&handle_, WAVE_MAPPER, &format,
-                                        reinterpret_cast<DWORD_PTR>(waveOutCallback), 0,
-                                        CALLBACK_FUNCTION);
-    return result == MMSYSERR_NOERROR;
+                                        reinterpret_cast<DWORD_PTR>(event_), 0,
+                                        CALLBACK_EVENT);
+    if (result == MMSYSERR_NOERROR) return true;
+    CloseHandle(event_);
+    event_ = nullptr;
+    return false;
   }
 
   void submit(std::span<const std::int16_t> samples) {
-    if (!handle_ || samples.empty()) return;
+    releaseCompleted();
+    if (!handle_ || samples.empty() || pendingHeaders_.size() >= kMaximumPendingBuffers) return;
     auto* bytes = new char[samples.size_bytes()];
     std::memcpy(bytes, samples.data(), samples.size_bytes());
     auto* header = new WAVEHDR{};
     header->lpData = bytes;
     header->dwBufferLength = static_cast<DWORD>(samples.size_bytes());
-    if (waveOutPrepareHeader(handle_, header, sizeof(WAVEHDR)) != MMSYSERR_NOERROR ||
-        waveOutWrite(handle_, header, sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
+    if (waveOutPrepareHeader(handle_, header, sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
+      delete[] bytes;
+      delete header;
+      return;
+    }
+    if (waveOutWrite(handle_, header, sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
       waveOutUnprepareHeader(handle_, header, sizeof(WAVEHDR));
       delete[] bytes;
       delete header;
+      return;
     }
+    pendingHeaders_.push_back(header);
   }
 
   void close() {
-    if (!handle_) return;
-    waveOutReset(handle_);
-    waveOutClose(handle_);
-    handle_ = nullptr;
+    if (handle_) {
+      waveOutReset(handle_);
+      while (!pendingHeaders_.empty()) {
+        releaseCompleted();
+        if (!pendingHeaders_.empty() && event_) WaitForSingleObject(event_, 25);
+      }
+      waveOutClose(handle_);
+      handle_ = nullptr;
+    }
+    if (event_) {
+      CloseHandle(event_);
+      event_ = nullptr;
+    }
   }
 
  private:
+  void releaseCompleted() {
+    auto header = pendingHeaders_.begin();
+    while (header != pendingHeaders_.end()) {
+      if (((*header)->dwFlags & WHDR_DONE) == 0 ||
+          waveOutUnprepareHeader(handle_, *header, sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
+        ++header;
+        continue;
+      }
+      delete[] (*header)->lpData;
+      delete *header;
+      header = pendingHeaders_.erase(header);
+    }
+  }
+
+  static constexpr std::uint32_t kMaximumPendingBuffers = 32;
   HWAVEOUT handle_ = nullptr;
+  HANDLE event_ = nullptr;
+  std::vector<WAVEHDR*> pendingHeaders_;
 };
 
 }  // namespace
+
+bool testAudioSampleDecoder() {
+  auto format = [](WORD tag, WORD bits, WORD channels, WORD sampleStride) {
+    WAVEFORMATEX value{};
+    value.wFormatTag = tag;
+    value.nChannels = channels;
+    value.nSamplesPerSec = 48000;
+    value.wBitsPerSample = bits;
+    value.nBlockAlign = static_cast<WORD>(channels * sampleStride);
+    value.nAvgBytesPerSec = value.nSamplesPerSec * value.nBlockAlign;
+    return value;
+  };
+  auto approximatelyEqual = [](float value, float expected) {
+    return std::abs(value - expected) < 0.0001f;
+  };
+
+  auto pcm8 = format(WAVE_FORMAT_PCM, 8, 1, 1);
+  const std::array<BYTE, 1> pcm8Data{192};
+  if (!approximatelyEqual(SampleDecoder(&pcm8).read(pcm8Data.data(), 0, 0, false), 0.5f)) {
+    return false;
+  }
+
+  auto pcm16 = format(WAVE_FORMAT_PCM, 16, 1, 2);
+  const std::int16_t pcm16Data = 16384;
+  if (!approximatelyEqual(
+          SampleDecoder(&pcm16).read(reinterpret_cast<const BYTE*>(&pcm16Data), 0, 0, false),
+          0.5f)) {
+    return false;
+  }
+
+  auto pcm24 = format(WAVE_FORMAT_PCM, 24, 1, 3);
+  const std::array<BYTE, 3> pcm24Data{0x00, 0x00, 0x40};
+  if (!approximatelyEqual(SampleDecoder(&pcm24).read(pcm24Data.data(), 0, 0, false), 0.5f)) {
+    return false;
+  }
+
+  auto pcm32 = format(WAVE_FORMAT_PCM, 32, 1, 4);
+  const std::int32_t pcm32Data = 1073741824;
+  if (!approximatelyEqual(
+          SampleDecoder(&pcm32).read(reinterpret_cast<const BYTE*>(&pcm32Data), 0, 0, false),
+          0.5f)) {
+    return false;
+  }
+
+  auto float32 = format(WAVE_FORMAT_IEEE_FLOAT, 32, 1, 4);
+  const float float32Data = 0.25f;
+  if (!approximatelyEqual(
+          SampleDecoder(&float32).read(reinterpret_cast<const BYTE*>(&float32Data), 0, 0, false),
+          0.25f)) {
+    return false;
+  }
+
+  auto float64 = format(WAVE_FORMAT_IEEE_FLOAT, 64, 1, 8);
+  const double float64Data = -0.25;
+  if (!approximatelyEqual(
+          SampleDecoder(&float64).read(reinterpret_cast<const BYTE*>(&float64Data), 0, 0, false),
+          -0.25f)) {
+    return false;
+  }
+
+  WAVEFORMATEXTENSIBLE extensible{};
+  extensible.Format = format(WAVE_FORMAT_EXTENSIBLE, 32, 2, 4);
+  extensible.Format.cbSize = 22;
+  extensible.SubFormat.Data1 = WAVE_FORMAT_IEEE_FLOAT;
+  const std::array<float, 2> extensibleData{0.75f, -0.75f};
+  const SampleDecoder extensibleDecoder(&extensible.Format);
+  if (!approximatelyEqual(extensibleDecoder.read(
+                              reinterpret_cast<const BYTE*>(extensibleData.data()), 0, 0, false),
+                          0.75f) ||
+      !approximatelyEqual(extensibleDecoder.read(
+                              reinterpret_cast<const BYTE*>(extensibleData.data()), 0, 1, false),
+                          -0.75f)) {
+    return false;
+  }
+
+  const float invalidFloat = std::numeric_limits<float>::infinity();
+  if (SampleDecoder(&float32).read(reinterpret_cast<const BYTE*>(&invalidFloat), 0, 0, false) !=
+      0.0f) {
+    return false;
+  }
+  auto invalid = format(WAVE_FORMAT_PCM, 16, 2, 2);
+  invalid.nBlockAlign = 3;
+  return !SampleDecoder(&invalid).valid();
+}
 
 AudioEngine::AudioEngine() {
   InitializeCriticalSection(&statusLock_);
@@ -266,7 +481,21 @@ void AudioEngine::stop() {
 }
 
 DWORD WINAPI AudioEngine::captureThreadEntry(LPVOID context) {
-  static_cast<AudioEngine*>(context)->captureThread();
+  auto* engine = static_cast<AudioEngine*>(context);
+  try {
+    engine->captureThread();
+  } catch (const std::exception& error) {
+    engine->running_ = false;
+    engine->recording_ = false;
+    std::wstring message = L"Audio worker stopped: ";
+    const std::string detail = error.what();
+    message.append(detail.begin(), detail.end());
+    engine->setStatus(message);
+  } catch (...) {
+    engine->running_ = false;
+    engine->recording_ = false;
+    engine->setStatus(L"Audio worker stopped after an unexpected error");
+  }
   return 0;
 }
 
@@ -338,6 +567,14 @@ void AudioEngine::captureThread() {
     return;
   }
 
+  const SampleDecoder decoder(mixFormat);
+  if (!decoder.valid()) {
+    setStatus(L"Unsupported input format: " + decoder.description());
+    CoTaskMemFree(mixFormat);
+    if (uninitialize) CoUninitialize();
+    return;
+  }
+
   result = client->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_NOPERSIST,
                               10000000, 0, mixFormat, nullptr);
   if (FAILED(result)) {
@@ -358,7 +595,7 @@ void AudioEngine::captureThread() {
   }
 
   const DWORD sampleRate = mixFormat->nSamplesPerSec;
-  const WORD inputChannels = std::max<WORD>(mixFormat->nChannels, 1);
+  const WORD inputChannels = decoder.channels();
   const WORD recordChannels = options_.mode == ChannelMode::Stereo ? 2 : 1;
   const bool splitStereo = options_.splitStereoFiles && options_.mode == ChannelMode::Stereo;
   const std::size_t preRollLimit = static_cast<std::size_t>(
@@ -367,9 +604,27 @@ void AudioEngine::captureThread() {
       std::max(0.1f, options_.holdSeconds) * sampleRate);
   const float thresholdLinear = std::pow(10.0f, options_.thresholdDb / 20.0f);
 
+  const std::wstring captureName = friendlyName(device.get(), options_.deviceName);
+  bool monitorEnabled = options_.monitor;
+  std::wstring monitorWarning;
+  if (monitorEnabled && isVirtualAudioEndpoint(captureName)) {
+    monitorEnabled = false;
+    monitorWarning = L"LISTENING - live monitor disabled for virtual-cable capture safety";
+  } else if (monitorEnabled) {
+    ComPtr<IMMDevice> renderDevice;
+    if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, renderDevice.put()))) {
+      const std::wstring renderName = friendlyName(renderDevice.get(), L"Default output");
+      if (isVirtualCableMonitorLoop(captureName, renderName)) {
+        monitorEnabled = false;
+        monitorWarning = L"LISTENING - live monitor disabled to prevent a virtual-cable loop";
+      }
+    }
+  }
+
   MonitorOutput monitor;
-  if (options_.monitor && !monitor.open(sampleRate)) {
-    setStatus(L"Listening started; live monitor unavailable on the selected output format");
+  if (monitorEnabled && !monitor.open(sampleRate)) {
+    monitorEnabled = false;
+    monitorWarning = L"LISTENING - live monitor unavailable for this output format";
   }
 
   std::deque<std::int16_t> preRoll;
@@ -479,7 +734,8 @@ void AudioEngine::captureThread() {
   }
 
   running_ = true;
-  setStatus(L"Listening");
+  setStatus(L"Input format: " + decoder.description());
+  setStatus(monitorWarning.empty() ? L"Listening" : monitorWarning);
   if (options_.forceRecord && beginRecording()) voxGate.activate();
 
   while (!stopRequested_) {
@@ -516,8 +772,8 @@ void AudioEngine::captureThread() {
       float outputRightPeak = 0.0f;
 
       for (UINT32 frame = 0; frame < frameCount; ++frame) {
-        const float left = sampleAt(data, frame, 0, mixFormat, silent);
-        const float right = inputChannels > 1 ? sampleAt(data, frame, 1, mixFormat, silent) : left;
+        const float left = decoder.read(data, frame, 0, silent);
+        const float right = inputChannels > 1 ? decoder.read(data, frame, 1, silent) : left;
         inputLeftPeak = std::max(inputLeftPeak, std::abs(left));
         inputRightPeak = std::max(inputRightPeak, std::abs(right));
 
@@ -553,7 +809,7 @@ void AudioEngine::captureThread() {
       outputRightDb_ = peakToDb(outputRightPeak);
       const float packetPeak = std::max(outputLeftPeak, outputRightPeak);
 
-      if (options_.monitor) monitor.submit(monitorSamples);
+      if (monitorEnabled) monitor.submit(monitorSamples);
 
       bool packetAlreadyBuffered = false;
       if (!voxGate.active()) {

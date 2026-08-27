@@ -10,6 +10,7 @@ native GUI unless `--headless` is supplied. Both interfaces use the same WASAPI 
   delivering digital silence.
 - Supports stereo, left-only, right-only, and mono-mix routing.
 - Live speaker monitoring of the selected route.
+- Virtual-cable monitor safety prevents routing a cable capture back into its playback endpoint.
 - Separate input-left, input-right, output-left, and output-right level meters.
 - Numeric dBFS readouts make muted or silent inputs immediately visible.
 - Adjustable VOX threshold from -60 dBFS to -5 dBFS.
@@ -21,6 +22,7 @@ native GUI unless `--headless` is supplied. Both interfaces use the same WASAPI 
 - Separate replay-log window with timestamp, frequency, mode, duration, peak level, playback,
   and Explorer access.
 - Full terminal operation for scripts, scheduled jobs, and automation.
+- Handles shared-mode 8/16/24/32-bit PCM and 32/64-bit floating-point input safely.
 
 ## Build
 
@@ -62,6 +64,17 @@ silence for two seconds, AudioVox tries the next physical input automatically.
 Use headphones when live monitoring a microphone to avoid acoustic feedback.
 If every input remains at `-90.0 dB`, check the microphone's hardware mute switch and Windows
 microphone privacy settings, then select another input or click **Refresh**.
+
+### VB-CABLE setup
+
+1. Send the source application's playback to **CABLE Input**.
+2. Select **CABLE Output (VB-Audio Virtual Cable)** as the AudioVox input.
+3. Confirm the numeric input meters move and set the VOX threshold below the displayed signal.
+4. AudioVox keeps recording and metering active but safety-locks its own live monitor for virtual
+   cable inputs. Monitor through a hardware output or a separate Voicemeeter route instead.
+
+This follows VB-Audio's endpoint direction: CABLE Input is the playback side and CABLE Output is
+the recording side. See the [official VB-CABLE reference manual](https://vb-audio.com/Cable/VBCABLE_ReferenceManual.pdf).
 
 ## Terminal automation
 

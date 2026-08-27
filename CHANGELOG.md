@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.2
+
+- Fixed a WinMM monitor-buffer cleanup deadlock that could hang or crash on another PC.
+- Prevents VB-CABLE and Voicemeeter capture-to-playback feedback loops and meter saturation.
+- Added bounded event-driven monitor buffering to prevent unbounded memory growth.
+- Hardened WASAPI decoding for 8/16/24/32-bit PCM plus 32/64-bit floating-point formats.
+- Sanitizes invalid, infinite, and out-of-range samples before metering or conversion.
+- Reports the active input format and catches audio-worker exceptions with a visible error.
+
 ## 1.0.1
 
 - Fixed the disabled Apply button that prevented changed recording options from taking effect.

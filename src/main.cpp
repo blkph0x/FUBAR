@@ -1,5 +1,6 @@
 #include "app_window.h"
 #include "audio_engine.h"
+#include "audio_safety.h"
 #include "wav_writer.h"
 #include "vox_gate.h"
 
@@ -26,7 +27,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"AudioVox 1.0.1 - VOX audio monitor and recorder\n\n"
+      << L"AudioVox 1.0.2 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  AudioVox.exe                         Open GUI and start listening\n"
       << L"  AudioVox.exe --list-devices          List capture devices\n"
@@ -56,6 +57,26 @@ ChannelMode parseMode(const std::wstring& text) {
 }
 
 int runSelfTest() {
+  if (!testAudioSampleDecoder()) {
+    std::wcerr << L"Self-test failed: audio sample decoder error\n";
+    return 1;
+  }
+
+  if (!isVirtualCableMonitorLoop(L"CABLE Output (VB-Audio Virtual Cable)",
+                                 L"CABLE Input (VB-Audio Virtual Cable)") ||
+      !isVirtualCableMonitorLoop(L"CABLE-A Output (VB-Audio Cable A)",
+                                 L"CABLE-A Input (VB-Audio Cable A)") ||
+      isVirtualCableMonitorLoop(L"CABLE-A Output (VB-Audio Cable A)",
+                                L"CABLE-B Input (VB-Audio Cable B)") ||
+      isVirtualCableMonitorLoop(L"Microphone (USB Audio)", L"Speakers (USB Audio)") ||
+      !isVirtualAudioEndpoint(L"CABLE Output (VB-Audio Virtual Cable)") ||
+      isVirtualAudioEndpoint(L"Microphone (USB Audio)") ||
+      sanitizeAudioSample(INFINITY) != 0.0f || sanitizeAudioSample(NAN) != 0.0f ||
+      sanitizeAudioSample(2.0) != 1.0f || sanitizeAudioSample(-2.0) != -1.0f) {
+    std::wcerr << L"Self-test failed: virtual-cable safety error\n";
+    return 1;
+  }
+
   VoxGate gate(100);
   if (gate.update(false, 50, false, true) != VoxAction::None ||
       gate.update(true, 10, false, true) != VoxAction::Start ||
