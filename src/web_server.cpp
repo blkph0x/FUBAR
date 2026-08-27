@@ -154,6 +154,7 @@ let livePlaying = false;
 let liveWanted = false;
 let liveAc = null;
 let liveMaster = null;
+let liveRouted = '';
 function queueLabel(status){
   const limit = Math.max(1, Number(status && status.listenerLimit) || 5);
   const n = Number(status && status.listeners) || 0;
@@ -177,6 +178,7 @@ function stopLive(){
   try { if (liveAc && liveAc.state !== 'closed' && liveAc.close) liveAc.close(); } catch {}
   liveAc = null;
   liveMaster = null;
+  liveRouted = '';
   setLiveUi(false, 'Same audio the app is capturing right now');
 }
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
@@ -191,17 +193,28 @@ async function setupLiveGraph(){
     liveAc = new Ctx({latencyHint:'playback'});
     liveMaster = liveAc.createGain();
     const dest = liveAc.createMediaStreamDestination();
-    liveMaster.connect(liveAc.destination);
     liveMaster.connect(dest);
     liveMedia.setAttribute('playsinline','true');
     liveMedia.setAttribute('webkit-playsinline','true');
     liveMedia.srcObject = dest.stream;
+    liveRouted = '';
   }
   if (navigator.audioSession) {
     try { navigator.audioSession.type = 'playback'; } catch {}
   }
   await liveAc.resume();
-  try { await liveMedia.play(); } catch {}
+  if (liveRouted !== 'direct') {
+    try {
+      liveMedia.muted = false;
+      liveMedia.volume = 1;
+      await liveMedia.play();
+      if (!liveMedia.paused) liveRouted = 'element';
+    } catch {}
+  }
+  if (liveRouted !== 'element') {
+    try { liveMaster.connect(liveAc.destination); } catch {}
+    liveRouted = 'direct';
+  }
   if (navigator.mediaSession) {
     try {
       navigator.mediaSession.metadata = new MediaMetadata({title:'FUBAR Live', artist:'FUBAR'});
@@ -232,7 +245,7 @@ async function playLiveSession(){
   }, 800);
   let res;
   try {
-    res = await fetch('live.pcm?v=119&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
+    res = await fetch('live.pcm?v=110&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
   } finally {
     clearInterval(poll);
   }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.10
+
+- Live listen no longer plays the stream twice (Web Audio plus the hidden player), which sounded
+  like a delayed ghost of the same audio.
+
 ## 1.1.9
 
 - Live listen keeps stereo for WFM/SDR instead of folding left and right together, which was adding
