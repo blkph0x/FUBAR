@@ -201,55 +201,165 @@ async function keepLiveAlive(){
     }
   } catch {}
 }
-function makePcmTap(ac, channels){
-  const queue = [];
-  let offset = 0;
-  let queued = 0;
-  let primed = false;
-  const node = ac.createScriptProcessor(4096, 0, channels);
+function makeResampler(inRate, outRate, ch){
+  const scale = 1 / 32768;
+  if (Math.abs(inRate - outRate) < 0.5) {
+    return (pcm) => {
+      const f = new Float32Array(pcm.length);
+      for (let i = 0; i < pcm.length; i++) f[i] = pcm[i] * scale;
+      return f;
+    };
+  }
+  let hold = new Float32Array(0);
+  let phase = 0;
+  const step = inRate / outRate;
+  return (pcm) => {
+    const merged = new Float32Array(hold.length + pcm.length);
+    merged.set(hold);
+    for (let i = 0; i < pcm.length; i++) merged[hold.length + i] = pcm[i] * scale;
+    const frames = Math.floor(merged.length / ch);
+    const out = [];
+    while (phase + 1 < frames) {
+      const i0 = phase | 0;
+      const frac = phase - i0;
+      const i1 = i0 + 1;
+      for (let c = 0; c < ch; c++) {
+        const a = merged[i0 * ch + c];
+        const b = merged[i1 * ch + c];
+        out.push(a + (b - a) * frac);
+      }
+      phase += step;
+    }
+    const consumed = phase | 0;
+    hold = merged.subarray(consumed * ch).slice();
+    phase -= consumed;
+    return Float32Array.from(out);
+  };
+}
+function attachScriptRing(ac, channels){
+  const n = Math.max(8192, Math.floor(ac.sampleRate * 4) * channels);
+  const ring = new Float32Array(n);
+  let w = 0, r = 0, primed = false;
+  const avail = () => { let a = w - r; if (a < 0) a += n; return a; };
+  const node = ac.createScriptProcessor(2048, 0, channels);
   node.onaudioprocess = (ev) => {
     const outs = [];
     for (let c = 0; c < channels; c++) outs[c] = ev.outputBuffer.getChannelData(c);
     const frames = ev.outputBuffer.length;
+    const need = frames * channels;
+    const sr = ac.sampleRate;
+    let a = avail();
     if (!primed) {
-      if (queued / channels < ac.sampleRate * 0.28) {
+      if (a < sr * 0.35 * channels) {
         for (let c = 0; c < channels; c++) outs[c].fill(0);
         return;
       }
       primed = true;
     }
+    if (a > sr * 0.85 * channels) {
+      const drop = Math.min(8 * channels, a - Math.floor(sr * 0.45 * channels));
+      r = (r + drop) % n;
+      a -= drop;
+    }
+    if (a < need) {
+      for (let c = 0; c < channels; c++) outs[c].fill(0);
+      return;
+    }
     let peak = 0;
     for (let i = 0; i < frames; i++) {
-      if (queued < channels) {
-        for (let c = 0; c < channels; c++) outs[c][i] = 0;
-        continue;
-      }
-      const chunk = queue[0];
       for (let c = 0; c < channels; c++) {
-        const v = chunk[offset + c] / 32768;
+        const v = ring[r];
+        r++; if (r >= n) r = 0;
         outs[c][i] = v;
-        const a = v < 0 ? -v : v;
-        if (a > peak) peak = a;
+        const abs = v < 0 ? -v : v;
+        if (abs > peak) peak = abs;
       }
-      offset += channels;
-      queued -= channels;
-      if (offset >= chunk.length) { queue.shift(); offset = 0; }
     }
     liveLevel.style.width = Math.min(100, Math.round(peak * 140)) + '%';
   };
   node.connect(ac.destination);
-  const maxSamples = () => Math.floor(ac.sampleRate * 1.15) * channels;
   return {
     node,
-    push(samples){
-      queue.push(samples);
-      queued += samples.length;
-      while (queued > maxSamples() && queue.length > 2) {
-        queued -= queue[0].length - offset;
-        queue.shift();
-        offset = 0;
+    push(f32){
+      for (let i = 0; i < f32.length; i++) {
+        ring[w] = f32[i];
+        w++; if (w >= n) w = 0;
       }
     }
+  };
+}
+async function attachWorkletRing(ac, channels){
+  const src = `
+    registerProcessor('fubar-play', class extends AudioWorkletProcessor {
+      constructor() {
+        super();
+        this.n = 0; this.ring = null; this.w = 0; this.r = 0;
+        this.ch = 1; this.primed = false; this.tick = 0;
+        this.port.onmessage = (e) => {
+          if (e.data.ch) this.ch = e.data.ch;
+          const s = e.data.s;
+          if (!s || !this.ring) return;
+          for (let i = 0; i < s.length; i++) {
+            this.ring[this.w] = s[i];
+            this.w++; if (this.w >= this.n) this.w = 0;
+          }
+        };
+      }
+      avail(){ let a = this.w - this.r; if (a < 0) a += this.n; return a; }
+      process(_, outputs){
+        if (!this.ring) {
+          this.n = Math.max(8192, sampleRate * 4 * 2);
+          this.ring = new Float32Array(this.n);
+        }
+        const out = outputs[0];
+        const frames = out[0].length;
+        const ch = Math.min(this.ch, out.length);
+        const need = frames * this.ch;
+        let a = this.avail();
+        if (!this.primed) {
+          if (a < sampleRate * 0.35 * this.ch) {
+            for (let c = 0; c < out.length; c++) out[c].fill(0);
+            return true;
+          }
+          this.primed = true;
+        }
+        if (a > sampleRate * 0.85 * this.ch) {
+          const drop = Math.min(8 * this.ch, a - Math.floor(sampleRate * 0.45 * this.ch));
+          this.r = (this.r + drop) % this.n;
+          a -= drop;
+        }
+        if (a < need) {
+          for (let c = 0; c < out.length; c++) out[c].fill(0);
+          return true;
+        }
+        let peak = 0;
+        for (let i = 0; i < frames; i++) {
+          for (let c = 0; c < ch; c++) {
+            const v = this.ring[this.r];
+            this.r++; if (this.r >= this.n) this.r = 0;
+            out[c][i] = v;
+            const abs = v < 0 ? -v : v;
+            if (abs > peak) peak = abs;
+          }
+          for (let c = ch; c < out.length; c++) out[c][i] = out[0][i];
+        }
+        this.tick++;
+        if ((this.tick & 7) === 0) this.port.postMessage(peak);
+        return true;
+      }
+    });`;
+  const url = URL.createObjectURL(new Blob([src], {type:'application/javascript'}));
+  await ac.audioWorklet.addModule(url);
+  URL.revokeObjectURL(url);
+  const node = new AudioWorkletNode(ac, 'fubar-play', {outputChannelCount:[channels]});
+  node.port.postMessage({ch: channels});
+  node.port.onmessage = (e) => {
+    liveLevel.style.width = Math.min(100, Math.round(Number(e.data) * 140)) + '%';
+  };
+  node.connect(ac.destination);
+  return {
+    node,
+    push(f32){ node.port.postMessage({s: f32}); }
   };
 }
 async function playLiveSession(){
@@ -260,7 +370,7 @@ async function playLiveSession(){
   liveMedia.src = SILENT_WAV;
   try { await liveMedia.play(); } catch {}
   await keepLiveAlive();
-  const res = await fetch('live.pcm?v=112&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
+  const res = await fetch('live.pcm?v=113&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
   if (!res.ok || !res.body) {
     if (res.status === 503) throw new Error('queue');
     throw new Error('live unavailable');
@@ -294,8 +404,15 @@ async function playLiveSession(){
   catch { ac = new (window.AudioContext || window.webkitAudioContext)({latencyHint:'playback'}); }
   liveAc = ac;
   await ac.resume();
-  const tap = makePcmTap(ac, channels);
+  let tap;
+  try {
+    if (ac.audioWorklet) tap = await attachWorkletRing(ac, channels);
+    else tap = attachScriptRing(ac, channels);
+  } catch {
+    tap = attachScriptRing(ac, channels);
+  }
   liveNode = tap.node;
+  const resample = makeResampler(rate, ac.sampleRate, channels);
   if (navigator.mediaSession) {
     try {
       navigator.mediaSession.metadata = new MediaMetadata({title:'FUBAR Live', artist:'FUBAR'});
@@ -318,25 +435,8 @@ async function playLiveSession(){
       const chunk = buf.slice(0, bytes);
       buf = buf.slice(bytes);
       const aligned = (chunk.byteOffset % 2 === 0) ? chunk : chunk.slice();
-      let samples = new Int16Array(aligned.buffer, aligned.byteOffset, aligned.byteLength / 2);
-      if (Math.abs(ac.sampleRate - rate) > 1) {
-        const inFrames = Math.floor(samples.length / channels);
-        const outFrames = Math.max(1, Math.floor(inFrames * ac.sampleRate / rate));
-        const out = new Int16Array(outFrames * channels);
-        for (let i = 0; i < outFrames; i++) {
-          const src = i * rate / ac.sampleRate;
-          const i0 = Math.min(inFrames - 1, Math.floor(src));
-          const i1 = Math.min(inFrames - 1, i0 + 1);
-          const frac = src - i0;
-          for (let c = 0; c < channels; c++) {
-            const a = samples[i0 * channels + c];
-            const b = samples[i1 * channels + c];
-            out[i * channels + c] = (a + (b - a) * frac) | 0;
-          }
-        }
-        samples = out;
-      }
-      tap.push(samples);
+      const samples = new Int16Array(aligned.buffer, aligned.byteOffset, aligned.byteLength / 2);
+      tap.push(resample(samples));
     }
   } finally {
     clearInterval(keep);

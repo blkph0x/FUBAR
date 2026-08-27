@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.13
+
+- Live playback no longer jumps when the buffer grows. It uses a continuous ring (and an audio
+  worklet when the browser allows it) so WFM stays time-stable instead of jittering.
+
 ## 1.1.12
 
 - Live listen is 16-bit PCM at the capture rate again (1:1, KiwiSDR-style) so SSTV, POCSAG,
