@@ -61,6 +61,9 @@ button.play.playing{ background:var(--blue); }
 .player{ position:fixed; left:0; right:0; bottom:0; background:rgba(8,10,8,.94); border-top:1px solid var(--line); padding:12px 18px 16px; }
 .player audio{ width:100%; }
 .empty{ padding:28px 8px; color:var(--muted); }
+.station{ display:grid; grid-template-columns:1fr auto; gap:8px 12px; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:12px 14px; margin:0 0 10px; color:inherit; text-decoration:none; }
+.station:hover{ border-color:var(--green); }
+.visit{ border:0; border-radius:999px; padding:8px 14px; font-weight:700; background:#1a2618; color:var(--green); }
 @media (max-width:700px){ .card{ grid-template-columns:auto 1fr; } .stats{ grid-column:1 / -1; } }
 </style>
 </head>
@@ -80,6 +83,8 @@ button.play.playing{ background:var(--blue); }
   </div>
 </header>
 <main>
+  <div class="row"><h2>Public servers</h2><div class="meta" id="netCount"></div></div>
+  <div id="stations" class="empty">Looking up stations on gearsqueens.online…</div>
   <div class="row"><h2>Captures</h2><div class="meta" id="count"></div></div>
   <div id="list" class="empty">Loading captures…</div>
 </main>
@@ -129,7 +134,7 @@ function play(id){
   stopLive();
   current = id;
   now.textContent = 'Playing ' + item.name;
-  audio.src = '/audio/' + encodeURIComponent(item.id);
+  audio.src = 'audio/' + encodeURIComponent(item.id);
   audio.play();
   render();
 }
@@ -173,7 +178,7 @@ async function playLiveSession(){
   const poll = setInterval(async () => {
     if (!liveWanted) return;
     try {
-      const status = await (await fetch('/api/status', {cache:'no-store'})).json();
+      const status = await (await fetch('api/status', {cache:'no-store'})).json();
       const limit = Math.max(1, Number(status.listenerLimit) || 5);
       const n = Number(status.listeners) || 0;
       const q = Number(status.queued) || 0;
@@ -184,7 +189,7 @@ async function playLiveSession(){
   }, 800);
   let res;
   try {
-    res = await fetch('/live.pcm?v=117&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
+    res = await fetch('live.pcm?v=118&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
   } finally {
     clearInterval(poll);
   }
@@ -280,11 +285,48 @@ document.addEventListener('visibilitychange', () => {
     try { (window.AudioContext || window.webkitAudioContext); } catch {}
   }
 });
+function esc(t){
+  return String(t||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function safeUrl(u){
+  return /^https?:\/\//i.test(u||'') ? u : '';
+}
+async function loadStations(){
+  const box = document.getElementById('stations');
+  const netCount = document.getElementById('netCount');
+  try {
+    const res = await fetch('https://gearsqueens.online/fubar-net/servers', {cache:'no-store'});
+    const data = await res.json();
+    const servers = data.servers || [];
+    netCount.textContent = servers.length ? (servers.length + ' on air') : 'none listed';
+    if (!servers.length){
+      box.className = 'empty';
+      box.textContent = 'No public FUBAR stations right now. Tick Public Server in the app to list this one.';
+      return;
+    }
+    box.className = '';
+    box.innerHTML = servers.map(s => {
+      const url = safeUrl(s.url);
+      if (!url) return '';
+      const freq = s.frequencyMhz ? Number(s.frequencyMhz).toFixed(3) + ' MHz' : '';
+      const state = s.recording ? 'recording' : (s.live ? 'on air' : 'idle');
+      const people = (s.listeners||0) + '/' + (s.listenerLimit||5);
+      return `<a class="station" href="${esc(url)}" target="_blank" rel="noopener">
+        <div><div class="name">${esc(s.name||'FUBAR')}</div>
+        <div class="when">${esc(freq)} · ${esc(state)} · ${esc(people)} listening</div></div>
+        <span class="visit">Open</span></a>`;
+    }).join('');
+  } catch {
+    netCount.textContent = '';
+    box.className = 'empty';
+    box.textContent = 'Could not reach the public station list.';
+  }
+}
 async function refresh(){
   try {
     const [statusRes, listRes] = await Promise.all([
-      fetch('/api/status', {cache:'no-store'}),
-      fetch('/api/captures', {cache:'no-store'})
+      fetch('api/status', {cache:'no-store'}),
+      fetch('api/captures', {cache:'no-store'})
     ]);
     const status = await statusRes.json();
     items = (await listRes.json()).captures || [];
@@ -298,7 +340,9 @@ async function refresh(){
   }
 }
 refresh();
+loadStations();
 setInterval(refresh, 4000);
+setInterval(loadStations, 15000);
 </script>
 </body>
 </html>
@@ -388,6 +432,50 @@ bool sendAll(SOCKET socket, const char* data, int length) {
     sent += chunk;
   }
   return true;
+}
+
+constexpr const char* kCors =
+    "Access-Control-Allow-Origin: *\r\n"
+    "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+    "Access-Control-Allow-Headers: Content-Type\r\n"
+    "Access-Control-Max-Age: 600\r\n";
+
+std::string headerValue(const std::string& request, const char* name) {
+  const std::string prefix = std::string("\r\n") + name + ":";
+  auto pos = request.find(prefix);
+  if (pos == std::string::npos) {
+    const std::string first = std::string(name) + ":";
+    if (request.rfind(first, 0) == 0) pos = 0;
+    else return {};
+  }
+  pos += prefix.size();
+  auto end = request.find("\r\n", pos);
+  std::string value = request.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
+  while (!value.empty() && (value.front() == ' ' || value.front() == '\t')) value.erase(value.begin());
+  return value;
+}
+
+std::string peerIpv4(SOCKET socket) {
+  sockaddr_in addr{};
+  int len = sizeof(addr);
+  if (getpeername(socket, reinterpret_cast<sockaddr*>(&addr), &len) != 0) return {};
+  char ip[INET_ADDRSTRLEN]{};
+  inet_ntop(AF_INET, &addr.sin_addr, ip, sizeof(ip));
+  return ip;
+}
+
+std::string observedPublicIp(SOCKET socket, const std::string& request) {
+  std::string forwarded = headerValue(request, "X-Forwarded-For");
+  if (forwarded.empty()) forwarded = headerValue(request, "X-Real-IP");
+  if (!forwarded.empty()) {
+    const auto comma = forwarded.find(',');
+    if (comma != std::string::npos) forwarded.resize(comma);
+    while (!forwarded.empty() && (forwarded.front() == ' ' || forwarded.front() == '\t')) {
+      forwarded.erase(forwarded.begin());
+    }
+    return forwarded;
+  }
+  return peerIpv4(socket);
 }
 
 bool sendResponse(SOCKET socket, int status, const char* reason, const std::string& type,
@@ -505,6 +593,14 @@ int CaptureWebServer::maxLiveListeners() const { return liveSlots_.limit(); }
 int CaptureWebServer::liveListeners() const { return liveSlots_.active(); }
 int CaptureWebServer::liveQueued() const { return liveSlots_.queued(); }
 
+bool CaptureWebServer::publishStation(const FubarNetStation& station, std::string* error) {
+  return directory_.upsert(station, "127.0.0.1", error);
+}
+
+void CaptureWebServer::unpublishStation(const std::string& id) { directory_.leave(id); }
+
+std::string CaptureWebServer::directoryJson() const { return directory_.listJson(); }
+
 bool CaptureWebServer::running() const { return running_; }
 std::uint16_t CaptureWebServer::port() const { return port_; }
 
@@ -590,6 +686,26 @@ std::vector<CaptureItem> CaptureWebServer::listCaptures(const std::filesystem::p
 bool CaptureWebServer::handlePathForTest(const std::string& method, const std::string& path,
                                          const std::filesystem::path& root, int* status,
                                          std::string* contentType) {
+  if (path == "/fubar-net" || path == "/fubar-net/" || path == "/fubar-net/servers") {
+    if (method == "GET" || method == "OPTIONS") {
+      *status = 200;
+      *contentType = "application/json";
+      return true;
+    }
+    *status = 405;
+    *contentType = "text/plain";
+    return false;
+  }
+  if (path == "/fubar-net/announce" || path == "/fubar-net/leave") {
+    if (method == "POST" || method == "OPTIONS") {
+      *status = 200;
+      *contentType = "application/json";
+      return true;
+    }
+    *status = 405;
+    *contentType = "text/plain";
+    return false;
+  }
   if (method != "GET") {
     *status = 405;
     *contentType = "text/plain";
@@ -862,6 +978,18 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     if (got <= 0) return;
     request.append(buffer, static_cast<std::size_t>(got));
   }
+  const auto headerEnd = request.find("\r\n\r\n");
+  if (headerEnd == std::string::npos) return;
+  std::string body = request.substr(headerEnd + 4);
+  const std::string lengthHeader = headerValue(request, "Content-Length");
+  const std::size_t contentLength = lengthHeader.empty() ? 0 : static_cast<std::size_t>(std::strtoul(lengthHeader.c_str(), nullptr, 10));
+  while (body.size() < contentLength && body.size() < 8192) {
+    const int got = recv(client, buffer, sizeof(buffer), 0);
+    if (got <= 0) break;
+    body.append(buffer, static_cast<std::size_t>(got));
+  }
+  if (body.size() > contentLength) body.resize(contentLength);
+
   const auto lineEnd = request.find("\r\n");
   if (lineEnd == std::string::npos) return;
   std::istringstream line(request.substr(0, lineEnd));
@@ -879,10 +1007,16 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     while (!range.empty() && (range.front() == ' ' || range.front() == '\t')) range.erase(range.begin());
   }
 
+  if (method == "OPTIONS" && path.rfind("/fubar-net", 0) == 0) {
+    sendResponse(client, 204, "No Content", "text/plain", "", kCors);
+    return;
+  }
+
   int status = 0;
   std::string type;
   if (!handlePathForTest(method, path, rootLocked(), &status, &type)) {
-    sendResponse(client, status ? status : 404, "Error", type.empty() ? "text/plain" : type, "error");
+    sendResponse(client, status ? status : 404, "Error", type.empty() ? "text/plain" : type, "error",
+                 kCors);
     return;
   }
   if (path == "/" || path == "/index.html") {
@@ -895,6 +1029,28 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
   }
   if (path == "/api/captures") {
     sendResponse(client, 200, "OK", "application/json", capturesJson());
+    return;
+  }
+  if (path == "/fubar-net" || path == "/fubar-net/" || path == "/fubar-net/servers") {
+    sendResponse(client, 200, "OK", "application/json", directory_.listJson(), kCors);
+    return;
+  }
+  if (path == "/fubar-net/announce") {
+    auto station = FubarNetDirectory::fromAnnounceJson(body);
+    std::string error;
+    if (!directory_.upsert(station, observedPublicIp(client, request), &error)) {
+      sendResponse(client, 400, "Bad Request", "application/json",
+                   std::string("{\"ok\":false,\"error\":\"") + error + "\"}", kCors);
+      return;
+    }
+    sendResponse(client, 200, "OK", "application/json",
+                 std::string("{\"ok\":true,\"id\":\"") + station.id + "\",\"ttl\":90}", kCors);
+    return;
+  }
+  if (path == "/fubar-net/leave") {
+    const auto id = FubarNetDirectory::jsonGetString(body, "id");
+    directory_.leave(id);
+    sendResponse(client, 200, "OK", "application/json", "{\"ok\":true}", kCors);
     return;
   }
   if (path == "/live" || path == "/live.wav") {

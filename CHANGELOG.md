@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.8
+
+- Public Server lists a station on the 24/7 hub at `https://gearsqueens.online/fubar-net`.
+- Every FUBAR website loads that live directory so listeners can jump between stations.
+- The hub itself is published at `https://gearsqueens.online/fubar/` because the domain is HTTPS-only.
+- Heartbeats keep the list fresh; a station drops off about 90 seconds after it goes quiet.
+
 ## 1.1.7
 
 - Live listen stays up when capture restarts, and the browser reconnects if the stream drops.

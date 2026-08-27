@@ -8,6 +8,7 @@
 
 #include "live_hub.h"
 #include "live_slot.h"
+#include "fubar_net.h"
 
 #include <windows.h>
 
@@ -43,6 +44,9 @@ class CaptureWebServer {
   int maxLiveListeners() const;
   int liveListeners() const;
   int liveQueued() const;
+  bool publishStation(const FubarNetStation& station, std::string* error = nullptr);
+  void unpublishStation(const std::string& id);
+  std::string directoryJson() const;
 
   static std::vector<CaptureItem> listCaptures(const std::filesystem::path& directory);
   static bool safeCaptureId(const std::string& id);
@@ -72,6 +76,7 @@ class CaptureWebServer {
   std::filesystem::path root_;
   LiveAudioHub* liveHub_ = nullptr;
   LiveSlotGate liveSlots_;
+  FubarNetDirectory directory_;
   std::wstring liveStatus_ = L"Idle";
   std::wstring lastError_;
 };

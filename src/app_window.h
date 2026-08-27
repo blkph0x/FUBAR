@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <mutex>
+#include <string>
 #include <vector>
 
 class AppWindow {
@@ -44,14 +45,21 @@ class AppWindow {
   void showSettings();
   void showRecordings();
   void pruneOldRecordings();
+  FubarNetStation currentStation() const;
+  void applyPublicListing();
 
   AudioOptions options_;
   AudioEngine engine_;
   CaptureWebServer web_;
+  FubarNetClient netClient_;
   bool webEnabled_ = false;
+  bool publicServer_ = false;
   int liveMaxListeners_ = 5;
   int liveBoostDb_ = 0;
   int pruneDays_ = 0;
+  std::string stationId_;
+  std::wstring stationName_;
+  std::string publicHost_;
   HINSTANCE instance_ = nullptr;
   HWND window_ = nullptr;
   HWND replayWindow_ = nullptr;
@@ -73,6 +81,8 @@ class AppWindow {
   HWND startButton_ = nullptr;
   HWND stopButton_ = nullptr;
   HWND webCheck_ = nullptr;
+  HWND publicCheck_ = nullptr;
+  HWND stationEdit_ = nullptr;
   HWND webStatus_ = nullptr;
   HWND inputLeftMeter_ = nullptr;
   HWND inputRightMeter_ = nullptr;

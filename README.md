@@ -27,6 +27,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 - Tools → Settings caps simultaneous live listeners (default 5); extra visitors wait in a queue.
 - Tools → Manage recordings deletes selected clips or anything older than a chosen number of days.
 - Live listen boost, frequency in file names, and remembered device/VOX settings for SDR + VB-CABLE.
+- Public Server directory at `https://gearsqueens.online/fubar-net` so listeners can find live stations.
 - Full terminal operation for scripts, scheduled jobs, and automation.
 - Handles shared-mode 8/16/24/32-bit PCM and 32/64-bit floating-point input safely.
 
@@ -73,6 +74,9 @@ silence for two seconds, FUBAR tries the next physical input automatically.
     Anyone above the live cap waits in a queue until someone stops listening.
 12. Open **Tools → Manage recordings** to delete selected clips or files older than N days.
     **Copy URL** puts the LAN website address on the clipboard for phones.
+13. Tick **Public Server** and set a station name to list this PC on
+    `https://gearsqueens.online/fubar-net`. Other FUBAR websites show that live list. The 24/7 hub
+    is `https://gearsqueens.online/fubar/`.
 
 ### Public website
 

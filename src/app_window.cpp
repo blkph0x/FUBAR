@@ -71,7 +71,9 @@ enum ControlId {
   IdRefreshDevices,
   IdWeb,
   IdOpenWeb,
-  IdCopyWeb
+  IdCopyWeb,
+  IdPublic,
+  IdStationName
 };
 
 HWND addControl(HWND parent, const wchar_t* className, const wchar_t* text, DWORD style,
@@ -84,6 +86,25 @@ HWND addControl(HWND parent, const wchar_t* className, const wchar_t* text, DWOR
   SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(GetStockObject(DEFAULT_GUI_FONT)),
                TRUE);
   return control;
+}
+
+std::string wideToUtf8(const std::wstring& value) {
+  if (value.empty()) return {};
+  const int bytes = WideCharToMultiByte(CP_UTF8, 0, value.c_str(), static_cast<int>(value.size()),
+                                        nullptr, 0, nullptr, nullptr);
+  std::string out(static_cast<std::size_t>(bytes), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, value.c_str(), static_cast<int>(value.size()), out.data(), bytes,
+                      nullptr, nullptr);
+  return out;
+}
+
+std::wstring utf8ToWideLocal(const std::string& value) {
+  if (value.empty()) return {};
+  const int chars = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), static_cast<int>(value.size()),
+                                        nullptr, 0);
+  std::wstring out(static_cast<std::size_t>(chars), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, value.c_str(), static_cast<int>(value.size()), out.data(), chars);
+  return out;
 }
 
 std::wstring windowText(HWND control) {
@@ -207,8 +228,8 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   RegisterClassExW(&brandClass);
 
   HMENU menu = LoadMenuW(instance_, MAKEINTRESOURCEW(IDR_MAINMENU));
-  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.7", WS_OVERLAPPEDWINDOW,
-                            CW_USEDEFAULT, CW_USEDEFAULT, 780, 780, nullptr, menu, instance_,
+  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.8", WS_OVERLAPPEDWINDOW,
+                            CW_USEDEFAULT, CW_USEDEFAULT, 780, 830, nullptr, menu, instance_,
                             this);
   if (!window_) return 1;
   ShowWindow(window_, showCommand);
@@ -289,7 +310,31 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
         case IdWeb:
           if (HIWORD(wParam) == BN_CLICKED) {
             webEnabled_ = SendMessageW(webCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
+            if (!webEnabled_) publicServer_ = false;
+            if (publicCheck_) {
+              SendMessageW(publicCheck_, BM_SETCHECK, publicServer_ ? BST_CHECKED : BST_UNCHECKED, 0);
+            }
             applyWebServer();
+            applyPublicListing();
+            saveSettings();
+          }
+          return 0;
+        case IdPublic:
+          if (HIWORD(wParam) == BN_CLICKED) {
+            publicServer_ = SendMessageW(publicCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
+            if (publicServer_ && !webEnabled_) {
+              webEnabled_ = true;
+              if (webCheck_) SendMessageW(webCheck_, BM_SETCHECK, BST_CHECKED, 0);
+              applyWebServer();
+            }
+            applyPublicListing();
+            saveSettings();
+          }
+          return 0;
+        case IdStationName:
+          if (HIWORD(wParam) == EN_KILLFOCUS) {
+            stationName_ = windowText(stationEdit_);
+            applyPublicListing();
             saveSettings();
           }
           return 0;
@@ -345,6 +390,9 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
 
     case WM_CLOSE:
       saveSettings();
+      applyPublicListing();
+      netClient_.stop();
+      if (!stationId_.empty()) web_.unpublishStation(stationId_);
       stopEngine();
       web_.stop();
       DestroyWindow(window);
@@ -433,13 +481,21 @@ void AppWindow::createControls() {
   addControl(window_, L"BUTTON", L"Open recordings", BS_PUSHBUTTON, 490, 575, 150, 38,
              IdOpenFolder);
   webCheck_ = addControl(window_, L"BUTTON", L"Public website on port 80", BS_AUTOCHECKBOX,
-                         85, 628, 230, 24, IdWeb);
-  addControl(window_, L"BUTTON", L"Open site", BS_PUSHBUTTON, 320, 624, 80, 28, IdOpenWeb);
-  addControl(window_, L"BUTTON", L"Copy URL", BS_PUSHBUTTON, 405, 624, 80, 28, IdCopyWeb);
-  webStatus_ = addControl(window_, L"STATIC", L"Website off", 0, 495, 628, 230, 24);
+                         85, 616, 230, 24, IdWeb);
+  addControl(window_, L"BUTTON", L"Open site", BS_PUSHBUTTON, 320, 612, 80, 28, IdOpenWeb);
+  addControl(window_, L"BUTTON", L"Copy URL", BS_PUSHBUTTON, 405, 612, 80, 28, IdCopyWeb);
+  webStatus_ = addControl(window_, L"STATIC", L"Website off", 0, 495, 616, 230, 24);
+  publicCheck_ = addControl(window_, L"BUTTON", L"Public Server", BS_AUTOCHECKBOX, 85, 648, 130,
+                            24, IdPublic);
+  addControl(window_, L"STATIC", L"Station name:", SS_RIGHT, 215, 650, 95, 22);
+  stationEdit_ = addControl(window_, L"EDIT", L"FUBAR", WS_BORDER | ES_AUTOHSCROLL, 318, 646, 280,
+                            24, IdStationName, WS_EX_CLIENTEDGE);
   addControl(window_, L"STATIC",
-             L"CLI automation: FUBAR.exe --cli --headless --mode left --threshold-db -35",
-              SS_CENTER, 40, 668, 680, 22);
+             L"Public Server lists this station at https://gearsqueens.online/fubar-net",
+              SS_CENTER, 40, 678, 680, 22);
+  addControl(window_, L"STATIC",
+             L"CLI automation: FUBAR.exe --cli --headless --web --public-server",
+              SS_CENTER, 40, 704, 680, 22);
 }
 
 void AppWindow::populateDevices() {
@@ -597,6 +653,11 @@ void AppWindow::updateMeters() {
     if (++webTicks >= 12) {
       webTicks = 0;
       refreshWebStatus();
+      if (publicServer_) {
+        const auto station = currentStation();
+        web_.publishStation(station);
+        netClient_.setPayload(station);
+      }
     }
   }
   if (autoSelectInput_ && engine_.running()) {
@@ -799,6 +860,14 @@ void AppWindow::saveSettings() const {
                              ini.c_str());
   WritePrivateProfileStringW(L"FUBAR", L"SplitStereo", current.splitStereoFiles ? L"1" : L"0",
                              ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"PublicServer", publicServer_ ? L"1" : L"0", ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"StationId", utf8ToWideLocal(stationId_).c_str(),
+                             ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"StationName",
+                             stationEdit_ ? windowText(stationEdit_).c_str() : stationName_.c_str(),
+                             ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"PublicHost", utf8ToWideLocal(publicHost_).c_str(),
+                             ini.c_str());
 }
 
 void AppWindow::reloadCapturesFromDisk() {
@@ -863,6 +932,29 @@ void AppWindow::loadSettings() {
   if (webCheck_) {
     SendMessageW(webCheck_, BM_SETCHECK, webEnabled_ ? BST_CHECKED : BST_UNCHECKED, 0);
   }
+  publicServer_ = GetPrivateProfileIntW(L"FUBAR", L"PublicServer", 0, ini.c_str()) != 0;
+  if (GetPrivateProfileStringW(L"FUBAR", L"StationId", L"", buffer, 1024, ini.c_str()) > 0) {
+    stationId_ = wideToUtf8(buffer);
+  }
+  if (stationId_.empty() || !FubarNetDirectory::validStationId(stationId_)) {
+    stationId_ = FubarNetDirectory::makeStationId();
+  }
+  if (GetPrivateProfileStringW(L"FUBAR", L"StationName", L"", buffer, 1024, ini.c_str()) > 0) {
+    stationName_ = buffer;
+  }
+  if (stationName_.empty()) {
+    wchar_t computer[MAX_COMPUTERNAME_LENGTH + 1]{};
+    DWORD computerSize = MAX_COMPUTERNAME_LENGTH + 1;
+    if (GetComputerNameW(computer, &computerSize)) stationName_ = computer;
+    else stationName_ = L"FUBAR";
+  }
+  if (GetPrivateProfileStringW(L"FUBAR", L"PublicHost", L"", buffer, 1024, ini.c_str()) > 0) {
+    publicHost_ = FubarNetDirectory::sanitizeHost(wideToUtf8(buffer));
+  }
+  if (publicCheck_) {
+    SendMessageW(publicCheck_, BM_SETCHECK, publicServer_ ? BST_CHECKED : BST_UNCHECKED, 0);
+  }
+  if (stationEdit_) SetWindowTextW(stationEdit_, stationName_.c_str());
 }
 
 void AppWindow::refreshWebStatus() {
@@ -878,6 +970,12 @@ void AppWindow::refreshWebStatus() {
     text += L", " + std::to_wstring(web_.liveQueued()) + L" waiting";
   }
   text += L")";
+  if (publicServer_) {
+    const auto listed = netClient_.lastError().empty() ? netClient_.lastOk()
+                                                       : netClient_.lastError();
+    if (!listed.empty()) text += L"  ·  " + listed;
+    else text += L"  ·  listing…";
+  }
   SetWindowTextW(webStatus_, text.c_str());
 }
 
@@ -901,6 +999,37 @@ void AppWindow::applyWebServer() {
     return;
   }
   refreshWebStatus();
+  applyPublicListing();
+}
+
+FubarNetStation AppWindow::currentStation() const {
+  FubarNetStation station;
+  station.id = stationId_;
+  std::wstring name = stationEdit_ ? windowText(stationEdit_) : stationName_;
+  station.name = FubarNetDirectory::sanitizeName(wideToUtf8(name));
+  station.host = publicHost_;
+  station.port = web_.port() ? web_.port() : 80;
+  station.path = "/";
+  station.frequencyMhz = options_.frequencyMhz;
+  station.recording = statusRecording_ || engine_.recording();
+  station.live = engine_.running();
+  station.listeners = web_.liveListeners();
+  station.listenerLimit = web_.maxLiveListeners();
+  station.version = "1.1.8";
+  return station;
+}
+
+void AppWindow::applyPublicListing() {
+  if (stationEdit_) stationName_ = windowText(stationEdit_);
+  if (publicServer_ && web_.running()) {
+    const auto station = currentStation();
+    web_.publishStation(station);
+    netClient_.setPayload(station);
+    netClient_.start();
+  } else {
+    netClient_.stop();
+    if (!stationId_.empty()) web_.unpublishStation(stationId_);
+  }
 }
 
 void AppWindow::openWebsite() const {
@@ -942,6 +1071,7 @@ struct SettingsDialogData {
   int queued = 0;
   int liveBoostDb = 0;
   int pruneDays = 0;
+  std::wstring publicHost;
 };
 
 INT_PTR CALLBACK settingsDialogProc(HWND dialog, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -951,6 +1081,7 @@ INT_PTR CALLBACK settingsDialogProc(HWND dialog, UINT message, WPARAM wParam, LP
     SetDlgItemInt(dialog, IDC_LIVE_LIMIT, static_cast<UINT>(data->limit), FALSE);
     SetDlgItemInt(dialog, IDC_LIVE_BOOST, static_cast<UINT>(data->liveBoostDb), FALSE);
     SetDlgItemInt(dialog, IDC_PRUNE_DAYS, static_cast<UINT>(data->pruneDays), FALSE);
+    SetDlgItemTextW(dialog, IDC_PUBLIC_HOST, data->publicHost.c_str());
     const std::wstring stats = L"Right now: " + std::to_wstring(data->listeners) +
                                L" listening, " + std::to_wstring(data->queued) + L" waiting.";
     SetDlgItemTextW(dialog, IDC_LIVE_STATS, stats.c_str());
@@ -968,6 +1099,9 @@ INT_PTR CALLBACK settingsDialogProc(HWND dialog, UINT message, WPARAM wParam, LP
           data->limit = LiveSlotGate::clampLimit(limit);
           data->liveBoostDb = std::clamp(boost, 0, 18);
           data->pruneDays = std::clamp(days, 0, 3650);
+          wchar_t host[128]{};
+          GetDlgItemTextW(dialog, IDC_PUBLIC_HOST, host, 128);
+          data->publicHost = host;
         }
         EndDialog(dialog, IDOK);
         return TRUE;
@@ -1089,6 +1223,7 @@ void AppWindow::showSettings() {
   data.queued = web_.liveQueued();
   data.liveBoostDb = liveBoostDb_;
   data.pruneDays = pruneDays_;
+  data.publicHost = utf8ToWideLocal(publicHost_);
   if (DialogBoxParamW(instance_, MAKEINTRESOURCEW(IDD_SETTINGS), window_, settingsDialogProc,
                       reinterpret_cast<LPARAM>(&data)) != IDOK) {
     return;
@@ -1096,9 +1231,11 @@ void AppWindow::showSettings() {
   liveMaxListeners_ = LiveSlotGate::clampLimit(data.limit);
   liveBoostDb_ = std::clamp(data.liveBoostDb, 0, 18);
   pruneDays_ = std::clamp(data.pruneDays, 0, 3650);
+  publicHost_ = FubarNetDirectory::sanitizeHost(wideToUtf8(data.publicHost));
   web_.setMaxLiveListeners(liveMaxListeners_);
   engine_.liveHub().setGainDb(static_cast<float>(liveBoostDb_));
   pruneOldRecordings();
+  applyPublicListing();
   refreshWebStatus();
   saveSettings();
 }

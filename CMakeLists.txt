@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(FUBAR VERSION 1.1.7 LANGUAGES CXX)
+project(FUBAR VERSION 1.1.8 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,7 +13,9 @@ add_executable(fubar
   src/web_server.cpp
   src/live_hub.cpp
   src/live_slot.cpp
+  src/fubar_net.cpp
   src/audio_safety.h
+  src/fubar_net.h
   src/live_hub.h
   src/live_slot.h
   src/app_paths.h
@@ -34,7 +36,7 @@ elseif(MINGW)
   target_link_options(fubar PRIVATE -municode -static-libgcc -static-libstdc++)
 endif()
 
-target_link_libraries(fubar PRIVATE ole32 uuid winmm comctl32 shell32 ws2_32)
+target_link_libraries(fubar PRIVATE ole32 uuid winmm comctl32 shell32 ws2_32 winhttp)
 
 set_target_properties(fubar PROPERTIES OUTPUT_NAME "FUBAR")
 

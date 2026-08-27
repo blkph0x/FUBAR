@@ -13,6 +13,7 @@
 #include "web_server.h"
 #include "live_hub.h"
 #include "live_slot.h"
+#include "fubar_net.h"
 #include "app_paths.h"
 
 #include <atomic>
@@ -69,7 +70,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.7 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.8 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -92,7 +93,9 @@ void printHelp() {
       << L"  --append-session      Pause on silence and resume into the same WAV\n"
       << L"  --split-stereo        Write stereo as separate mono left/right WAV files\n"
       << L"  --web                 Serve the public capture website on TCP port 80\n"
-      << L"  --live-listeners N    Max simultaneous live listeners (default 5, extras queue)\n";
+      << L"  --live-listeners N    Max simultaneous live listeners (default 5, extras queue)\n"
+      << L"  --public-server       List this station on https://gearsqueens.online/fubar-net\n"
+      << L"  --station-name NAME   Public station name used in the directory\n";
 }
 
 ChannelMode parseMode(const std::wstring& text) {
@@ -392,6 +395,46 @@ int runSelfTest() {
   }
   slots.release();
 
+  FubarNetDirectory directory;
+  FubarNetStation netStation;
+  netStation.id = "testhub01aabbcc";
+  netStation.name = "Test SDR";
+  netStation.port = 80;
+  std::string dirError;
+  if (!directory.upsert(netStation, "8.8.8.8", &dirError) ||
+      directory.listJson().find("8.8.8.8") == std::string::npos ||
+      directory.listJson().find("Test SDR") == std::string::npos) {
+    std::wcerr << L"Self-test failed: public server directory\n";
+    return 1;
+  }
+  if (!directory.upsert(netStation, "10.1.1.65", &dirError) ||
+      directory.listJson().find("gearsqueens.online/fubar") == std::string::npos) {
+    std::wcerr << L"Self-test failed: hub public URL rewrite\n";
+    return 1;
+  }
+  directory.leave(netStation.id);
+  if (directory.size() != 0) {
+    std::wcerr << L"Self-test failed: directory leave\n";
+    return 1;
+  }
+  const auto parsed = FubarNetDirectory::fromAnnounceJson(
+      "{\"id\":\"testhub01aabbcc\",\"name\":\"Alpha\",\"port\":80,\"frequencyMhz\":146.5}");
+  if (parsed.id != "testhub01aabbcc" || parsed.name != "Alpha") {
+    std::wcerr << L"Self-test failed: announce JSON parse\n";
+    return 1;
+  }
+  int netStatus = 0;
+  std::string netType;
+  if (!CaptureWebServer::handlePathForTest("GET", "/fubar-net/servers", webDir, &netStatus,
+                                           &netType) ||
+      netStatus != 200 ||
+      !CaptureWebServer::handlePathForTest("POST", "/fubar-net/announce", webDir, &netStatus,
+                                           &netType) ||
+      netStatus != 200) {
+    std::wcerr << L"Self-test failed: directory paths\n";
+    return 1;
+  }
+
   const auto capturesDir = defaultCaptureDirectory();
   if (capturesDir.empty() || capturesDir.filename() != L"Vox_captures") {
     std::wcerr << L"Self-test failed: default capture folder\n";
@@ -411,6 +454,8 @@ int wmain(int argc, wchar_t** argv) {
   bool listDevices = false;
   bool selfTest = false;
   bool webEnabled = false;
+  bool publicServer = false;
+  std::wstring stationName = L"FUBAR";
   int liveMaxListeners = LiveSlotGate::kDefaultLimit;
   double durationSeconds = 0.0;
   int deviceIndex = -1;
@@ -463,6 +508,11 @@ int wmain(int argc, wchar_t** argv) {
         webEnabled = true;
       } else if (argument == L"--live-listeners") {
         liveMaxListeners = LiveSlotGate::clampLimit(std::stoi(next()));
+      } else if (argument == L"--public-server") {
+        publicServer = true;
+        webEnabled = true;
+      } else if (argument == L"--station-name") {
+        stationName = next();
       } else {
         std::wcerr << L"Unknown option: " << argument << L"\n";
         printHelp();
@@ -507,6 +557,8 @@ int wmain(int argc, wchar_t** argv) {
 
   AudioEngine engine;
   CaptureWebServer website;
+  FubarNetClient netClient;
+  FubarNetStation station;
   if (webEnabled) {
     website.setRoot(options.outputDirectory);
     website.setLiveHub(&engine.liveHub());
@@ -516,6 +568,18 @@ int wmain(int argc, wchar_t** argv) {
     } else {
       std::wcout << L"[web] " << website.lanUrl() << L"\n";
     }
+  }
+  if (publicServer && website.running()) {
+    station.id = FubarNetDirectory::makeStationId();
+    station.name = FubarNetDirectory::sanitizeName(std::string(stationName.begin(), stationName.end()));
+    station.port = website.port();
+    station.frequencyMhz = options.frequencyMhz;
+    station.live = true;
+    station.listenerLimit = liveMaxListeners;
+    website.publishStation(station);
+    netClient.setPayload(station);
+    netClient.start();
+    std::wcout << L"[public-server] listing on https://gearsqueens.online/fubar-net\n";
   }
 
   SetConsoleCtrlHandler(consoleHandler, TRUE);
@@ -537,6 +601,8 @@ int wmain(int argc, wchar_t** argv) {
     Sleep(100);
   }
   engine.stop();
+  netClient.stop();
+  if (!station.id.empty()) website.unpublishStation(station.id);
   website.stop();
   return 0;
 }
