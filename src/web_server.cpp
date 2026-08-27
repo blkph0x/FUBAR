@@ -92,7 +92,7 @@ button.play.playing{ background:var(--blue); }
 <div class="player">
   <div class="meta" id="now" style="margin-bottom:6px">Nothing playing</div>
   <audio id="audio" controls preload="none"></audio>
-  <audio id="liveMedia" playsinline webkit-playsinline autoplay style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></audio>
+  <audio id="liveMedia" muted playsinline webkit-playsinline autoplay style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></audio>
 </div>
 <script>
 const audio = document.getElementById('audio');
@@ -156,6 +156,8 @@ let liveAbort = null;
 let liveAc = null;
 let liveNode = null;
 let liveWake = null;
+let livePeak = 0;
+let meterRaf = 0;
 const SILENT_WAV = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
 function queueLabel(status){
   const limit = Math.max(1, Number(status && status.listenerLimit) || 5);
@@ -164,21 +166,40 @@ function queueLabel(status){
   if (q > 0) return n + '/' + limit + ' listening · ' + q + ' waiting';
   return n + '/' + limit + ' listening';
 }
+function startMeter(){
+  if (meterRaf) return;
+  const tick = () => {
+    meterRaf = 0;
+    liveLevel.style.width = Math.min(100, Math.round(livePeak * 140)) + '%';
+    livePeak *= 0.82;
+    if (liveWanted) meterRaf = requestAnimationFrame(tick);
+  };
+  meterRaf = requestAnimationFrame(tick);
+}
+function stopMeter(){
+  if (meterRaf) cancelAnimationFrame(meterRaf);
+  meterRaf = 0;
+  livePeak = 0;
+  liveLevel.style.width = '0';
+}
 function setLiveUi(on, text){
   livePlaying = on;
   liveBtn.textContent = on ? 'Stop live' : 'Listen live';
   liveBtn.classList.toggle('on', on);
   liveHint.textContent = text;
-  if (!on) liveLevel.style.width = '0';
+  if (!on) stopMeter();
+}
+function closeLiveAudio(){
+  try { if (liveNode) liveNode.disconnect(); } catch {}
+  liveNode = null;
+  try { if (liveAc && liveAc.state !== 'closed' && liveAc.close) liveAc.close(); } catch {}
+  liveAc = null;
 }
 function stopLive(){
   liveWanted = false;
   livePlaying = false;
   if (liveAbort) { liveAbort.abort(); liveAbort = null; }
-  try { if (liveNode) liveNode.disconnect(); } catch {}
-  liveNode = null;
-  try { if (liveAc && liveAc.state !== 'closed' && liveAc.close) liveAc.close(); } catch {}
-  liveAc = null;
+  closeLiveAudio();
   try { liveMedia.pause(); liveMedia.removeAttribute('src'); liveMedia.load(); } catch {}
   try { if (liveWake) liveWake.release(); } catch {}
   liveWake = null;
@@ -189,6 +210,8 @@ async function keepLiveAlive(){
   if (!liveWanted) return;
   try { if (liveAc && liveAc.state !== 'running') await liveAc.resume(); } catch {}
   try {
+    liveMedia.muted = true;
+    liveMedia.volume = 0;
     if (liveMedia.paused) {
       liveMedia.src = SILENT_WAV;
       liveMedia.loop = true;
@@ -236,73 +259,108 @@ function makeResampler(inRate, outRate, ch){
     return Float32Array.from(out);
   };
 }
+function foldFrame(outs, i, samples, srcCh){
+  const outCh = outs.length;
+  if (srcCh === 1) {
+    for (let c = 0; c < outCh; c++) outs[c][i] = samples[0];
+    return;
+  }
+  if (outCh === 1) {
+    let sum = 0;
+    for (let c = 0; c < srcCh; c++) sum += samples[c];
+    outs[0][i] = sum / srcCh;
+    return;
+  }
+  for (let c = 0; c < outCh; c++) outs[c][i] = samples[c < srcCh ? c : 0];
+}
 function attachScriptRing(ac, channels){
-  const n = Math.max(8192, Math.floor(ac.sampleRate * 4) * channels);
+  const sr = ac.sampleRate;
+  const srcCh = Math.max(1, channels);
+  const outCh = Math.max(1, Math.min(2, srcCh));
+  const n = Math.max(16384, Math.floor(sr * 8) * srcCh);
   const ring = new Float32Array(n);
   let w = 0, r = 0, primed = false;
   const avail = () => { let a = w - r; if (a < 0) a += n; return a; };
-  const node = ac.createScriptProcessor(2048, 0, channels);
+  const primeNeed = Math.floor(sr * 1.0) * srcCh;
+  const lowNeed = Math.floor(sr * 0.2) * srcCh;
+  let node;
+  try { node = ac.createScriptProcessor(4096, 0, outCh); }
+  catch { node = ac.createScriptProcessor(4096, 1, outCh); }
   node.onaudioprocess = (ev) => {
     const outs = [];
-    for (let c = 0; c < channels; c++) outs[c] = ev.outputBuffer.getChannelData(c);
+    for (let c = 0; c < ev.outputBuffer.numberOfChannels; c++) outs[c] = ev.outputBuffer.getChannelData(c);
     const frames = ev.outputBuffer.length;
-    const need = frames * channels;
-    const sr = ac.sampleRate;
+    const need = frames * srcCh;
     let a = avail();
     if (!primed) {
-      if (a < sr * 0.4 * channels) {
-        for (let c = 0; c < channels; c++) outs[c].fill(0);
+      if (a < primeNeed) {
+        for (let c = 0; c < outs.length; c++) outs[c].fill(0);
         return;
       }
       primed = true;
     }
-    if (a < need) {
-      for (let c = 0; c < channels; c++) outs[c].fill(0);
+    if (a < need || a < lowNeed) {
+      primed = false;
+      for (let c = 0; c < outs.length; c++) outs[c].fill(0);
       return;
     }
     let peak = 0;
+    const frame = new Float32Array(srcCh);
     for (let i = 0; i < frames; i++) {
-      for (let c = 0; c < channels; c++) {
+      for (let c = 0; c < srcCh; c++) {
         const v = ring[r];
         r++; if (r >= n) r = 0;
-        outs[c][i] = v;
+        frame[c] = v;
         const abs = v < 0 ? -v : v;
         if (abs > peak) peak = abs;
       }
+      foldFrame(outs, i, frame, srcCh);
     }
-    liveLevel.style.width = Math.min(100, Math.round(peak * 140)) + '%';
+    livePeak = peak;
   };
   node.connect(ac.destination);
   return {
     node,
+    buffered(){ return avail() / srcCh / sr; },
     push(f32){
       let used = w - r; if (used < 0) used += n;
-      const space = n - used - channels;
+      const space = n - used - srcCh;
       const count = Math.min(f32.length, Math.max(0, space));
-      const aligned = count - (count % channels);
+      const aligned = count - (count % srcCh);
       for (let i = 0; i < aligned; i++) {
         ring[w] = f32[i];
         w++; if (w >= n) w = 0;
       }
+      return aligned;
     }
   };
 }
 async function attachWorkletRing(ac, channels){
+  const srcCh = Math.max(1, channels);
   const src = `
     registerProcessor('fubar-play', class extends AudioWorkletProcessor {
       constructor() {
         super();
-        this.n = 0; this.ring = null; this.w = 0; this.r = 0;
-        this.ch = 1; this.primed = false; this.tick = 0;
+        this.ch = 1;
+        this.n = Math.max(16384, sampleRate * 8 * 2);
+        this.ring = new Float32Array(this.n);
+        this.w = 0; this.r = 0; this.primed = false; this.tick = 0;
         this.port.onmessage = (e) => {
-          if (e.data.ch) this.ch = e.data.ch;
-          const s = e.data.s;
-          if (!s || !this.ring) return;
+          const d = e.data || {};
+          if (d.ch) this.ch = d.ch;
+          const s = d.s;
+          if (!s) return;
           let used = this.w - this.r; if (used < 0) used += this.n;
-          const space = this.n - used - this.ch;
-          const count = Math.min(s.length, Math.max(0, space));
-          const aligned = count - (count % this.ch);
-          for (let i = 0; i < aligned; i++) {
+          let space = this.n - used - this.ch;
+          let i = 0;
+          while (i < s.length && space < this.ch) {
+            this.r += this.ch; if (this.r >= this.n) this.r -= this.n;
+            used = this.w - this.r; if (used < 0) used += this.n;
+            space = this.n - used - this.ch;
+          }
+          const aligned = (s.length - i) - ((s.length - i) % this.ch);
+          const end = i + Math.min(aligned, Math.max(0, space));
+          for (; i < end; i++) {
             this.ring[this.w] = s[i];
             this.w++; if (this.w >= this.n) this.w = 0;
           }
@@ -310,65 +368,99 @@ async function attachWorkletRing(ac, channels){
       }
       avail(){ let a = this.w - this.r; if (a < 0) a += this.n; return a; }
       process(_, outputs){
-        if (!this.ring) {
-          this.n = Math.max(8192, sampleRate * 4 * 2);
-          this.ring = new Float32Array(this.n);
-        }
         const out = outputs[0];
         const frames = out[0].length;
-        const ch = Math.min(this.ch, out.length);
-        const need = frames * this.ch;
+        const srcCh = this.ch;
+        const need = frames * srcCh;
+        const primeNeed = sampleRate * 1.0 * srcCh;
+        const lowNeed = sampleRate * 0.2 * srcCh;
         let a = this.avail();
         if (!this.primed) {
-          if (a < sampleRate * 0.4 * this.ch) {
+          if (a < primeNeed) {
             for (let c = 0; c < out.length; c++) out[c].fill(0);
             return true;
           }
           this.primed = true;
         }
-        if (a < need) {
+        if (a < need || a < lowNeed) {
+          this.primed = false;
           for (let c = 0; c < out.length; c++) out[c].fill(0);
           return true;
         }
         let peak = 0;
         for (let i = 0; i < frames; i++) {
-          for (let c = 0; c < ch; c++) {
-            const v = this.ring[this.r];
+          let sum = 0;
+          const left = this.ring[this.r];
+          this.r++; if (this.r >= this.n) this.r = 0;
+          sum += left;
+          let right = left;
+          if (srcCh > 1) {
+            right = this.ring[this.r];
             this.r++; if (this.r >= this.n) this.r = 0;
-            out[c][i] = v;
-            const abs = v < 0 ? -v : v;
-            if (abs > peak) peak = abs;
+            sum += right;
+            for (let extra = 2; extra < srcCh; extra++) {
+              this.r++; if (this.r >= this.n) this.r = 0;
+            }
           }
-          for (let c = ch; c < out.length; c++) out[c][i] = out[0][i];
+          const absL = left < 0 ? -left : left;
+          const absR = right < 0 ? -right : right;
+          if (absL > peak) peak = absL;
+          if (absR > peak) peak = absR;
+          if (out.length === 1) out[0][i] = srcCh > 1 ? sum / 2 : left;
+          else {
+            out[0][i] = left;
+            out[1][i] = right;
+            for (let c = 2; c < out.length; c++) out[c][i] = left;
+          }
         }
         this.tick++;
-        if ((this.tick & 7) === 0) this.port.postMessage(peak);
+        if ((this.tick & 15) === 0) {
+          this.port.postMessage({p: peak, f: this.avail() / srcCh / sampleRate});
+        }
         return true;
       }
     });`;
   const url = URL.createObjectURL(new Blob([src], {type:'application/javascript'}));
   await ac.audioWorklet.addModule(url);
   URL.revokeObjectURL(url);
-  const node = new AudioWorkletNode(ac, 'fubar-play', {outputChannelCount:[channels]});
-  node.port.postMessage({ch: channels});
+  const node = new AudioWorkletNode(ac, 'fubar-play', {
+    numberOfInputs: 0,
+    numberOfOutputs: 1,
+    outputChannelCount: [srcCh > 1 ? 2 : 1],
+    channelCount: srcCh > 1 ? 2 : 1,
+    channelCountMode: 'explicit'
+  });
+  let fillSec = 0;
   node.port.onmessage = (e) => {
-    liveLevel.style.width = Math.min(100, Math.round(Number(e.data) * 140)) + '%';
+    const d = e.data || {};
+    livePeak = Number(d.p) || 0;
+    if (d.f != null) fillSec = Number(d.f) || 0;
   };
+  node.port.postMessage({ch: srcCh});
   node.connect(ac.destination);
+  const sr = ac.sampleRate;
   return {
     node,
-    push(f32){ node.port.postMessage({s: f32}); }
+    buffered(){ return fillSec; },
+    push(f32){
+      fillSec += (f32.length / srcCh) / sr;
+      node.port.postMessage({s: f32});
+      return f32.length;
+    }
   };
 }
 async function playLiveSession(){
   audio.pause();
+  closeLiveAudio();
   liveAbort = new AbortController();
   if (navigator.audioSession) { try { navigator.audioSession.type = 'playback'; } catch {} }
+  liveMedia.muted = true;
+  liveMedia.volume = 0;
   liveMedia.loop = true;
   liveMedia.src = SILENT_WAV;
   try { await liveMedia.play(); } catch {}
   await keepLiveAlive();
-  const res = await fetch('live.pcm?v=114&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
+  const res = await fetch('live.pcm?v=115&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
   if (!res.ok || !res.body) {
     if (res.status === 503) throw new Error('queue');
     throw new Error('live unavailable');
@@ -411,6 +503,7 @@ async function playLiveSession(){
   }
   liveNode = tap.node;
   const resample = makeResampler(rate, ac.sampleRate, channels);
+  startMeter();
   if (navigator.mediaSession) {
     try {
       navigator.mediaSession.metadata = new MediaMetadata({title:'FUBAR Live', artist:'FUBAR'});
@@ -420,10 +513,14 @@ async function playLiveSession(){
       navigator.mediaSession.setActionHandler('stop', () => stopLive());
     } catch {}
   }
-  setLiveUi(true, 'Live · ' + rate + ' Hz 16-bit PCM' + (channels>1?' stereo':'') + ' · 1:1');
+  setLiveUi(true, 'Live · ' + rate + ' Hz 16-bit PCM' + (channels>1?' stereo':'') + ' · 1:1 · ~1s buffer');
   const keep = setInterval(keepLiveAlive, 1500);
   try {
     while (liveWanted) {
+      while (liveWanted && tap.buffered() > 1.8) {
+        await new Promise(r => setTimeout(r, 25));
+      }
+      if (!liveWanted) break;
       const frameBytes = 2 * channels;
       if (buf.length < 2048 && !await readMore()) break;
       let bytes = buf.length - (buf.length % frameBytes);
@@ -439,6 +536,9 @@ async function playLiveSession(){
   } finally {
     clearInterval(keep);
     try { tap.node.disconnect(); } catch {}
+    liveNode = null;
+    try { if (liveAc === ac && ac.state !== 'closed' && ac.close) ac.close(); } catch {}
+    if (liveAc === ac) liveAc = null;
   }
 }
 async function startLive(){

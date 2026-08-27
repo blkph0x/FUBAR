@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.15
+
+- Live no longer gargles or vibrates on PC and phone. The player was pumping silence
+  whenever the buffer dipped, which amplitude-modulated whatever was playing — Stereo,
+  Left, Right and Mono all sounded the same because it was not a channel-mix bug.
+- Listen live now waits about a second before starting, never chops zeros into a live
+  stream, and pauses the download instead of dropping samples when the buffer is full.
+- The keep-alive WAV is muted so it cannot mix with the capture. The level meter is
+  drawn off the audio thread.
+
 ## 1.1.14
 
 - Live WFM no longer “gurgles”: the player was skipping a few samples on every audio tick

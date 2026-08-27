@@ -18,7 +18,7 @@ void LiveAudioHub::resizeLocked(std::uint32_t sampleRate, std::uint16_t channels
   channels_ = channels == 2 ? 2 : 1;
   sampleRate_ = sampleRate ? sampleRate : 48000;
   const std::size_t capacity =
-      static_cast<std::size_t>(std::max<std::uint32_t>(sampleRate_, 8000)) * channels_ * 4;
+      static_cast<std::size_t>(std::max<std::uint32_t>(sampleRate_, 8000)) * channels_ * 8;
   buffer_.assign(capacity, 0);
   writePos_ = 0;
 }
@@ -81,14 +81,16 @@ std::size_t LiveAudioHub::pull(Cursor& cursor, std::int16_t* out, std::size_t ma
     if (cursor.generation != generation_) {
       cursor.generation = generation_;
       const std::uint64_t preroll =
-          static_cast<std::uint64_t>(std::max<std::uint32_t>(sampleRate_ / 12, 160)) * channels_;
+          static_cast<std::uint64_t>(std::max<std::uint32_t>(sampleRate_ / 2, 800)) * channels_;
       cursor.pos = writePos_ > preroll ? writePos_ - preroll : 0;
       cursor.pos -= cursor.pos % channels_;
     }
     if (cursor.pos > writePos_) cursor.pos = writePos_;
     const std::uint64_t behind = writePos_ - cursor.pos;
     if (behind > buffer_.size()) {
-      cursor.pos = writePos_ - (buffer_.size() / 4);
+      const std::uint64_t keep =
+          static_cast<std::uint64_t>(std::max<std::uint32_t>(sampleRate_, 8000)) * channels_;
+      cursor.pos = writePos_ > keep ? writePos_ - keep : 0;
       cursor.pos -= cursor.pos % channels_;
     }
     std::size_t copied = 0;

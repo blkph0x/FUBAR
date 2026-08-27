@@ -87,9 +87,12 @@ play saved WAV clips. Several people can listen at the same time. When the live 
 (default 5, change it in **Tools → Settings**), new visitors wait in a queue until a slot frees.
 Live audio is **16-bit PCM at the capture sample rate** (1:1, the same idea as KiwiSDR). That is
 required for SSTV, POCSAG, weather-fax and other digital modes — MP3 would destroy them. Tap
-**Listen live**. A jitter buffer keeps WFM and voice from breaking up. On a phone the page takes a
-screen wake lock so listening is not killed when the display would sleep. Set **Live listen boost**
-to 0 dB for digital modes. If the stream still drops, the page reconnects. Stereo stays stereo.
+**Listen live**. A ~1 second jitter buffer keeps WFM and voice continuous (no gargle from
+underruns). On a phone the page takes a screen wake lock so listening is not killed when the
+display would sleep. Set **Live listen boost** to 0 dB for digital modes. If the stream still
+drops, the page reconnects. Stereo stays stereo. If you listen on the same PC that is running
+FUBAR, mute the app’s local monitor or you will hear both — that delayed double can sound like
+a vibration.
 
 ### Public Server network
 
