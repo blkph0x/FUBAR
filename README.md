@@ -22,7 +22,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 - Optional continuous recording mode for testing or unattended capture.
 - Separate replay-log window with timestamp, frequency, mode, duration, peak level, playback,
   and Explorer access.
-- Optional public website on port 80 so anyone on the network can list and play captures.
+- Optional public website on port 80 so anyone on the network can listen live and play captures.
 - Full terminal operation for scripts, scheduled jobs, and automation.
 - Handles shared-mode 8/16/24/32-bit PCM and 32/64-bit floating-point input safely.
 
@@ -67,9 +67,10 @@ silence for two seconds, FUBAR tries the next physical input automatically.
 
 ### Public website
 
-The website is off until an admin enables it. While it is on, FUBAR serves a simple capture
-player at `http://<this-pc>:80/`. Visitors can browse every WAV in the recording folder and
-play clips in the browser. Disable the checkbox to take the site offline.
+The website is off until an admin enables it. While it is on, FUBAR serves a capture player at
+`http://<this-pc>:80/`. Visitors can **Listen live** to the same audio the app is capturing, and
+play saved WAV clips. Live audio is sent as a continuous mono WAV from a shared ring buffer, so
+many listeners do not recapture the device. Disable the checkbox to take the site offline.
 
 Port 80 is the standard web port, so no extra port number is required. If Windows Firewall
 prompts, allow FUBAR so other devices on the network can connect.

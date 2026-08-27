@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio_types.h"
+#include "live_hub.h"
 
 #include <atomic>
 #include <functional>
@@ -37,6 +38,7 @@ class AudioEngine {
   bool recording() const;
   LevelSnapshot levels() const;
   std::wstring status() const;
+  LiveAudioHub& liveHub() { return liveHub_; }
 
  private:
   void captureThread();
@@ -56,4 +58,5 @@ class AudioEngine {
   std::atomic<float> outputRightDb_{-90.0f};
   mutable CRITICAL_SECTION statusLock_{};
   std::wstring status_ = L"Idle";
+  LiveAudioHub liveHub_;
 };

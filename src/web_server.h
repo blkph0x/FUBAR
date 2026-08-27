@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "live_hub.h"
+
 #include <windows.h>
 
 struct CaptureItem {
@@ -34,6 +36,7 @@ class CaptureWebServer {
   std::wstring lanUrl() const;
 
   void setRoot(const std::filesystem::path& directory);
+  void setLiveHub(LiveAudioHub* hub);
   void setLiveStatus(const std::wstring& status, bool recording);
 
   static std::vector<CaptureItem> listCaptures(const std::filesystem::path& directory);
@@ -46,6 +49,7 @@ class CaptureWebServer {
  private:
   void acceptLoop();
   void handleClient(std::uintptr_t client);
+  void streamLive(std::uintptr_t client);
   std::filesystem::path rootLocked() const;
   std::string statusJson() const;
   std::string capturesJson() const;
@@ -61,6 +65,7 @@ class CaptureWebServer {
   std::uint16_t port_ = 80;
   mutable CRITICAL_SECTION lock_{};
   std::filesystem::path root_;
+  LiveAudioHub* liveHub_ = nullptr;
   std::wstring liveStatus_ = L"Idle";
   std::wstring lastError_;
 };

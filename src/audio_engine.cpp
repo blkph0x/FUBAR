@@ -473,6 +473,7 @@ bool AudioEngine::start(const AudioOptions& options, StatusCallback statusCallba
 
 void AudioEngine::stop() {
   stopRequested_ = true;
+  liveHub_.endSession();
   if (thread_) {
     WaitForSingleObject(thread_, INFINITE);
     CloseHandle(thread_);
@@ -734,6 +735,7 @@ void AudioEngine::captureThread() {
   }
 
   running_ = true;
+  liveHub_.beginSession(sampleRate);
   setStatus(L"Input format: " + decoder.description());
   setStatus(monitorWarning.empty() ? L"Listening" : monitorWarning);
   if (options_.forceRecord && beginRecording()) voxGate.activate();
@@ -810,6 +812,7 @@ void AudioEngine::captureThread() {
       const float packetPeak = std::max(outputLeftPeak, outputRightPeak);
 
       if (monitorEnabled) monitor.submit(monitorSamples);
+      liveHub_.pushInterleaved(routed.data(), routed.size(), recordChannels);
 
       bool packetAlreadyBuffered = false;
       if (!voxGate.active()) {
@@ -856,6 +859,7 @@ void AudioEngine::captureThread() {
   voxGate.reset();
   client->Stop();
   monitor.close();
+  liveHub_.endSession();
   running_ = false;
   recording_ = false;
   inputLeftDb_ = inputRightDb_ = outputLeftDb_ = outputRightDb_ = -90.0f;

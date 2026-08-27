@@ -38,6 +38,10 @@ header{ max-width:920px; margin:0 auto; padding:28px 18px 8px; }
 h1{ margin:.2rem 0; font-size:clamp(2.2rem,7vw,4.4rem); letter-spacing:.04em; }
 .sub{ color:var(--muted); margin:0 0 14px; }
 .pill{ display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); background:#0c100c; border-radius:999px; padding:7px 12px; font-size:13px; }
+.livebox{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:16px 0 8px; padding:14px; background:var(--card); border:1px solid var(--line); border-radius:16px; }
+.livebox button{ border:0; border-radius:999px; padding:10px 18px; font-weight:800; cursor:pointer; background:var(--live); color:#fff; }
+.livebox button.on{ background:var(--green); color:#111; }
+.livebox audio{ flex:1; min-width:220px; }
 .dot{ width:9px; height:9px; border-radius:50%; background:var(--muted); }
 .dot.live{ background:var(--live); box-shadow:0 0 12px var(--live); }
 .dot.on{ background:var(--green); box-shadow:0 0 12px var(--green); }
@@ -60,8 +64,16 @@ button.play.playing{ background:var(--blue); }
 <header>
   <p class="kicker">Communication is key</p>
   <h1>FUBAR</h1>
-  <p class="sub">Public capture log. Tap a clip to listen.</p>
+  <p class="sub">Listen live to what FUBAR hears, or play back saved captures.</p>
   <div class="pill"><span id="dot" class="dot"></span><span id="live">Connecting…</span></div>
+  <div class="livebox">
+    <button id="liveBtn" type="button">Listen live</button>
+    <div>
+      <div class="name">Live monitor</div>
+      <div class="when" id="liveHint">Same audio the app is capturing right now</div>
+    </div>
+    <audio id="liveAudio" controls preload="none"></audio>
+  </div>
 </header>
 <main>
   <div class="row"><h2>Captures</h2><div class="meta" id="count"></div></div>
@@ -110,6 +122,7 @@ function play(id){
   const item = items.find(x => x.id === id);
   if (!item) return;
   if (current === id && !audio.paused){ audio.pause(); return; }
+  liveAudio.pause();
   current = id;
   now.textContent = 'Playing ' + item.name;
   audio.src = '/audio/' + encodeURIComponent(item.id);
@@ -122,6 +135,17 @@ list.addEventListener('click', e => {
 });
 audio.addEventListener('pause', render);
 audio.addEventListener('play', render);
+const liveBtn = document.getElementById('liveBtn');
+const liveAudio = document.getElementById('liveAudio');
+const liveHint = document.getElementById('liveHint');
+liveBtn.addEventListener('click', () => {
+  if (!liveAudio.paused && liveAudio.src) { liveAudio.pause(); return; }
+  audio.pause();
+  liveAudio.src = '/live.wav?t=' + Date.now();
+  liveAudio.play();
+});
+liveAudio.addEventListener('play', () => { liveBtn.textContent = 'Stop live'; liveBtn.classList.add('on'); liveHint.textContent = 'Streaming the live capture'; });
+liveAudio.addEventListener('pause', () => { liveBtn.textContent = 'Listen live'; liveBtn.classList.remove('on'); liveHint.textContent = 'Same audio the app is capturing right now'; });
 async function refresh(){
   try {
     const [statusRes, listRes] = await Promise.all([
@@ -130,7 +154,7 @@ async function refresh(){
     ]);
     const status = await statusRes.json();
     items = (await listRes.json()).captures || [];
-    live.textContent = status.recording ? 'LIVE · recording' : (status.status || 'On air');
+    live.textContent = status.recording ? 'LIVE · recording' : (status.live ? 'On air · live stream ready' : (status.status || 'On air'));
     dot.className = 'dot ' + (status.recording ? 'live' : 'on');
     render();
   } catch {
@@ -327,6 +351,12 @@ void CaptureWebServer::setRoot(const std::filesystem::path& directory) {
   LeaveCriticalSection(&lock_);
 }
 
+void CaptureWebServer::setLiveHub(LiveAudioHub* hub) {
+  EnterCriticalSection(&lock_);
+  liveHub_ = hub;
+  LeaveCriticalSection(&lock_);
+}
+
 void CaptureWebServer::setLiveStatus(const std::wstring& status, bool recording) {
   EnterCriticalSection(&lock_);
   liveStatus_ = status;
@@ -429,6 +459,11 @@ bool CaptureWebServer::handlePathForTest(const std::string& method, const std::s
     *contentType = "text/html";
     return true;
   }
+  if (path == "/live" || path == "/live.wav") {
+    *status = 200;
+    *contentType = "audio/wav";
+    return true;
+  }
   if (path == "/api/status" || path == "/api/captures") {
     *status = 200;
     *contentType = "application/json";
@@ -464,7 +499,10 @@ std::string CaptureWebServer::statusJson() const {
   const std::uint16_t port = port_;
   LeaveCriticalSection(&lock_);
   std::ostringstream json;
+  LiveAudioHub* hub = liveHub_;
   json << "{\"ok\":true,\"recording\":" << (recording ? "true" : "false")
+       << ",\"live\":" << (hub && hub->live() ? "true" : "false")
+       << ",\"sampleRate\":" << (hub ? hub->sampleRate() : 0)
        << ",\"status\":\"" << jsonEscape(wideToUtf8(live)) << "\",\"port\":" << port
        << "}";
   return json.str();
@@ -578,6 +616,54 @@ void CaptureWebServer::acceptLoop() {
   }
 }
 
+void CaptureWebServer::streamLive(std::uintptr_t clientHandle) {
+  const SOCKET client = static_cast<SOCKET>(clientHandle);
+  const BOOL nodelay = TRUE;
+  setsockopt(client, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&nodelay), sizeof(nodelay));
+  DWORD sendTimeout = 4000;
+  setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&sendTimeout),
+             sizeof(sendTimeout));
+
+  EnterCriticalSection(&lock_);
+  LiveAudioHub* hub = liveHub_;
+  LeaveCriticalSection(&lock_);
+
+  const std::uint32_t rate = (hub && hub->sampleRate()) ? hub->sampleRate() : 48000;
+  std::uint8_t wav[44];
+  LiveAudioHub::writeWavHeader(wav, rate);
+  const char* prelude =
+      "HTTP/1.0 200 OK\r\n"
+      "Content-Type: audio/wav\r\n"
+      "Cache-Control: no-store, no-cache\r\n"
+      "Pragma: no-cache\r\n"
+      "Connection: close\r\n"
+      "icy-name: FUBAR Live\r\n"
+      "\r\n";
+  if (!sendAll(client, prelude, static_cast<int>(std::strlen(prelude)))) return;
+  if (!sendAll(client, reinterpret_cast<const char*>(wav), 44)) return;
+
+  LiveAudioHub::Cursor cursor;
+  std::int16_t pcm[2048];
+  std::uint32_t generation = hub ? hub->generation() : 0;
+  while (!stop_) {
+    if (hub && hub->sampleRate() && hub->sampleRate() != rate) break;
+    if (hub && hub->live() && hub->generation() != generation) {
+      generation = hub->generation();
+      cursor = {};
+    }
+    std::size_t got = hub ? hub->pull(cursor, pcm, 2048, 40) : 0;
+    if (got == 0) {
+      got = static_cast<std::size_t>(std::max<std::uint32_t>(rate / 50, 160));
+      if (got > 2048) got = 2048;
+      std::memset(pcm, 0, got * sizeof(std::int16_t));
+    }
+    if (!sendAll(client, reinterpret_cast<const char*>(pcm),
+                 static_cast<int>(got * sizeof(std::int16_t)))) {
+      break;
+    }
+  }
+}
+
 void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
   const SOCKET client = static_cast<SOCKET>(clientHandle);
   DWORD timeout = 8000;
@@ -622,6 +708,10 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
   }
   if (path == "/api/captures") {
     sendResponse(client, 200, "OK", "application/json", capturesJson());
+    return;
+  }
+  if (path == "/live" || path == "/live.wav") {
+    streamLive(static_cast<std::uintptr_t>(client));
     return;
   }
   if (path.rfind("/audio/", 0) == 0) {

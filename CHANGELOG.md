@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.3
+
+- Live website stream of the same audio FUBAR is capturing, shared by all listeners from one ring buffer.
+- Listen live in the browser without waiting for a saved clip.
+
 ## 1.1.2
 
 - Added a public capture website on port 80 that lists recordings and plays them in the browser.

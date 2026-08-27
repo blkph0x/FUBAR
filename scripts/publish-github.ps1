@@ -1,6 +1,6 @@
 param(
   [string]$RepositoryName = "FUBAR",
-  [string]$Tag = "v1.1.2"
+  [string]$Tag = "v1.1.3"
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,8 +36,12 @@ try {
   git push origin $Tag
   if ($LASTEXITCODE -ne 0) { throw "Tag push failed" }
 
+  $prevError = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
   gh release view $Tag *> $null
-  if ($LASTEXITCODE -eq 0) {
+  $releaseExists = $LASTEXITCODE -eq 0
+  $ErrorActionPreference = $prevError
+  if ($releaseExists) {
     gh release upload $Tag $asset --clobber
   } else {
     gh release create $Tag $asset --title "FUBAR $Tag" --notes-file CHANGELOG.md

@@ -11,9 +11,11 @@
 #include "wav_writer.h"
 #include "vox_gate.h"
 #include "web_server.h"
+#include "live_hub.h"
 
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -54,7 +56,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.2 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.3 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -197,7 +199,62 @@ int runSelfTest() {
     std::wcerr << L"Self-test failed: website did not list the capture\n";
     return 1;
   }
-  std::wcout << L"Self-test passed: CLI, WAV writer, and public website are operational.\n";
+
+  LiveAudioHub hub;
+  hub.beginSession(8000);
+  std::vector<std::int16_t> tone(800);
+  for (int i = 0; i < 800; ++i) tone[static_cast<std::size_t>(i)] = static_cast<std::int16_t>(i);
+  hub.pushInterleaved(tone.data(), tone.size(), 1);
+  LiveAudioHub::Cursor cursor;
+  std::vector<std::int16_t> pulled(800);
+  const std::size_t got = hub.pull(cursor, pulled.data(), pulled.size(), 0);
+  if (got < 400 || pulled[10] != 10) {
+    std::wcerr << L"Self-test failed: live audio hub\n";
+    return 1;
+  }
+  std::uint8_t wavHeader[44];
+  LiveAudioHub::writeWavHeader(wavHeader, 8000);
+  if (std::memcmp(wavHeader, "RIFF", 4) != 0 || std::memcmp(wavHeader + 8, "WAVE", 4) != 0) {
+    std::wcerr << L"Self-test failed: live WAV header\n";
+    return 1;
+  }
+  if (!CaptureWebServer::handlePathForTest("GET", "/live.wav", webDir, &status, &type) ||
+      status != 200) {
+    std::wcerr << L"Self-test failed: live stream path\n";
+    return 1;
+  }
+  server.setLiveHub(&hub);
+  if (!server.start(18080)) {
+    std::wcerr << L"Self-test failed: could not restart website for live stream\n";
+    return 1;
+  }
+  Sleep(50);
+  SOCKET liveSock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  const bool liveConnected =
+      liveSock != INVALID_SOCKET &&
+      ::connect(liveSock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0;
+  std::string liveHead;
+  if (liveConnected) {
+    DWORD timeout = 1500;
+    setsockopt(liveSock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout),
+               sizeof(timeout));
+    const char liveReq[] = "GET /live.wav HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+    send(liveSock, liveReq, sizeof(liveReq) - 1, 0);
+    hub.pushInterleaved(tone.data(), tone.size(), 1);
+    char buf[1024];
+    int n = 0;
+    while (liveHead.size() < 512 && (n = recv(liveSock, buf, sizeof(buf), 0)) > 0) {
+      liveHead.append(buf, static_cast<std::size_t>(n));
+    }
+  }
+  if (liveSock != INVALID_SOCKET) closesocket(liveSock);
+  server.stop();
+  if (!liveConnected || liveHead.find("audio/wav") == std::string::npos ||
+      liveHead.find("RIFF") == std::string::npos) {
+    std::wcerr << L"Self-test failed: live stream did not send WAV audio\n";
+    return 1;
+  }
+  std::wcout << L"Self-test passed: CLI, WAV writer, website, and live stream are operational.\n";
   return 0;
 }
 
@@ -298,9 +355,11 @@ int wmain(int argc, wchar_t** argv) {
     return app.run(GetModuleHandleW(nullptr), SW_SHOWDEFAULT);
   }
 
+  AudioEngine engine;
   CaptureWebServer website;
   if (webEnabled) {
     website.setRoot(options.outputDirectory);
+    website.setLiveHub(&engine.liveHub());
     if (!website.start(80)) {
       std::wcerr << L"Website failed: " << website.lastError() << L"\n";
     } else {
@@ -309,7 +368,6 @@ int wmain(int argc, wchar_t** argv) {
   }
 
   SetConsoleCtrlHandler(consoleHandler, TRUE);
-  AudioEngine engine;
   engine.start(
       options,
       [](const std::wstring& status) { std::wcout << L"[status] " << status << L"\n"; },
@@ -328,5 +386,6 @@ int wmain(int argc, wchar_t** argv) {
     Sleep(100);
   }
   engine.stop();
+  website.stop();
   return 0;
 }
