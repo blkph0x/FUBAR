@@ -66,7 +66,9 @@ enum ControlId {
   IdReplayList,
   IdReplayPlay,
   IdReplayOpen,
-  IdRefreshDevices
+  IdRefreshDevices,
+  IdWeb,
+  IdOpenWeb
 };
 
 HWND addControl(HWND parent, const wchar_t* className, const wchar_t* text, DWORD style,
@@ -208,8 +210,8 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   brandClass.lpszClassName = kBrandClass;
   RegisterClassExW(&brandClass);
 
-  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.1", WS_OVERLAPPEDWINDOW,
-                            CW_USEDEFAULT, CW_USEDEFAULT, 780, 735, nullptr, nullptr, instance_,
+  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.2", WS_OVERLAPPEDWINDOW,
+                            CW_USEDEFAULT, CW_USEDEFAULT, 780, 780, nullptr, nullptr, instance_,
                             this);
   if (!window_) return 1;
   ShowWindow(window_, showCommand);
@@ -254,8 +256,10 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
       idleStatusBrush_ = CreateSolidBrush(RGB(190, 35, 35));
       recordingStatusBrush_ = CreateSolidBrush(RGB(25, 150, 70));
       createControls();
+      loadSettings();
       populateDevices();
       applyOptionsToControls();
+      applyWebServer();
       SetTimer(window, kMeterTimer, 75, nullptr);
       PostMessageW(window, WM_COMMAND, IdStart, 0);
       return 0;
@@ -279,6 +283,14 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
         case IdBrowse: browseOutputDirectory(); return 0;
         case IdOpenFolder: openOutputDirectory(); return 0;
         case IdReplay: showReplayWindow(); return 0;
+        case IdOpenWeb: openWebsite(); return 0;
+        case IdWeb:
+          if (HIWORD(wParam) == BN_CLICKED) {
+            webEnabled_ = SendMessageW(webCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
+            applyWebServer();
+            saveSettings();
+          }
+          return 0;
         case IdDevice:
           if (HIWORD(wParam) == CBN_SELCHANGE) {
             autoSelectInput_ = false;
@@ -329,6 +341,7 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
     case WM_CLOSE:
       saveSettings();
       stopEngine();
+      web_.stop();
       DestroyWindow(window);
       return 0;
 
@@ -414,9 +427,13 @@ void AppWindow::createControls() {
   addControl(window_, L"BUTTON", L"Replay log", BS_PUSHBUTTON, 345, 575, 130, 38, IdReplay);
   addControl(window_, L"BUTTON", L"Open recordings", BS_PUSHBUTTON, 490, 575, 150, 38,
              IdOpenFolder);
+  webCheck_ = addControl(window_, L"BUTTON", L"Public website on port 80", BS_AUTOCHECKBOX,
+                         85, 628, 230, 24, IdWeb);
+  addControl(window_, L"BUTTON", L"Open site", BS_PUSHBUTTON, 325, 624, 90, 28, IdOpenWeb);
+  webStatus_ = addControl(window_, L"STATIC", L"Website off", 0, 430, 628, 280, 24);
   addControl(window_, L"STATIC",
              L"CLI automation: FUBAR.exe --cli --headless --mode left --threshold-db -35",
-              SS_CENTER, 40, 630, 680, 22);
+              SS_CENTER, 40, 668, 680, 22);
 }
 
 void AppWindow::populateDevices() {
@@ -525,6 +542,7 @@ void AppWindow::startEngine() {
     options_.outputDirectory = executableDirectory() / options_.outputDirectory;
     SetWindowTextW(outputEdit_, options_.outputDirectory.wstring().c_str());
   }
+  web_.setRoot(options_.outputDirectory);
   EnableWindow(startButton_, TRUE);
   EnableWindow(stopButton_, TRUE);
   updateStatus(L"Starting...");
@@ -617,6 +635,8 @@ void AppWindow::updateStatus(const std::wstring& status) {
   }
   SetWindowTextW(statusLabel_, text.c_str());
   InvalidateRect(statusLabel_, nullptr, TRUE);
+  web_.setLiveStatus(text, statusRecording_);
+  web_.setRoot(options_.outputDirectory);
 }
 
 void AppWindow::browseOutputDirectory() {
@@ -732,6 +752,48 @@ void AppWindow::saveSettings() const {
   WritePrivateProfileStringW(L"FUBAR", L"Threshold",
                              std::to_wstring(static_cast<int>(current.thresholdDb)).c_str(),
                              ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"WebEnabled", webEnabled_ ? L"1" : L"0", ini.c_str());
 }
 
-void AppWindow::loadSettings() {}
+void AppWindow::loadSettings() {
+  const auto ini = executableDirectory() / L"FUBAR.ini";
+  wchar_t buffer[1024]{};
+  if (GetPrivateProfileStringW(L"FUBAR", L"OutputDirectory", L"", buffer, 1024, ini.c_str()) > 0) {
+    options_.outputDirectory = buffer;
+  }
+  if (GetPrivateProfileStringW(L"FUBAR", L"Frequency", L"", buffer, 1024, ini.c_str()) > 0) {
+    try { options_.frequencyMhz = std::stod(buffer); } catch (...) {}
+  }
+  if (GetPrivateProfileStringW(L"FUBAR", L"Threshold", L"", buffer, 1024, ini.c_str()) > 0) {
+    try { options_.thresholdDb = std::stof(buffer); } catch (...) {}
+  }
+  webEnabled_ = GetPrivateProfileIntW(L"FUBAR", L"WebEnabled", 0, ini.c_str()) != 0;
+  if (webCheck_) {
+    SendMessageW(webCheck_, BM_SETCHECK, webEnabled_ ? BST_CHECKED : BST_UNCHECKED, 0);
+  }
+}
+
+void AppWindow::applyWebServer() {
+  web_.setRoot(options_.outputDirectory);
+  if (!webEnabled_) {
+    web_.stop();
+    if (webStatus_) SetWindowTextW(webStatus_, L"Website off");
+    return;
+  }
+  if (web_.running()) {
+    if (webStatus_) SetWindowTextW(webStatus_, (L"On air  " + web_.lanUrl()).c_str());
+    return;
+  }
+  if (!web_.start(80)) {
+    if (webStatus_) SetWindowTextW(webStatus_, web_.lastError().c_str());
+    webEnabled_ = false;
+    if (webCheck_) SendMessageW(webCheck_, BM_SETCHECK, BST_UNCHECKED, 0);
+    return;
+  }
+  if (webStatus_) SetWindowTextW(webStatus_, (L"On air  " + web_.lanUrl()).c_str());
+}
+
+void AppWindow::openWebsite() const {
+  const std::wstring target = web_.running() ? web_.url() : L"http://127.0.0.1/";
+  ShellExecuteW(window_, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio_engine.h"
+#include "web_server.h"
 
 #include <windows.h>
 
@@ -35,9 +36,13 @@ class AppWindow {
   void playSelectedReplay();
   void saveSettings() const;
   void loadSettings();
+  void applyWebServer();
+  void openWebsite() const;
 
   AudioOptions options_;
   AudioEngine engine_;
+  CaptureWebServer web_;
+  bool webEnabled_ = false;
   HINSTANCE instance_ = nullptr;
   HWND window_ = nullptr;
   HWND replayWindow_ = nullptr;
@@ -58,6 +63,8 @@ class AppWindow {
   HWND outputEdit_ = nullptr;
   HWND startButton_ = nullptr;
   HWND stopButton_ = nullptr;
+  HWND webCheck_ = nullptr;
+  HWND webStatus_ = nullptr;
   HWND inputLeftMeter_ = nullptr;
   HWND inputRightMeter_ = nullptr;
   HWND outputLeftMeter_ = nullptr;

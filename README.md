@@ -22,6 +22,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 - Optional continuous recording mode for testing or unattended capture.
 - Separate replay-log window with timestamp, frequency, mode, duration, peak level, playback,
   and Explorer access.
+- Optional public website on port 80 so anyone on the network can list and play captures.
 - Full terminal operation for scripts, scheduled jobs, and automation.
 - Handles shared-mode 8/16/24/32-bit PCM and 32/64-bit floating-point input safely.
 
@@ -61,6 +62,23 @@ silence for two seconds, FUBAR tries the next physical input automatically.
 8. Device, route, and checkbox changes apply immediately. Click **Apply / Restart** after editing
    threshold, timing, frequency, or output-folder values.
 9. Open **Replay log** to play completed files or locate them in Explorer.
+10. Tick **Public website on port 80** to share the capture log. Use **Open site** for this PC,
+    or visit the LAN address shown next to the checkbox from a phone or another computer.
+
+### Public website
+
+The website is off until an admin enables it. While it is on, FUBAR serves a simple capture
+player at `http://<this-pc>:80/`. Visitors can browse every WAV in the recording folder and
+play clips in the browser. Disable the checkbox to take the site offline.
+
+Port 80 is the standard web port, so no extra port number is required. If Windows Firewall
+prompts, allow FUBAR so other devices on the network can connect.
+
+Headless:
+
+```powershell
+.\FUBAR.exe --cli --headless --web --output "D:\FUBAR Recordings"
+```
 
 Use headphones when live monitoring a microphone to avoid acoustic feedback.
 If every input remains at `-90.0 dB`, check the microphone's hardware mute switch and Windows

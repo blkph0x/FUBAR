@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2
+
+- Added a public capture website on port 80 that lists recordings and plays them in the browser.
+- Admins can enable or disable the website from the GUI; the setting is saved.
+- Headless runs can serve the same site with `--web`.
+
 ## 1.1.1
 
 - The GUI now detaches from its console by default so no terminal remains visible.

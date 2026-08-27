@@ -1,10 +1,16 @@
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+
 #include "app_window.h"
 #include "audio_engine.h"
 #include "audio_safety.h"
 #include "wav_writer.h"
 #include "vox_gate.h"
-
-#include <windows.h>
+#include "web_server.h"
 
 #include <atomic>
 #include <chrono>
@@ -48,14 +54,15 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.1 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.2 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
       << L"  FUBAR.exe --cli --headless [options]       Run without GUI\n"
-      << L"  FUBAR.exe --cli --self-test                Test WAV output and CLI\n\n"
+      << L"  FUBAR.exe --cli --self-test                Test WAV output, web UI, and CLI\n\n"
       << L"Options:\n"
       << L"  --cli                 Keep the terminal attached for logs and input\n"
+      << L"  --web                 Enable the public capture website on port 80\n"
       << L"  --device N            Capture device index from --list-devices\n"
       << L"  --mode MODE           stereo, left, right, or mono\n"
       << L"  --threshold-db DB     VOX threshold, e.g. -35\n"
@@ -68,7 +75,8 @@ void printHelp() {
       << L"  --no-save             Meter/monitor only; do not write clips\n"
       << L"  --force-record        Record continuously instead of VOX\n"
       << L"  --append-session      Pause on silence and resume into the same WAV\n"
-      << L"  --split-stereo        Write stereo as separate mono left/right WAV files\n";
+      << L"  --split-stereo        Write stereo as separate mono left/right WAV files\n"
+      << L"  --web                 Serve the public capture website on TCP port 80\n";
 }
 
 ChannelMode parseMode(const std::wstring& text) {
@@ -129,12 +137,67 @@ int runSelfTest() {
   writer.close();
   std::error_code error;
   const auto size = std::filesystem::file_size(path, error);
-  std::filesystem::remove(path, error);
   if (size != 2444) {
+    std::filesystem::remove(path, error);
     std::wcerr << L"Self-test failed: expected 2444-byte WAV, got " << size << L"\n";
     return 1;
   }
-  std::wcout << L"Self-test passed: CLI and WAV writer are operational.\n";
+  const auto webDir = std::filesystem::temp_directory_path() / L"fubar_web_test";
+  std::filesystem::create_directories(webDir);
+  const auto clip = webDir / L"FUBAR_20260101_120000_stereo.wav";
+  std::filesystem::copy_file(path, clip, std::filesystem::copy_options::overwrite_existing, error);
+  if (!CaptureWebServer::safeCaptureId("FUBAR_20260101_120000_stereo.wav") ||
+      CaptureWebServer::safeCaptureId("../secret.wav") ||
+      CaptureWebServer::safeCaptureId("nope.txt")) {
+    std::wcerr << L"Self-test failed: capture id filter error\n";
+    return 1;
+  }
+  int status = 0;
+  std::string type;
+  if (!CaptureWebServer::handlePathForTest("GET", "/", webDir, &status, &type) || status != 200 ||
+      !CaptureWebServer::handlePathForTest("GET", "/api/captures", webDir, &status, &type) ||
+      CaptureWebServer::handlePathForTest("GET", "/audio/../secret.wav", webDir, &status, &type) ||
+      status != 400) {
+    std::wcerr << L"Self-test failed: web path filter error\n";
+    return 1;
+  }
+  const auto listed = CaptureWebServer::listCaptures(webDir);
+  if (listed.empty() || listed[0].id != "FUBAR_20260101_120000_stereo.wav") {
+    std::wcerr << L"Self-test failed: capture listing error\n";
+    return 1;
+  }
+  CaptureWebServer server;
+  server.setRoot(webDir);
+  if (!server.start(18080)) {
+    std::wcerr << L"Self-test failed: could not bind test web port 18080\n";
+    return 1;
+  }
+  SOCKET sock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  sockaddr_in addr{};
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(18080);
+  inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+  const bool connected = sock != INVALID_SOCKET &&
+                         ::connect(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0;
+  std::string response;
+  if (connected) {
+    const char request[] = "GET /api/captures HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    send(sock, request, sizeof(request) - 1, 0);
+    char buf[2048];
+    int got = 0;
+    while ((got = recv(sock, buf, sizeof(buf), 0)) > 0) response.append(buf, static_cast<std::size_t>(got));
+  }
+  if (sock != INVALID_SOCKET) closesocket(sock);
+  server.stop();
+  std::error_code cleanup;
+  std::filesystem::remove(clip, cleanup);
+  std::filesystem::remove(path, cleanup);
+  std::filesystem::remove(webDir, cleanup);
+  if (!connected || response.find("FUBAR_20260101_120000_stereo.wav") == std::string::npos) {
+    std::wcerr << L"Self-test failed: website did not list the capture\n";
+    return 1;
+  }
+  std::wcout << L"Self-test passed: CLI, WAV writer, and public website are operational.\n";
   return 0;
 }
 
@@ -147,6 +210,7 @@ int wmain(int argc, wchar_t** argv) {
   bool headless = false;
   bool listDevices = false;
   bool selfTest = false;
+  bool webEnabled = false;
   double durationSeconds = 0.0;
   int deviceIndex = -1;
 
@@ -194,6 +258,8 @@ int wmain(int argc, wchar_t** argv) {
         options.appendSession = true;
       } else if (argument == L"--split-stereo") {
         options.splitStereoFiles = true;
+      } else if (argument == L"--web") {
+        webEnabled = true;
       } else {
         std::wcerr << L"Unknown option: " << argument << L"\n";
         printHelp();
@@ -230,6 +296,16 @@ int wmain(int argc, wchar_t** argv) {
   if (!headless) {
     AppWindow app(options);
     return app.run(GetModuleHandleW(nullptr), SW_SHOWDEFAULT);
+  }
+
+  CaptureWebServer website;
+  if (webEnabled) {
+    website.setRoot(options.outputDirectory);
+    if (!website.start(80)) {
+      std::wcerr << L"Website failed: " << website.lastError() << L"\n";
+    } else {
+      std::wcout << L"[web] " << website.lanUrl() << L"\n";
+    }
   }
 
   SetConsoleCtrlHandler(consoleHandler, TRUE);
