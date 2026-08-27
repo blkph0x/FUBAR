@@ -1,5 +1,6 @@
 #include "app_window.h"
 
+#include "app_paths.h"
 #include "audio_safety.h"
 #include "../resources/resource.h"
 
@@ -96,13 +97,6 @@ void setWindowNumber(HWND control, double value, int precision = 1) {
   SetWindowTextW(control, stream.str().c_str());
 }
 
-std::filesystem::path executableDirectory() {
-  std::wstring buffer(32768, L'\0');
-  const DWORD length = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
-  buffer.resize(length);
-  return std::filesystem::path(buffer).parent_path();
-}
-
 int meterPosition(float db) {
   return static_cast<int>(std::clamp(db + 90.0f, 0.0f, 90.0f) * 10.0f);
 }
@@ -154,7 +148,7 @@ std::wstring replayLabel(const ReplayEntry& entry) {
   std::tm local{};
   localtime_s(&local, &time);
   std::wostringstream stream;
-  stream << std::put_time(&local, L"%H:%M:%S") << L"  "
+  stream << std::put_time(&local, L"%Y-%m-%d %H:%M:%S") << L"  "
          << std::fixed << std::setprecision(2) << entry.frequencyMhz << L" MHz  "
          << channelModeName(entry.mode) << L"  " << std::setprecision(1)
          << entry.durationSeconds << L" s  " << entry.peakDb << L" dB  "
@@ -210,7 +204,7 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   brandClass.lpszClassName = kBrandClass;
   RegisterClassExW(&brandClass);
 
-  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.4", WS_OVERLAPPEDWINDOW,
+  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.5", WS_OVERLAPPEDWINDOW,
                             CW_USEDEFAULT, CW_USEDEFAULT, 780, 780, nullptr, nullptr, instance_,
                             this);
   if (!window_) return 1;
@@ -259,6 +253,7 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
       loadSettings();
       populateDevices();
       applyOptionsToControls();
+      reloadCapturesFromDisk();
       applyWebServer();
       SetTimer(window, kMeterTimer, 75, nullptr);
       PostMessageW(window, WM_COMMAND, IdStart, 0);
@@ -332,7 +327,10 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
     case kMessageReplay: {
       std::unique_ptr<ReplayEntry> replay(reinterpret_cast<ReplayEntry*>(lParam));
       if (replay) {
-        replays_.push_back(*replay);
+        auto existing = std::find_if(replays_.begin(), replays_.end(),
+                                     [&](const ReplayEntry& item) { return item.path == replay->path; });
+        if (existing != replays_.end()) *existing = *replay;
+        else replays_.push_back(*replay);
         refreshReplayWindow();
       }
       return 0;
@@ -397,7 +395,7 @@ void AppWindow::createControls() {
   splitCheck_ = addControl(window_, L"BUTTON", L"Split stereo into L/R files",
                            BS_AUTOCHECKBOX, 435, 276, 235, 24, IdSplit);
   addControl(window_, L"STATIC", L"Recording folder:", SS_RIGHT, 40, 316, 160, 22);
-  outputEdit_ = addControl(window_, L"EDIT", L"recordings", WS_BORDER | ES_AUTOHSCROLL, 210,
+  outputEdit_ = addControl(window_, L"EDIT", defaultCaptureDirectory().wstring().c_str(), WS_BORDER | ES_AUTOHSCROLL, 210,
                            312, 410, 25, IdOutput, WS_EX_CLIENTEDGE);
   addControl(window_, L"BUTTON", L"Browse...", BS_PUSHBUTTON, 630, 311, 80, 27, IdBrowse);
 
@@ -538,10 +536,12 @@ void AppWindow::startEngine() {
   if (autoSelectInput_) inputProbeStarted_ = std::chrono::steady_clock::now();
   EnableWindow(splitCheck_, options_.mode == ChannelMode::Stereo);
   EnableWindow(appendCheck_, !options_.forceRecord);
-  if (options_.outputDirectory.is_relative()) {
-    options_.outputDirectory = executableDirectory() / options_.outputDirectory;
-    SetWindowTextW(outputEdit_, options_.outputDirectory.wstring().c_str());
+  if (isPlaceholderCapturePath(options_.outputDirectory)) {
+    options_.outputDirectory = defaultCaptureDirectory();
   }
+  std::error_code createError;
+  std::filesystem::create_directories(options_.outputDirectory, createError);
+  SetWindowTextW(outputEdit_, options_.outputDirectory.wstring().c_str());
   web_.setRoot(options_.outputDirectory);
   web_.setLiveHub(&engine_.liveHub());
   EnableWindow(startButton_, TRUE);
@@ -654,7 +654,10 @@ void AppWindow::browseOutputDirectory() {
       PWSTR path = nullptr;
       if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
         SetWindowTextW(outputEdit_, path);
+        options_.outputDirectory = path;
         CoTaskMemFree(path);
+        reloadCapturesFromDisk();
+        web_.setRoot(options_.outputDirectory);
       }
     }
   }
@@ -744,7 +747,7 @@ void AppWindow::playSelectedReplay() {
 }
 
 void AppWindow::saveSettings() const {
-  const auto ini = executableDirectory() / L"FUBAR.ini";
+  const auto ini = fubarSettingsPath();
   const auto current = optionsFromControls();
   WritePrivateProfileStringW(L"FUBAR", L"OutputDirectory",
                              current.outputDirectory.wstring().c_str(), ini.c_str());
@@ -756,11 +759,29 @@ void AppWindow::saveSettings() const {
   WritePrivateProfileStringW(L"FUBAR", L"WebEnabled", webEnabled_ ? L"1" : L"0", ini.c_str());
 }
 
+void AppWindow::reloadCapturesFromDisk() {
+  if (isPlaceholderCapturePath(options_.outputDirectory)) {
+    options_.outputDirectory = defaultCaptureDirectory();
+  }
+  migrateLegacyCaptures(options_.outputDirectory);
+  replays_ = loadCapturesFromDirectory(options_.outputDirectory, options_.frequencyMhz);
+  refreshReplayWindow();
+  web_.setRoot(options_.outputDirectory);
+}
+
 void AppWindow::loadSettings() {
-  const auto ini = executableDirectory() / L"FUBAR.ini";
+  const auto ini = fubarSettingsPath();
+  const auto legacyIni = executableDirectory() / L"FUBAR.ini";
+  std::error_code error;
+  if (!std::filesystem::exists(ini, error) && std::filesystem::exists(legacyIni, error)) {
+    std::filesystem::copy_file(legacyIni, ini, error);
+  }
   wchar_t buffer[1024]{};
   if (GetPrivateProfileStringW(L"FUBAR", L"OutputDirectory", L"", buffer, 1024, ini.c_str()) > 0) {
     options_.outputDirectory = buffer;
+  }
+  if (isPlaceholderCapturePath(options_.outputDirectory)) {
+    options_.outputDirectory = defaultCaptureDirectory();
   }
   if (GetPrivateProfileStringW(L"FUBAR", L"Frequency", L"", buffer, 1024, ini.c_str()) > 0) {
     try { options_.frequencyMhz = std::stod(buffer); } catch (...) {}

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.5
+
+- Saves captures to `%AppData%\Roaming\FUBAR\Vox_captures` and reloads that folder every start.
+- Copies clips from the old exe-side `recordings` folder into AppData once, so history is not lost.
+
 ## 1.1.4
 
 - Live listen now plays through Web Audio from a raw PCM stream, so browsers actually hear the capture.

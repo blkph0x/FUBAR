@@ -34,7 +34,7 @@ struct AudioOptions {
   bool appendSession = false;
   bool splitStereoFiles = false;
   double frequencyMhz = 268.0;
-  std::filesystem::path outputDirectory = L"recordings";
+  std::filesystem::path outputDirectory;
 };
 
 struct LevelSnapshot {

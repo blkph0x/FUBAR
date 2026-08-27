@@ -17,6 +17,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 - Adjustable VOX threshold from -60 dBFS to -5 dBFS.
 - Configurable pre-roll and silence hold time.
 - Creates standard 16-bit PCM WAV recordings automatically when audio crosses the threshold.
+- Stores clips in `%AppData%\Roaming\FUBAR\Vox_captures` and reloads them the next time FUBAR starts.
 - Optional append-session mode pauses file writes during silence and resumes into the same WAV.
 - Optional split-stereo mode creates synchronized mono `_left.wav` and `_right.wav` files.
 - Optional continuous recording mode for testing or unattended capture.
@@ -129,6 +130,11 @@ Run `FUBAR.exe --cli --help` for every option. A headless run with no duration c
 `Ctrl+C`.
 
 ## Recording behavior
+
+Recordings default to `%AppData%\Roaming\FUBAR\Vox_captures` (for example
+`C:\Users\You\AppData\Roaming\FUBAR\Vox_captures`). FUBAR creates that folder, writes WAV files
+there, and on every start reloads the replay log and website from it. A custom folder chosen with
+**Browse...** is still honoured. Settings live in `%AppData%\Roaming\FUBAR\FUBAR.ini`.
 
 The engine reads the selected endpoint's native shared-mode format, converts samples internally
 to normalized floating point, applies the selected channel route, and writes 16-bit PCM WAV data.

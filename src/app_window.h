@@ -36,6 +36,7 @@ class AppWindow {
   void playSelectedReplay();
   void saveSettings() const;
   void loadSettings();
+  void reloadCapturesFromDisk();
   void applyWebServer();
   void openWebsite() const;
 

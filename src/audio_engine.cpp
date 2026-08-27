@@ -214,6 +214,8 @@ std::filesystem::path recordingPath(const AudioOptions& options,
   }
   name << suffix;
   name << L".wav";
+  std::error_code error;
+  std::filesystem::create_directories(options.outputDirectory, error);
   return options.outputDirectory / name.str();
 }
 

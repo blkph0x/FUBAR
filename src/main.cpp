@@ -12,6 +12,7 @@
 #include "vox_gate.h"
 #include "web_server.h"
 #include "live_hub.h"
+#include "app_paths.h"
 
 #include <atomic>
 #include <chrono>
@@ -56,7 +57,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.4 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.5 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -259,6 +260,11 @@ int runSelfTest() {
     std::wcerr << L"Self-test failed: live stream did not send PCM audio\n";
     return 1;
   }
+  const auto capturesDir = defaultCaptureDirectory();
+  if (capturesDir.empty() || capturesDir.filename() != L"Vox_captures") {
+    std::wcerr << L"Self-test failed: default capture folder\n";
+    return 1;
+  }
   std::wcout << L"Self-test passed: CLI, WAV writer, website, and live stream are operational.\n";
   return 0;
 }
@@ -334,6 +340,10 @@ int wmain(int argc, wchar_t** argv) {
   }
 
   if (selfTest) return runSelfTest();
+
+  if (isPlaceholderCapturePath(options.outputDirectory)) {
+    options.outputDirectory = defaultCaptureDirectory();
+  }
 
   std::wstring deviceError;
   const auto devices = AudioEngine::enumerateInputDevices(&deviceError);
