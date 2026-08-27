@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$buildDir = Join-Path $projectRoot ("build-" + $Configuration.ToLowerInvariant() + "-mingw")
+$buildDir = Join-Path $projectRoot ("build-fubar-" + $Configuration.ToLowerInvariant() + "-mingw")
 $generator = "MinGW Makefiles"
 
 if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
@@ -39,4 +39,4 @@ if ($LASTEXITCODE -ne 0) { throw "Build failed with exit code $LASTEXITCODE" }
 ctest --test-dir $buildDir --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "Tests failed with exit code $LASTEXITCODE" }
 
-Write-Host "Built: $(Join-Path $buildDir 'AudioVox.exe')"
+Write-Host "Built: $(Join-Path $buildDir 'FUBAR.exe')"

@@ -1,6 +1,6 @@
-# AudioVox
+# FUBAR
 
-AudioVox is a Windows C++ VOX monitor and recorder. It starts as a console program and opens a
+FUBAR is a Windows C++ VOX monitor and recorder. It starts as a console program and opens a
 native GUI unless `--headless` is supplied. Both interfaces use the same WASAPI capture engine.
 
 ## Features
@@ -30,11 +30,11 @@ The included PowerShell script locates MinGW-w64 from `PATH` (with a fallback to
 `%USERPROFILE%\gcc\bin`) and runs the test suite after compiling:
 
 ```powershell
-cd "C:\Users\Blkph0x\Documents\New project 2\AudioVox"
+cd "C:\Users\Blkph0x\Documents\New project 2\FUBAR"
 .\scripts\build.ps1 -Configuration Release
 ```
 
-The resulting executable is in `build-release-mingw\AudioVox.exe`.
+The resulting executable is in `build-fubar-release-mingw\FUBAR.exe`.
 
 To build, create a public GitHub repository, push the source/tag, and publish the portable ZIP as
 a release asset after authenticating the GitHub CLI, run:
@@ -45,9 +45,9 @@ a release asset after authenticating the GitHub CLI, run:
 
 ## GUI operation
 
-Run `AudioVox.exe` with no arguments. The console remains available for diagnostics and the GUI
+Run `FUBAR.exe` with no arguments. The console remains available for diagnostics and the GUI
 opens on top. Capture starts with the Windows default input. If that endpoint produces digital
-silence for two seconds, AudioVox tries the next physical input automatically.
+silence for two seconds, FUBAR tries the next physical input automatically.
 
 1. Select the recording device and channel route.
    The status banner names the active input; use **Refresh** after connecting a new device.
@@ -68,9 +68,9 @@ microphone privacy settings, then select another input or click **Refresh**.
 ### VB-CABLE setup
 
 1. Send the source application's playback to **CABLE Input**.
-2. Select **CABLE Output (VB-Audio Virtual Cable)** as the AudioVox input.
+2. Select **CABLE Output (VB-Audio Virtual Cable)** as the FUBAR input.
 3. Confirm the numeric input meters move and set the VOX threshold below the displayed signal.
-4. AudioVox keeps recording and metering active but safety-locks its own live monitor for virtual
+4. FUBAR keeps recording and metering active but safety-locks its own live monitor for virtual
    cable inputs. Monitor through a hardware output or a separate Voicemeeter route instead.
 
 This follows VB-Audio's endpoint direction: CABLE Input is the playback side and CABLE Output is
@@ -81,30 +81,30 @@ the recording side. See the [official VB-CABLE reference manual](https://vb-audi
 List capture devices:
 
 ```powershell
-.\AudioVox.exe --list-devices
+.\FUBAR.exe --list-devices
 ```
 
 Monitor the left channel and create clips at -32 dBFS:
 
 ```powershell
-.\AudioVox.exe --headless --device 2 --mode left --threshold-db -32 `
-  --pre-roll 1 --hold 1.5 --output "D:\AudioVox Recordings"
+.\FUBAR.exe --headless --device 2 --mode left --threshold-db -32 `
+  --pre-roll 1 --hold 1.5 --output "D:\FUBAR Recordings"
 ```
 
 Run a ten-second mono capture test without speaker monitoring:
 
 ```powershell
-.\AudioVox.exe --headless --mode mono --duration 10 --force-record --no-monitor
+.\FUBAR.exe --headless --mode mono --duration 10 --force-record --no-monitor
 ```
 
 Keep one VOX session open across quiet periods and save stereo channels separately:
 
 ```powershell
-.\AudioVox.exe --headless --mode stereo --append-session --split-stereo `
-  --threshold-db -32 --hold 1.5 --output "D:\AudioVox Recordings"
+.\FUBAR.exe --headless --mode stereo --append-session --split-stereo `
+  --threshold-db -32 --hold 1.5 --output "D:\FUBAR Recordings"
 ```
 
-Run `AudioVox.exe --help` for every option. A headless run with no duration continues until
+Run `FUBAR.exe --help` for every option. A headless run with no duration continues until
 `Ctrl+C`.
 
 ## Recording behavior

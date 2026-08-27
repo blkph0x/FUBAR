@@ -27,12 +27,12 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"AudioVox 1.0.2 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.0 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
-      << L"  AudioVox.exe                         Open GUI and start listening\n"
-      << L"  AudioVox.exe --list-devices          List capture devices\n"
-      << L"  AudioVox.exe --headless [options]    Run without GUI\n"
-      << L"  AudioVox.exe --self-test             Test WAV output and CLI\n\n"
+      << L"  FUBAR.exe                            Open GUI and start listening\n"
+      << L"  FUBAR.exe --list-devices             List capture devices\n"
+      << L"  FUBAR.exe --headless [options]       Run without GUI\n"
+      << L"  FUBAR.exe --self-test                Test WAV output and CLI\n\n"
       << L"Options:\n"
       << L"  --device N            Capture device index from --list-devices\n"
       << L"  --mode MODE           stereo, left, right, or mono\n"
@@ -88,7 +88,7 @@ int runSelfTest() {
     return 1;
   }
 
-  const auto path = std::filesystem::temp_directory_path() / L"audiovox_self_test.wav";
+  const auto path = std::filesystem::temp_directory_path() / L"fubar_self_test.wav";
   WavWriter writer;
   if (!writer.open(path, 8000, 1)) {
     std::wcerr << L"Self-test failed: could not create " << path << L"\n";

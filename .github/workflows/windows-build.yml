@@ -23,13 +23,13 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force package | Out-Null
-          Copy-Item build/Release/AudioVox.exe package/AudioVox.exe
+          Copy-Item build/Release/FUBAR.exe package/FUBAR.exe
           Copy-Item README.md package/README.md
           Copy-Item CHANGELOG.md package/CHANGELOG.md
-          Compress-Archive -Path package/* -DestinationPath AudioVox-Windows-x64.zip -Force
+          Compress-Archive -Path package/* -DestinationPath FUBAR-Windows-x64.zip -Force
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AudioVox-Windows-x64
-          path: AudioVox-Windows-x64.zip
+          name: FUBAR-Windows-x64
+          path: FUBAR-Windows-x64.zip

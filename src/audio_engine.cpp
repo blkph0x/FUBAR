@@ -205,7 +205,7 @@ std::filesystem::path recordingPath(const AudioOptions& options,
   std::tm local{};
   localtime_s(&local, &time);
   std::wostringstream name;
-  name << L"AudioVox_" << std::put_time(&local, L"%Y%m%d_%H%M%S") << L"_";
+  name << L"FUBAR_" << std::put_time(&local, L"%Y%m%d_%H%M%S") << L"_";
   switch (options.mode) {
     case ChannelMode::Stereo: name << L"stereo"; break;
     case ChannelMode::Left: name << L"left"; break;

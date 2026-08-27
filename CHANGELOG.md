@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0
+
+- Renamed the program, executable, package, recording prefix, and repository to FUBAR.
+- Embedded the FUBAR icon in the Windows executable and application window.
+- Added a 180-degree rotated FUBAR wordmark to the main window.
+- The status panel is red while idle/listening/paused and green only while recording.
+
 ## 1.0.2
 
 - Fixed a WinMM monitor-buffer cleanup deadlock that could hang or crash on another PC.

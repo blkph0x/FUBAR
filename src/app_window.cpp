@@ -1,6 +1,7 @@
 #include "app_window.h"
 
 #include "audio_safety.h"
+#include "../resources/resource.h"
 
 #include <commctrl.h>
 #include <mmsystem.h>
@@ -19,8 +20,9 @@
 
 namespace {
 
-constexpr wchar_t kMainClass[] = L"AudioVoxMainWindow";
-constexpr wchar_t kReplayClass[] = L"AudioVoxReplayWindow";
+constexpr wchar_t kMainClass[] = L"FubarMainWindow";
+constexpr wchar_t kReplayClass[] = L"FubarReplayWindow";
+constexpr wchar_t kBrandClass[] = L"FubarRotatedBrand";
 constexpr UINT kMessageStatus = WM_APP + 1;
 constexpr UINT kMessageReplay = WM_APP + 2;
 constexpr UINT_PTR kMeterTimer = 1;
@@ -118,6 +120,33 @@ bool likelyPhysicalInput(const std::wstring& name) {
          lower.find(L"stereo mix") == std::wstring::npos;
 }
 
+LRESULT CALLBACK brandProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+  if (message != WM_PAINT) return DefWindowProcW(window, message, wParam, lParam);
+  PAINTSTRUCT paint{};
+  HDC deviceContext = BeginPaint(window, &paint);
+  RECT bounds{};
+  GetClientRect(window, &bounds);
+  FillRect(deviceContext, &bounds, reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1));
+  SetGraphicsMode(deviceContext, GM_ADVANCED);
+  XFORM rotation{-1.0f, 0.0f, 0.0f, -1.0f,
+                 static_cast<FLOAT>(bounds.right), static_cast<FLOAT>(bounds.bottom)};
+  SetWorldTransform(deviceContext, &rotation);
+  LOGFONTW font{};
+  font.lfHeight = -28;
+  font.lfWeight = FW_BLACK;
+  wcscpy_s(font.lfFaceName, LF_FACESIZE, L"Segoe UI");
+  HFONT brandFont = CreateFontIndirectW(&font);
+  HGDIOBJ previousFont = SelectObject(deviceContext, brandFont);
+  SetBkMode(deviceContext, TRANSPARENT);
+  SetTextColor(deviceContext, RGB(25, 25, 25));
+  DrawTextW(deviceContext, L"FUBAR", -1, &bounds,
+            DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  SelectObject(deviceContext, previousFont);
+  DeleteObject(brandFont);
+  EndPaint(window, &paint);
+  return 0;
+}
+
 std::wstring replayLabel(const ReplayEntry& entry) {
   const std::time_t time = std::chrono::system_clock::to_time_t(entry.started);
   std::tm local{};
@@ -147,7 +176,16 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   mainClass.lpfnWndProc = windowProc;
   mainClass.hInstance = instance_;
   mainClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-  mainClass.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+  mainClass.hIcon = LoadIconW(instance_, MAKEINTRESOURCEW(IDI_APPICON));
+  mainClass.hIconSm = reinterpret_cast<HICON>(LoadImageW(
+      instance_, MAKEINTRESOURCEW(IDI_APPICON), IMAGE_ICON,
+      GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0));
+  if (!mainClass.hIcon) {
+    mainClass.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+  }
+  if (!mainClass.hIconSm) {
+    mainClass.hIconSm = mainClass.hIcon;
+  }
   mainClass.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
   mainClass.lpszClassName = kMainClass;
   RegisterClassExW(&mainClass);
@@ -161,7 +199,16 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   replayClass.lpszClassName = kReplayClass;
   RegisterClassExW(&replayClass);
 
-  window_ = CreateWindowExW(0, kMainClass, L"AudioVox VOX V1.0.2", WS_OVERLAPPEDWINDOW,
+  WNDCLASSEXW brandClass{};
+  brandClass.cbSize = sizeof(brandClass);
+  brandClass.lpfnWndProc = brandProc;
+  brandClass.hInstance = instance_;
+  brandClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+  brandClass.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+  brandClass.lpszClassName = kBrandClass;
+  RegisterClassExW(&brandClass);
+
+  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.0", WS_OVERLAPPEDWINDOW,
                             CW_USEDEFAULT, CW_USEDEFAULT, 780, 735, nullptr, nullptr, instance_,
                             this);
   if (!window_) return 1;
@@ -204,12 +251,25 @@ LRESULT CALLBACK AppWindow::replayProc(HWND window, UINT message, WPARAM wParam,
 LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
   switch (message) {
     case WM_CREATE:
+      idleStatusBrush_ = CreateSolidBrush(RGB(190, 35, 35));
+      recordingStatusBrush_ = CreateSolidBrush(RGB(25, 150, 70));
       createControls();
       populateDevices();
       applyOptionsToControls();
       SetTimer(window, kMeterTimer, 75, nullptr);
       PostMessageW(window, WM_COMMAND, IdStart, 0);
       return 0;
+
+    case WM_CTLCOLORSTATIC:
+      if (reinterpret_cast<HWND>(lParam) == statusLabel_) {
+        HDC deviceContext = reinterpret_cast<HDC>(wParam);
+        SetTextColor(deviceContext, RGB(255, 255, 255));
+        SetBkColor(deviceContext,
+                   statusRecording_ ? RGB(25, 150, 70) : RGB(190, 35, 35));
+        return reinterpret_cast<LRESULT>(statusRecording_ ? recordingStatusBrush_
+                                                          : idleStatusBrush_);
+      }
+      break;
 
     case WM_COMMAND:
       switch (LOWORD(wParam)) {
@@ -274,6 +334,10 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
 
     case WM_DESTROY:
       KillTimer(window, kMeterTimer);
+      if (idleStatusBrush_) DeleteObject(idleStatusBrush_);
+      if (recordingStatusBrush_) DeleteObject(recordingStatusBrush_);
+      idleStatusBrush_ = nullptr;
+      recordingStatusBrush_ = nullptr;
       PostQuitMessage(0);
       return 0;
   }
@@ -281,8 +345,9 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
 }
 
 void AppWindow::createControls() {
+  addControl(window_, kBrandClass, L"", WS_BORDER, 20, 18, 120, 48);
   statusLabel_ = addControl(window_, L"STATIC", L"Idle", SS_CENTER | SS_CENTERIMAGE | WS_BORDER,
-                            20, 18, 720, 48);
+                            150, 18, 590, 48);
 
   addControl(window_, L"BUTTON", L"Audio source and VOX settings", BS_GROUPBOX, 20, 78, 720,
              275);
@@ -350,7 +415,7 @@ void AppWindow::createControls() {
   addControl(window_, L"BUTTON", L"Open recordings", BS_PUSHBUTTON, 490, 575, 150, 38,
              IdOpenFolder);
   addControl(window_, L"STATIC",
-             L"CLI automation: AudioVox.exe --headless --mode left --threshold-db -35",
+             L"CLI automation: FUBAR.exe --headless --mode left --threshold-db -35",
               SS_CENTER, 40, 630, 680, 22);
 }
 
@@ -535,6 +600,7 @@ void AppWindow::updateMeters() {
 }
 
 void AppWindow::updateStatus(const std::wstring& status) {
+  statusRecording_ = status == L"Recording";
   std::wstring text = status;
   if (status == L"Recording") text = L"● RECORDING — signal above threshold";
   else if (status == L"LISTENING - live monitor disabled for virtual-cable capture safety") {
@@ -550,6 +616,7 @@ void AppWindow::updateStatus(const std::wstring& status) {
     text = L"PAUSED — file remains open; waiting to append more audio";
   }
   SetWindowTextW(statusLabel_, text.c_str());
+  InvalidateRect(statusLabel_, nullptr, TRUE);
 }
 
 void AppWindow::browseOutputDirectory() {
@@ -586,7 +653,7 @@ void AppWindow::showReplayWindow() {
     SetForegroundWindow(replayWindow_);
     return;
   }
-  replayWindow_ = CreateWindowExW(WS_EX_TOOLWINDOW, kReplayClass, L"AudioVox Replay Log",
+  replayWindow_ = CreateWindowExW(WS_EX_TOOLWINDOW, kReplayClass, L"FUBAR Replay Log",
                                   WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT,
                                   780, 430, window_, nullptr, instance_, this);
 }
@@ -656,13 +723,13 @@ void AppWindow::playSelectedReplay() {
 }
 
 void AppWindow::saveSettings() const {
-  const auto ini = executableDirectory() / L"AudioVox.ini";
+  const auto ini = executableDirectory() / L"FUBAR.ini";
   const auto current = optionsFromControls();
-  WritePrivateProfileStringW(L"AudioVox", L"OutputDirectory",
+  WritePrivateProfileStringW(L"FUBAR", L"OutputDirectory",
                              current.outputDirectory.wstring().c_str(), ini.c_str());
-  WritePrivateProfileStringW(L"AudioVox", L"Frequency",
+  WritePrivateProfileStringW(L"FUBAR", L"Frequency",
                              windowText(frequencyEdit_).c_str(), ini.c_str());
-  WritePrivateProfileStringW(L"AudioVox", L"Threshold",
+  WritePrivateProfileStringW(L"FUBAR", L"Threshold",
                              std::to_wstring(static_cast<int>(current.thresholdDb)).c_str(),
                              ini.c_str());
 }

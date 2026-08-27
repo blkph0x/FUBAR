@@ -66,9 +66,12 @@ class AppWindow {
   HWND inputRightValue_ = nullptr;
   HWND outputLeftValue_ = nullptr;
   HWND outputRightValue_ = nullptr;
+  HBRUSH idleStatusBrush_ = nullptr;
+  HBRUSH recordingStatusBrush_ = nullptr;
   std::vector<AudioDeviceInfo> devices_;
   std::vector<ReplayEntry> replays_;
   std::vector<std::wstring> probedDeviceIds_;
   std::chrono::steady_clock::time_point inputProbeStarted_{};
   bool autoSelectInput_ = false;
+  bool statusRecording_ = false;
 };

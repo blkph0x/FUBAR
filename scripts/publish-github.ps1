@@ -1,11 +1,11 @@
 param(
-  [string]$RepositoryName = "AudioVox",
-  [string]$Tag = "v1.0.2"
+  [string]$RepositoryName = "FUBAR",
+  [string]$Tag = "v1.1.0"
 )
 
 $ErrorActionPreference = "Stop"
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$asset = Join-Path $projectRoot "AudioVox-Windows-x64.zip"
+$asset = Join-Path $projectRoot "FUBAR-Windows-x64.zip"
 
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
   throw "GitHub CLI (gh) is not installed"
@@ -26,7 +26,7 @@ try {
   $remoteExists = git remote get-url origin 2>$null
   if (-not $remoteExists) {
     gh repo create $RepositoryName --public --source . --remote origin --push `
-      --description "Native Windows VOX audio monitor and automatic recorder with stereo, left, right, and mono routing."
+      --description "Native Windows VOX audio monitor and recorder with stereo, channel splitting, and VB-CABLE support."
     if ($LASTEXITCODE -ne 0) { throw "GitHub repository creation failed" }
   } else {
     git push -u origin main
@@ -40,7 +40,7 @@ try {
   if ($LASTEXITCODE -eq 0) {
     gh release upload $Tag $asset --clobber
   } else {
-    gh release create $Tag $asset --title "AudioVox $Tag" --notes-file CHANGELOG.md
+    gh release create $Tag $asset --title "FUBAR $Tag" --notes-file CHANGELOG.md
   }
   if ($LASTEXITCODE -ne 0) { throw "GitHub release publication failed" }
 
