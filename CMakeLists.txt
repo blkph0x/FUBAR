@@ -10,6 +10,7 @@ add_executable(audiovox
   src/audio_engine.cpp
   src/wav_writer.cpp
   src/app_window.cpp
+  src/vox_gate.h
 )
 
 target_include_directories(audiovox PRIVATE src)

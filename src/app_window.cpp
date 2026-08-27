@@ -50,6 +50,8 @@ enum ControlId {
   IdSave,
   IdMonitor,
   IdForce,
+  IdAppend,
+  IdSplit,
   IdOutput,
   IdBrowse,
   IdStart,
@@ -139,7 +141,7 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   RegisterClassExW(&replayClass);
 
   window_ = CreateWindowExW(0, kMainClass, L"AudioVox VOX V1.0", WS_OVERLAPPEDWINDOW,
-                            CW_USEDEFAULT, CW_USEDEFAULT, 780, 690, nullptr, nullptr, instance_,
+                            CW_USEDEFAULT, CW_USEDEFAULT, 780, 735, nullptr, nullptr, instance_,
                             this);
   if (!window_) return 1;
   ShowWindow(window_, showCommand);
@@ -244,7 +246,7 @@ void AppWindow::createControls() {
                             20, 18, 720, 48);
 
   addControl(window_, L"BUTTON", L"Audio source and VOX settings", BS_GROUPBOX, 20, 78, 720,
-             258);
+             275);
   addControl(window_, L"STATIC", L"Audio input device:", SS_RIGHT, 40, 108, 160, 22);
   deviceCombo_ = addControl(window_, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, 210,
                             104, 500, 240, IdDevice);
@@ -271,36 +273,40 @@ void AppWindow::createControls() {
                              130, 24, IdMonitor);
   forceCheck_ = addControl(window_, L"BUTTON", L"Continuous record", BS_AUTOCHECKBOX, 510,
                            248, 160, 24, IdForce);
-  addControl(window_, L"STATIC", L"Recording folder:", SS_RIGHT, 40, 292, 160, 22);
+  appendCheck_ = addControl(window_, L"BUTTON", L"Append VOX to one file", BS_AUTOCHECKBOX,
+                            210, 276, 210, 24, IdAppend);
+  splitCheck_ = addControl(window_, L"BUTTON", L"Split stereo into L/R files",
+                           BS_AUTOCHECKBOX, 435, 276, 235, 24, IdSplit);
+  addControl(window_, L"STATIC", L"Recording folder:", SS_RIGHT, 40, 316, 160, 22);
   outputEdit_ = addControl(window_, L"EDIT", L"recordings", WS_BORDER | ES_AUTOHSCROLL, 210,
-                           288, 410, 25, IdOutput, WS_EX_CLIENTEDGE);
-  addControl(window_, L"BUTTON", L"Browse...", BS_PUSHBUTTON, 630, 287, 80, 27, IdBrowse);
+                           312, 410, 25, IdOutput, WS_EX_CLIENTEDGE);
+  addControl(window_, L"BUTTON", L"Browse...", BS_PUSHBUTTON, 630, 311, 80, 27, IdBrowse);
 
-  addControl(window_, L"BUTTON", L"Live levels — input and routed output", BS_GROUPBOX, 20, 348,
+  addControl(window_, L"BUTTON", L"Live levels — input and routed output", BS_GROUPBOX, 20, 365,
              720, 190);
-  addControl(window_, L"STATIC", L"Input left", SS_RIGHT, 45, 382, 100, 22);
-  inputLeftMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 380, 535, 22);
-  addControl(window_, L"STATIC", L"Input right", SS_RIGHT, 45, 417, 100, 22);
-  inputRightMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 415, 535, 22);
-  addControl(window_, L"STATIC", L"Output left", SS_RIGHT, 45, 466, 100, 22);
-  outputLeftMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 464, 535, 22);
-  addControl(window_, L"STATIC", L"Output right", SS_RIGHT, 45, 501, 100, 22);
-  outputRightMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 499, 535, 22);
+  addControl(window_, L"STATIC", L"Input left", SS_RIGHT, 45, 399, 100, 22);
+  inputLeftMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 397, 535, 22);
+  addControl(window_, L"STATIC", L"Input right", SS_RIGHT, 45, 434, 100, 22);
+  inputRightMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 432, 535, 22);
+  addControl(window_, L"STATIC", L"Output left", SS_RIGHT, 45, 483, 100, 22);
+  outputLeftMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 481, 535, 22);
+  addControl(window_, L"STATIC", L"Output right", SS_RIGHT, 45, 518, 100, 22);
+  outputRightMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 516, 535, 22);
   for (HWND meter : {inputLeftMeter_, inputRightMeter_, outputLeftMeter_, outputRightMeter_}) {
     SendMessageW(meter, PBM_SETRANGE32, 0, 900);
     SendMessageW(meter, PBM_SETBARCOLOR, 0, RGB(30, 170, 70));
   }
 
-  startButton_ = addControl(window_, L"BUTTON", L"Start / Apply", BS_DEFPUSHBUTTON, 85, 560,
-                            130, 38, IdStart);
-  stopButton_ = addControl(window_, L"BUTTON", L"Stop", BS_PUSHBUTTON, 230, 560, 100, 38,
+  startButton_ = addControl(window_, L"BUTTON", L"Start / Apply", BS_DEFPUSHBUTTON, 85, 575,
+                             130, 38, IdStart);
+  stopButton_ = addControl(window_, L"BUTTON", L"Stop", BS_PUSHBUTTON, 230, 575, 100, 38,
                            IdStop);
-  addControl(window_, L"BUTTON", L"Replay log", BS_PUSHBUTTON, 345, 560, 130, 38, IdReplay);
-  addControl(window_, L"BUTTON", L"Open recordings", BS_PUSHBUTTON, 490, 560, 150, 38,
+  addControl(window_, L"BUTTON", L"Replay log", BS_PUSHBUTTON, 345, 575, 130, 38, IdReplay);
+  addControl(window_, L"BUTTON", L"Open recordings", BS_PUSHBUTTON, 490, 575, 150, 38,
              IdOpenFolder);
   addControl(window_, L"STATIC",
              L"CLI automation: AudioVox.exe --headless --mode left --threshold-db -35",
-             SS_CENTER, 40, 615, 680, 22);
+              SS_CENTER, 40, 630, 680, 22);
 }
 
 void AppWindow::populateDevices() {
@@ -344,6 +350,10 @@ void AppWindow::applyOptionsToControls() {
   SendMessageW(saveCheck_, BM_SETCHECK, options_.saveAudio ? BST_CHECKED : BST_UNCHECKED, 0);
   SendMessageW(monitorCheck_, BM_SETCHECK, options_.monitor ? BST_CHECKED : BST_UNCHECKED, 0);
   SendMessageW(forceCheck_, BM_SETCHECK, options_.forceRecord ? BST_CHECKED : BST_UNCHECKED, 0);
+  SendMessageW(appendCheck_, BM_SETCHECK, options_.appendSession ? BST_CHECKED : BST_UNCHECKED,
+               0);
+  SendMessageW(splitCheck_, BM_SETCHECK,
+               options_.splitStereoFiles ? BST_CHECKED : BST_UNCHECKED, 0);
   SetWindowTextW(outputEdit_, options_.outputDirectory.wstring().c_str());
 }
 
@@ -360,6 +370,8 @@ AudioOptions AppWindow::optionsFromControls() const {
   result.saveAudio = SendMessageW(saveCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
   result.monitor = SendMessageW(monitorCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
   result.forceRecord = SendMessageW(forceCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
+  result.appendSession = SendMessageW(appendCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
+  result.splitStereoFiles = SendMessageW(splitCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
   result.outputDirectory = windowText(outputEdit_);
   try { result.frequencyMhz = std::stod(windowText(frequencyEdit_)); } catch (...) {}
   try { result.preRollSeconds = std::stof(windowText(preRollEdit_)); } catch (...) {}
@@ -415,6 +427,9 @@ void AppWindow::updateStatus(const std::wstring& status) {
   std::wstring text = status;
   if (status == L"Recording") text = L"● RECORDING — signal above threshold";
   else if (status == L"Listening") text = L"LISTENING — waiting for VOX trigger";
+  else if (status == L"Paused - waiting for audio") {
+    text = L"PAUSED — file remains open; waiting to append more audio";
+  }
   SetWindowTextW(statusLabel_, text.c_str());
 }
 

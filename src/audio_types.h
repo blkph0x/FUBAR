@@ -31,6 +31,8 @@ struct AudioOptions {
   bool saveAudio = true;
   bool monitor = true;
   bool forceRecord = false;
+  bool appendSession = false;
+  bool splitStereoFiles = false;
   double frequencyMhz = 268.0;
   std::filesystem::path outputDirectory = L"recordings";
 };

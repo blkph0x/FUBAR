@@ -1,6 +1,7 @@
 #include "audio_engine.h"
 
 #include "wav_writer.h"
+#include "vox_gate.h"
 
 #include <windows.h>
 #include <initguid.h>
@@ -17,7 +18,9 @@
 #include <deque>
 #include <iomanip>
 #include <memory>
+#include <span>
 #include <sstream>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -94,7 +97,8 @@ float sampleAt(const BYTE* data, UINT32 frame, WORD channel, const WAVEFORMATEX*
   return 0.0f;
 }
 
-std::filesystem::path recordingPath(const AudioOptions& options) {
+std::filesystem::path recordingPath(const AudioOptions& options,
+                                    std::wstring_view suffix = {}) {
   const auto now = std::chrono::system_clock::now();
   const std::time_t time = std::chrono::system_clock::to_time_t(now);
   std::tm local{};
@@ -107,6 +111,7 @@ std::filesystem::path recordingPath(const AudioOptions& options) {
     case ChannelMode::Right: name << L"right"; break;
     case ChannelMode::Mono: name << L"mono"; break;
   }
+  name << suffix;
   name << L".wav";
   return options.outputDirectory / name.str();
 }
@@ -345,6 +350,7 @@ void AudioEngine::captureThread() {
   const DWORD sampleRate = mixFormat->nSamplesPerSec;
   const WORD inputChannels = std::max<WORD>(mixFormat->nChannels, 1);
   const WORD recordChannels = options_.mode == ChannelMode::Stereo ? 2 : 1;
+  const bool splitStereo = options_.splitStereoFiles && options_.mode == ChannelMode::Stereo;
   const std::size_t preRollLimit = static_cast<std::size_t>(
       std::max(0.0f, options_.preRollSeconds) * sampleRate * recordChannels);
   const std::uint64_t holdFrames = static_cast<std::uint64_t>(
@@ -358,46 +364,100 @@ void AudioEngine::captureThread() {
 
   std::deque<std::int16_t> preRoll;
   WavWriter writer;
+  WavWriter rightWriter;
   ReplayEntry currentEntry;
-  std::uint64_t quietFrames = 0;
+  std::filesystem::path rightRecordingPath;
   std::uint64_t recordingFrames = 0;
-  float recordingPeak = 0.0f;
+  float recordingLeftPeak = 0.0f;
+  float recordingRightPeak = 0.0f;
+  VoxGate voxGate(holdFrames);
 
-  auto beginRecording = [&]() {
-    if (writer.isOpen() || !options_.saveAudio) return;
+  auto writeSamples = [&](std::span<const std::int16_t> samples) {
+    if (!splitStereo) return writer.write(samples);
+    std::vector<std::int16_t> left;
+    std::vector<std::int16_t> right;
+    left.reserve(samples.size() / 2);
+    right.reserve(samples.size() / 2);
+    for (std::size_t index = 0; index + 1 < samples.size(); index += 2) {
+      left.push_back(samples[index]);
+      right.push_back(samples[index + 1]);
+    }
+    return writer.write(left) && rightWriter.write(right);
+  };
+
+  auto openRecording = [&]() {
+    if (writer.isOpen() || !options_.saveAudio) return writer.isOpen();
     currentEntry = {};
-    currentEntry.path = recordingPath(options_);
+    currentEntry.path = recordingPath(options_, splitStereo ? L"_left" : L"");
+    rightRecordingPath = splitStereo ? recordingPath(options_, L"_right")
+                                     : std::filesystem::path{};
     currentEntry.started = std::chrono::system_clock::now();
     currentEntry.mode = options_.mode;
     currentEntry.frequencyMhz = options_.frequencyMhz;
-    if (!writer.open(currentEntry.path, sampleRate, recordChannels)) {
+    const WORD fileChannels = splitStereo ? 1 : recordChannels;
+    if (!writer.open(currentEntry.path, sampleRate, fileChannels)) {
       setStatus(L"Could not create recording file: " + currentEntry.path.wstring());
-      return;
+      return false;
     }
+    if (splitStereo && !rightWriter.open(rightRecordingPath, sampleRate, 1)) {
+      writer.close();
+      setStatus(L"Could not create recording file: " + rightRecordingPath.wstring());
+      return false;
+    }
+    recordingFrames = 0;
+    recordingLeftPeak = 0.0f;
+    recordingRightPeak = 0.0f;
+    return true;
+  };
+
+  auto beginRecording = [&]() {
+    if (!openRecording()) return false;
     if (!preRoll.empty()) {
       std::vector<std::int16_t> buffered(preRoll.begin(), preRoll.end());
-      writer.write(buffered);
-      recordingFrames = buffered.size() / recordChannels;
-    } else {
-      recordingFrames = 0;
+      if (!writeSamples(buffered)) {
+        setStatus(L"Could not write recording audio");
+        return false;
+      }
+      recordingFrames += buffered.size() / recordChannels;
+      preRoll.clear();
     }
-    recordingPeak = 0.0f;
-    quietFrames = 0;
     recording_ = true;
     setStatus(L"Recording");
+    return true;
+  };
+
+  auto pauseRecording = [&]() {
+    recording_ = false;
+    preRoll.clear();
+    setStatus(L"Paused - waiting for audio");
   };
 
   auto finishRecording = [&]() {
     if (!writer.isOpen()) return;
     writer.close();
+    if (rightWriter.isOpen()) rightWriter.close();
     currentEntry.durationSeconds = static_cast<double>(recordingFrames) / sampleRate;
-    currentEntry.peakDb = peakToDb(recordingPeak);
     recording_ = false;
     setStatus(L"Listening");
-    if (replayCallback_) replayCallback_(currentEntry);
+    if (replayCallback_) {
+      if (splitStereo) {
+        currentEntry.mode = ChannelMode::Left;
+        currentEntry.peakDb = peakToDb(recordingLeftPeak);
+        replayCallback_(currentEntry);
+        ReplayEntry rightEntry = currentEntry;
+        rightEntry.path = rightRecordingPath;
+        rightEntry.mode = ChannelMode::Right;
+        rightEntry.peakDb = peakToDb(recordingRightPeak);
+        replayCallback_(rightEntry);
+      } else {
+        currentEntry.peakDb = peakToDb(std::max(recordingLeftPeak, recordingRightPeak));
+        replayCallback_(currentEntry);
+      }
+    }
     recordingFrames = 0;
-    recordingPeak = 0.0f;
-    quietFrames = 0;
+    recordingLeftPeak = 0.0f;
+    recordingRightPeak = 0.0f;
+    preRoll.clear();
   };
 
   result = client->Start();
@@ -410,7 +470,7 @@ void AudioEngine::captureThread() {
 
   running_ = true;
   setStatus(L"Listening");
-  if (options_.forceRecord) beginRecording();
+  if (options_.forceRecord && beginRecording()) voxGate.activate();
 
   while (!stopRequested_) {
     UINT32 packetFrames = 0;
@@ -486,25 +546,34 @@ void AudioEngine::captureThread() {
       if (options_.monitor) monitor.submit(monitorSamples);
 
       bool packetAlreadyBuffered = false;
-      if (!writer.isOpen()) {
+      if (!voxGate.active()) {
         for (const auto sample : routed) preRoll.push_back(sample);
         while (preRoll.size() > preRollLimit) preRoll.pop_front();
-        if (options_.saveAudio && (options_.forceRecord || packetPeak >= thresholdLinear)) {
-          beginRecording();
-          packetAlreadyBuffered = writer.isOpen();
+        if (options_.saveAudio && !options_.forceRecord) {
+          const VoxAction action = voxGate.update(packetPeak >= thresholdLinear, frameCount,
+                                                  writer.isOpen(), options_.appendSession);
+          if (action == VoxAction::Start || action == VoxAction::Resume) {
+            packetAlreadyBuffered = beginRecording();
+            if (!packetAlreadyBuffered) voxGate.reset();
+          }
         }
       }
 
-      if (writer.isOpen()) {
+      if (voxGate.active()) {
         if (!packetAlreadyBuffered) {
-          writer.write(routed);
+          if (!writeSamples(routed)) {
+            setStatus(L"Could not write recording audio");
+            stopRequested_ = true;
+          }
           recordingFrames += frameCount;
         }
-        recordingPeak = std::max(recordingPeak, packetPeak);
+        recordingLeftPeak = std::max(recordingLeftPeak, outputLeftPeak);
+        recordingRightPeak = std::max(recordingRightPeak, outputRightPeak);
         if (!options_.forceRecord) {
-          if (packetPeak >= thresholdLinear) quietFrames = 0;
-          else quietFrames += frameCount;
-          if (quietFrames >= holdFrames) finishRecording();
+          const VoxAction action = voxGate.update(packetPeak >= thresholdLinear, frameCount,
+                                                  writer.isOpen(), options_.appendSession);
+          if (action == VoxAction::Pause) pauseRecording();
+          else if (action == VoxAction::Finish) finishRecording();
         }
       }
 
@@ -518,6 +587,7 @@ void AudioEngine::captureThread() {
   }
 
   finishRecording();
+  voxGate.reset();
   client->Stop();
   monitor.close();
   running_ = false;

@@ -51,6 +51,8 @@ class AppWindow {
   HWND saveCheck_ = nullptr;
   HWND monitorCheck_ = nullptr;
   HWND forceCheck_ = nullptr;
+  HWND appendCheck_ = nullptr;
+  HWND splitCheck_ = nullptr;
   HWND outputEdit_ = nullptr;
   HWND startButton_ = nullptr;
   HWND stopButton_ = nullptr;

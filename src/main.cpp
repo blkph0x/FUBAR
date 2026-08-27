@@ -1,6 +1,7 @@
 #include "app_window.h"
 #include "audio_engine.h"
 #include "wav_writer.h"
+#include "vox_gate.h"
 
 #include <windows.h>
 
@@ -42,7 +43,9 @@ void printHelp() {
       << L"  --duration SEC        Headless run duration; 0 waits for Ctrl+C\n"
       << L"  --no-monitor          Disable live speaker monitoring\n"
       << L"  --no-save             Meter/monitor only; do not write clips\n"
-      << L"  --force-record        Record continuously instead of VOX\n";
+      << L"  --force-record        Record continuously instead of VOX\n"
+      << L"  --append-session      Pause on silence and resume into the same WAV\n"
+      << L"  --split-stereo        Write stereo as separate mono left/right WAV files\n";
 }
 
 ChannelMode parseMode(const std::wstring& text) {
@@ -53,6 +56,17 @@ ChannelMode parseMode(const std::wstring& text) {
 }
 
 int runSelfTest() {
+  VoxGate gate(100);
+  if (gate.update(false, 50, false, true) != VoxAction::None ||
+      gate.update(true, 10, false, true) != VoxAction::Start ||
+      gate.update(false, 40, true, true) != VoxAction::None ||
+      gate.update(false, 60, true, true) != VoxAction::Pause || gate.active() ||
+      gate.update(true, 10, true, true) != VoxAction::Resume ||
+      gate.update(false, 100, true, false) != VoxAction::Finish || gate.active()) {
+    std::wcerr << L"Self-test failed: VOX append-session transition error\n";
+    return 1;
+  }
+
   const auto path = std::filesystem::temp_directory_path() / L"audiovox_self_test.wav";
   WavWriter writer;
   if (!writer.open(path, 8000, 1)) {
@@ -64,12 +78,17 @@ int runSelfTest() {
     std::wcerr << L"Self-test failed: WAV write error\n";
     return 1;
   }
+  std::vector<std::int16_t> resumedAudio(400, 1000);
+  if (!writer.write(resumedAudio)) {
+    std::wcerr << L"Self-test failed: resumed WAV write error\n";
+    return 1;
+  }
   writer.close();
   std::error_code error;
   const auto size = std::filesystem::file_size(path, error);
   std::filesystem::remove(path, error);
-  if (size != 1644) {
-    std::wcerr << L"Self-test failed: expected 1644-byte WAV, got " << size << L"\n";
+  if (size != 2444) {
+    std::wcerr << L"Self-test failed: expected 2444-byte WAV, got " << size << L"\n";
     return 1;
   }
   std::wcout << L"Self-test passed: CLI and WAV writer are operational.\n";
@@ -124,6 +143,10 @@ int wmain(int argc, wchar_t** argv) {
         options.saveAudio = false;
       } else if (argument == L"--force-record") {
         options.forceRecord = true;
+      } else if (argument == L"--append-session") {
+        options.appendSession = true;
+      } else if (argument == L"--split-stereo") {
+        options.splitStereoFiles = true;
       } else {
         std::wcerr << L"Unknown option: " << argument << L"\n";
         printHelp();
