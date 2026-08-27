@@ -1,0 +1,38 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -A x64
+
+      - name: Build and test
+        run: |
+          cmake --build build --config Release --parallel
+          ctest --test-dir build -C Release --output-on-failure
+
+      - name: Assemble portable package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item build/Release/AudioVox.exe package/AudioVox.exe
+          Copy-Item README.md package/README.md
+          Copy-Item CHANGELOG.md package/CHANGELOG.md
+          Compress-Archive -Path package/* -DestinationPath AudioVox-Windows-x64.zip -Force
+
+      - name: Create GitHub release and upload package
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" AudioVox-Windows-x64.zip --title "AudioVox ${{ github.ref_name }}" --notes-file CHANGELOG.md

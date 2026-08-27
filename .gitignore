@@ -1,0 +1,7 @@
+/build*/
+/dist/
+/runtime-test/
+/recordings/
+*.ini
+gui-smoke.png
+/AudioVox-Windows-x64.zip

@@ -1,0 +1,35 @@
+name: Windows build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -A x64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Assemble portable package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item build/Release/AudioVox.exe package/AudioVox.exe
+          Copy-Item README.md package/README.md
+          Copy-Item CHANGELOG.md package/CHANGELOG.md
+          Compress-Archive -Path package/* -DestinationPath AudioVox-Windows-x64.zip -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AudioVox-Windows-x64
+          path: AudioVox-Windows-x64.zip
