@@ -12,6 +12,7 @@
 struct AudioDeviceInfo {
   std::wstring id;
   std::wstring name;
+  bool isDefault = false;
 };
 
 class AudioEngine {

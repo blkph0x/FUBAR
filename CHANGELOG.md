@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1
+
+- Fixed the disabled Apply button that prevented changed recording options from taking effect.
+- Device, channel, and checkbox changes now restart capture immediately.
+- Selects the Windows default capture endpoint and falls back from digitally silent inputs.
+- Added input-device refresh and visible numeric dBFS readings for all four meters.
+- Added clearer active-device and no-input-signal status messages.
+
 ## 1.0.0
 
 - Native WASAPI capture with active Windows input-device enumeration.

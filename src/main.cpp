@@ -26,7 +26,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"AudioVox 1.0 - VOX audio monitor and recorder\n\n"
+      << L"AudioVox 1.0.1 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  AudioVox.exe                         Open GUI and start listening\n"
       << L"  AudioVox.exe --list-devices          List capture devices\n"
@@ -165,7 +165,8 @@ int wmain(int argc, wchar_t** argv) {
   if (listDevices) {
     if (!deviceError.empty()) std::wcerr << deviceError << L"\n";
     for (std::size_t index = 0; index < devices.size(); ++index) {
-      std::wcout << index << L": " << devices[index].name << L"\n";
+      std::wcout << index << L": " << devices[index].name
+                 << (devices[index].isDefault ? L" (default)" : L"") << L"\n";
     }
     return devices.empty() ? 1 : 0;
   }

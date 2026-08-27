@@ -4,6 +4,7 @@
 
 #include <windows.h>
 
+#include <chrono>
 #include <mutex>
 #include <vector>
 
@@ -20,6 +21,7 @@ class AppWindow {
   LRESULT handleReplayMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
   void createControls();
   void populateDevices();
+  void refreshDevices();
   void startEngine();
   void stopEngine();
   void updateMeters();
@@ -60,6 +62,13 @@ class AppWindow {
   HWND inputRightMeter_ = nullptr;
   HWND outputLeftMeter_ = nullptr;
   HWND outputRightMeter_ = nullptr;
+  HWND inputLeftValue_ = nullptr;
+  HWND inputRightValue_ = nullptr;
+  HWND outputLeftValue_ = nullptr;
+  HWND outputRightValue_ = nullptr;
   std::vector<AudioDeviceInfo> devices_;
   std::vector<ReplayEntry> replays_;
+  std::vector<std::wstring> probedDeviceIds_;
+  std::chrono::steady_clock::time_point inputProbeStarted_{};
+  bool autoSelectInput_ = false;
 };

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cwctype>
 #include <filesystem>
 #include <iomanip>
 #include <memory>
@@ -60,7 +61,8 @@ enum ControlId {
   IdOpenFolder,
   IdReplayList,
   IdReplayPlay,
-  IdReplayOpen
+  IdReplayOpen,
+  IdRefreshDevices
 };
 
 HWND addControl(HWND parent, const wchar_t* className, const wchar_t* text, DWORD style,
@@ -99,6 +101,21 @@ int meterPosition(float db) {
   return static_cast<int>(std::clamp(db + 90.0f, 0.0f, 90.0f) * 10.0f);
 }
 
+std::wstring dbLabel(float db) {
+  std::wostringstream stream;
+  stream << std::fixed << std::setprecision(1) << db << L" dB";
+  return stream.str();
+}
+
+bool likelyPhysicalInput(const std::wstring& name) {
+  std::wstring lower = name;
+  std::transform(lower.begin(), lower.end(), lower.begin(),
+                 [](wchar_t value) { return static_cast<wchar_t>(std::towlower(value)); });
+  return lower.find(L"cable") == std::wstring::npos &&
+         lower.find(L"virtual") == std::wstring::npos &&
+         lower.find(L"stereo mix") == std::wstring::npos;
+}
+
 std::wstring replayLabel(const ReplayEntry& entry) {
   const std::time_t time = std::chrono::system_clock::to_time_t(entry.started);
   std::tm local{};
@@ -114,7 +131,9 @@ std::wstring replayLabel(const ReplayEntry& entry) {
 
 }  // namespace
 
-AppWindow::AppWindow(AudioOptions initialOptions) : options_(std::move(initialOptions)) {}
+AppWindow::AppWindow(AudioOptions initialOptions) : options_(std::move(initialOptions)) {
+  autoSelectInput_ = options_.deviceId.empty() && options_.deviceName.empty();
+}
 
 int AppWindow::run(HINSTANCE instance, int showCommand) {
   instance_ = instance;
@@ -140,7 +159,7 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   replayClass.lpszClassName = kReplayClass;
   RegisterClassExW(&replayClass);
 
-  window_ = CreateWindowExW(0, kMainClass, L"AudioVox VOX V1.0", WS_OVERLAPPEDWINDOW,
+  window_ = CreateWindowExW(0, kMainClass, L"AudioVox VOX V1.0.1", WS_OVERLAPPEDWINDOW,
                             CW_USEDEFAULT, CW_USEDEFAULT, 780, 735, nullptr, nullptr, instance_,
                             this);
   if (!window_) return 1;
@@ -194,9 +213,27 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
       switch (LOWORD(wParam)) {
         case IdStart: startEngine(); return 0;
         case IdStop: stopEngine(); return 0;
+        case IdRefreshDevices: refreshDevices(); return 0;
         case IdBrowse: browseOutputDirectory(); return 0;
         case IdOpenFolder: openOutputDirectory(); return 0;
         case IdReplay: showReplayWindow(); return 0;
+        case IdDevice:
+          if (HIWORD(wParam) == CBN_SELCHANGE) {
+            autoSelectInput_ = false;
+            probedDeviceIds_.clear();
+            startEngine();
+          }
+          return 0;
+        case IdMode:
+          if (HIWORD(wParam) == CBN_SELCHANGE) startEngine();
+          return 0;
+        case IdSave:
+        case IdMonitor:
+        case IdForce:
+        case IdAppend:
+        case IdSplit:
+          if (HIWORD(wParam) == BN_CLICKED) startEngine();
+          return 0;
       }
       break;
 
@@ -249,7 +286,9 @@ void AppWindow::createControls() {
              275);
   addControl(window_, L"STATIC", L"Audio input device:", SS_RIGHT, 40, 108, 160, 22);
   deviceCombo_ = addControl(window_, L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, 210,
-                            104, 500, 240, IdDevice);
+                            104, 410, 240, IdDevice);
+  addControl(window_, L"BUTTON", L"Refresh", BS_PUSHBUTTON, 630, 103, 80, 27,
+             IdRefreshDevices);
   addControl(window_, L"STATIC", L"Input channel:", SS_RIGHT, 40, 143, 160, 22);
   modeCombo_ = addControl(window_, L"COMBOBOX", L"", CBS_DROPDOWNLIST, 210, 139, 220, 160,
                           IdMode);
@@ -285,19 +324,23 @@ void AppWindow::createControls() {
   addControl(window_, L"BUTTON", L"Live levels — input and routed output", BS_GROUPBOX, 20, 365,
              720, 190);
   addControl(window_, L"STATIC", L"Input left", SS_RIGHT, 45, 399, 100, 22);
-  inputLeftMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 397, 535, 22);
+  inputLeftMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 397, 480, 22);
+  inputLeftValue_ = addControl(window_, L"STATIC", L"-90.0 dB", SS_RIGHT, 650, 399, 65, 22);
   addControl(window_, L"STATIC", L"Input right", SS_RIGHT, 45, 434, 100, 22);
-  inputRightMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 432, 535, 22);
+  inputRightMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 432, 480, 22);
+  inputRightValue_ = addControl(window_, L"STATIC", L"-90.0 dB", SS_RIGHT, 650, 434, 65, 22);
   addControl(window_, L"STATIC", L"Output left", SS_RIGHT, 45, 483, 100, 22);
-  outputLeftMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 481, 535, 22);
+  outputLeftMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 481, 480, 22);
+  outputLeftValue_ = addControl(window_, L"STATIC", L"-90.0 dB", SS_RIGHT, 650, 483, 65, 22);
   addControl(window_, L"STATIC", L"Output right", SS_RIGHT, 45, 518, 100, 22);
-  outputRightMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 516, 535, 22);
+  outputRightMeter_ = addControl(window_, PROGRESS_CLASSW, L"", PBS_SMOOTH, 160, 516, 480, 22);
+  outputRightValue_ = addControl(window_, L"STATIC", L"-90.0 dB", SS_RIGHT, 650, 518, 65, 22);
   for (HWND meter : {inputLeftMeter_, inputRightMeter_, outputLeftMeter_, outputRightMeter_}) {
     SendMessageW(meter, PBM_SETRANGE32, 0, 900);
     SendMessageW(meter, PBM_SETBARCOLOR, 0, RGB(30, 170, 70));
   }
 
-  startButton_ = addControl(window_, L"BUTTON", L"Start / Apply", BS_DEFPUSHBUTTON, 85, 575,
+  startButton_ = addControl(window_, L"BUTTON", L"Apply / Restart", BS_DEFPUSHBUTTON, 85, 575,
                              130, 38, IdStart);
   stopButton_ = addControl(window_, L"BUTTON", L"Stop", BS_PUSHBUTTON, 230, 575, 100, 38,
                            IdStop);
@@ -314,7 +357,8 @@ void AppWindow::populateDevices() {
   devices_ = AudioEngine::enumerateInputDevices(&error);
   SendMessageW(deviceCombo_, CB_RESETCONTENT, 0, 0);
   for (const auto& device : devices_) {
-    SendMessageW(deviceCombo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(device.name.c_str()));
+    const std::wstring label = device.name + (device.isDefault ? L" (Default input)" : L"");
+    SendMessageW(deviceCombo_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label.c_str()));
   }
   if (devices_.empty()) {
     SendMessageW(deviceCombo_, CB_ADDSTRING, 0,
@@ -322,6 +366,7 @@ void AppWindow::populateDevices() {
   }
   SendMessageW(deviceCombo_, CB_SETCURSEL, 0, 0);
 
+  SendMessageW(modeCombo_, CB_RESETCONTENT, 0, 0);
   for (ChannelMode mode : {ChannelMode::Stereo, ChannelMode::Left, ChannelMode::Right,
                            ChannelMode::Mono}) {
     SendMessageW(modeCombo_, CB_ADDSTRING, 0,
@@ -330,7 +375,7 @@ void AppWindow::populateDevices() {
 }
 
 void AppWindow::applyOptionsToControls() {
-  int selectedDevice = 0;
+  int selectedDevice = -1;
   for (std::size_t index = 0; index < devices_.size(); ++index) {
     if ((!options_.deviceId.empty() && devices_[index].id == options_.deviceId) ||
         (!options_.deviceName.empty() && devices_[index].name == options_.deviceName)) {
@@ -338,6 +383,15 @@ void AppWindow::applyOptionsToControls() {
       break;
     }
   }
+  if (selectedDevice < 0) {
+    for (std::size_t index = 0; index < devices_.size(); ++index) {
+      if (devices_[index].isDefault) {
+        selectedDevice = static_cast<int>(index);
+        break;
+      }
+    }
+  }
+  if (selectedDevice < 0 && !devices_.empty()) selectedDevice = 0;
   SendMessageW(deviceCombo_, CB_SETCURSEL, selectedDevice, 0);
   SendMessageW(modeCombo_, CB_SETCURSEL, static_cast<int>(options_.mode), 0);
   SendMessageW(thresholdSlider_, TBM_SETPOS, TRUE,
@@ -355,6 +409,17 @@ void AppWindow::applyOptionsToControls() {
   SendMessageW(splitCheck_, BM_SETCHECK,
                options_.splitStereoFiles ? BST_CHECKED : BST_UNCHECKED, 0);
   SetWindowTextW(outputEdit_, options_.outputDirectory.wstring().c_str());
+}
+
+void AppWindow::refreshDevices() {
+  options_ = optionsFromControls();
+  options_.deviceId.clear();
+  options_.deviceName.clear();
+  autoSelectInput_ = true;
+  probedDeviceIds_.clear();
+  populateDevices();
+  applyOptionsToControls();
+  startEngine();
 }
 
 AudioOptions AppWindow::optionsFromControls() const {
@@ -380,16 +445,20 @@ AudioOptions AppWindow::optionsFromControls() const {
 }
 
 void AppWindow::startEngine() {
-  stopEngine();
-  options_ = optionsFromControls();
+  AudioOptions requestedOptions = optionsFromControls();
+  engine_.stop();
+  options_ = std::move(requestedOptions);
+  if (autoSelectInput_) inputProbeStarted_ = std::chrono::steady_clock::now();
+  EnableWindow(splitCheck_, options_.mode == ChannelMode::Stereo);
+  EnableWindow(appendCheck_, !options_.forceRecord);
   if (options_.outputDirectory.is_relative()) {
     options_.outputDirectory = executableDirectory() / options_.outputDirectory;
     SetWindowTextW(outputEdit_, options_.outputDirectory.wstring().c_str());
   }
-  EnableWindow(startButton_, FALSE);
+  EnableWindow(startButton_, TRUE);
   EnableWindow(stopButton_, TRUE);
   updateStatus(L"Starting...");
-  engine_.start(
+  if (!engine_.start(
       options_,
       [this](const std::wstring& status) {
         if (IsWindow(window_)) {
@@ -402,7 +471,10 @@ void AppWindow::startEngine() {
           PostMessageW(window_, kMessageReplay, 0,
                        reinterpret_cast<LPARAM>(new ReplayEntry(replay)));
         }
-      });
+      })) {
+    EnableWindow(stopButton_, FALSE);
+    updateStatus(engine_.status());
+  }
 }
 
 void AppWindow::stopEngine() {
@@ -418,6 +490,40 @@ void AppWindow::updateMeters() {
   SendMessageW(inputRightMeter_, PBM_SETPOS, meterPosition(levels.inputRightDb), 0);
   SendMessageW(outputLeftMeter_, PBM_SETPOS, meterPosition(levels.outputLeftDb), 0);
   SendMessageW(outputRightMeter_, PBM_SETPOS, meterPosition(levels.outputRightDb), 0);
+  SetWindowTextW(inputLeftValue_, dbLabel(levels.inputLeftDb).c_str());
+  SetWindowTextW(inputRightValue_, dbLabel(levels.inputRightDb).c_str());
+  SetWindowTextW(outputLeftValue_, dbLabel(levels.outputLeftDb).c_str());
+  SetWindowTextW(outputRightValue_, dbLabel(levels.outputRightDb).c_str());
+  if (autoSelectInput_ && engine_.running()) {
+    const float inputPeak = std::max(levels.inputLeftDb, levels.inputRightDb);
+    if (inputPeak > -89.0f) {
+      autoSelectInput_ = false;
+      probedDeviceIds_.clear();
+    } else if (std::chrono::steady_clock::now() - inputProbeStarted_ >=
+               std::chrono::seconds(2)) {
+      const int selected = static_cast<int>(SendMessageW(deviceCombo_, CB_GETCURSEL, 0, 0));
+      if (selected >= 0 && selected < static_cast<int>(devices_.size())) {
+        probedDeviceIds_.push_back(devices_[selected].id);
+      }
+      int fallback = -1;
+      for (std::size_t index = 0; index < devices_.size(); ++index) {
+        const bool alreadyProbed =
+            std::find(probedDeviceIds_.begin(), probedDeviceIds_.end(), devices_[index].id) !=
+            probedDeviceIds_.end();
+        if (!alreadyProbed && likelyPhysicalInput(devices_[index].name)) {
+          fallback = static_cast<int>(index);
+          break;
+        }
+      }
+      if (fallback >= 0) {
+        SendMessageW(deviceCombo_, CB_SETCURSEL, fallback, 0);
+        startEngine();
+        return;
+      }
+      autoSelectInput_ = false;
+      updateStatus(L"NO INPUT SIGNAL — choose another input or check its mute switch");
+    }
+  }
   if (!engine_.running() && !engine_.status().empty() && engine_.status() != L"Idle") {
     updateStatus(engine_.status());
   }
@@ -426,7 +532,11 @@ void AppWindow::updateMeters() {
 void AppWindow::updateStatus(const std::wstring& status) {
   std::wstring text = status;
   if (status == L"Recording") text = L"● RECORDING — signal above threshold";
-  else if (status == L"Listening") text = L"LISTENING — waiting for VOX trigger";
+  else if (status == L"Listening") {
+    text = L"LISTENING — " +
+           (options_.deviceName.empty() ? std::wstring(L"default input") : options_.deviceName) +
+           L" — waiting for VOX trigger";
+  }
   else if (status == L"Paused - waiting for audio") {
     text = L"PAUSED — file remains open; waiting to append more audio";
   }

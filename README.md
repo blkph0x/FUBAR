@@ -6,9 +6,12 @@ native GUI unless `--headless` is supplied. Both interfaces use the same WASAPI 
 ## Features
 
 - Enumerates active Windows recording devices, including VB-Audio Cable devices.
+- Selects the Windows default input and automatically tries another physical input if it is
+  delivering digital silence.
 - Supports stereo, left-only, right-only, and mono-mix routing.
 - Live speaker monitoring of the selected route.
 - Separate input-left, input-right, output-left, and output-right level meters.
+- Numeric dBFS readouts make muted or silent inputs immediately visible.
 - Adjustable VOX threshold from -60 dBFS to -5 dBFS.
 - Configurable pre-roll and silence hold time.
 - Creates standard 16-bit PCM WAV recordings automatically when audio crosses the threshold.
@@ -41,19 +44,24 @@ a release asset after authenticating the GitHub CLI, run:
 ## GUI operation
 
 Run `AudioVox.exe` with no arguments. The console remains available for diagnostics and the GUI
-opens on top. Capture starts automatically with the selected/default device.
+opens on top. Capture starts with the Windows default input. If that endpoint produces digital
+silence for two seconds, AudioVox tries the next physical input automatically.
 
 1. Select the recording device and channel route.
+   The status banner names the active input; use **Refresh** after connecting a new device.
 2. Move the trigger threshold. A lower value is more sensitive.
 3. Set pre-roll and hold time.
 4. Keep **Save audio files** enabled for VOX clips.
 5. Keep **Live monitor** enabled to hear the routed channel through the default output.
 6. Enable **Append VOX to one file** to omit silent gaps without closing the current recording.
 7. Enable **Split stereo into L/R files** in Stereo mode to save each channel separately.
-8. Click **Start / Apply** after changing settings.
+8. Device, route, and checkbox changes apply immediately. Click **Apply / Restart** after editing
+   threshold, timing, frequency, or output-folder values.
 9. Open **Replay log** to play completed files or locate them in Explorer.
 
 Use headphones when live monitoring a microphone to avoid acoustic feedback.
+If every input remains at `-90.0 dB`, check the microphone's hardware mute switch and Windows
+microphone privacy settings, then select another input or click **Refresh**.
 
 ## Terminal automation
 

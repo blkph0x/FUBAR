@@ -200,6 +200,16 @@ std::vector<AudioDeviceInfo> AudioEngine::enumerateInputDevices(std::wstring* er
   }
 
   ComPtr<IMMDeviceCollection> collection;
+  std::wstring defaultDeviceId;
+  ComPtr<IMMDevice> defaultDevice;
+  if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eCapture, eConsole,
+                                                     defaultDevice.put()))) {
+    LPWSTR id = nullptr;
+    if (SUCCEEDED(defaultDevice->GetId(&id)) && id) {
+      defaultDeviceId = id;
+      CoTaskMemFree(id);
+    }
+  }
   result = enumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, collection.put());
   if (SUCCEEDED(result)) {
     UINT count = 0;
@@ -220,7 +230,7 @@ std::vector<AudioDeviceInfo> AudioEngine::enumerateInputDevices(std::wstring* er
         }
         PropVariantClear(&value);
       }
-      devices.push_back({id, name});
+      devices.push_back({id, name, defaultDeviceId == id});
       CoTaskMemFree(id);
     }
   } else if (error) {
