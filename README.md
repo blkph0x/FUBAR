@@ -85,10 +85,11 @@ The website is off until an admin enables it. While it is on, FUBAR serves a cap
 `http://<this-pc>:80/`. Visitors can **Listen live** to the same audio the app is capturing, and
 play saved WAV clips. Several people can listen at the same time. When the live cap is reached
 (default 5, change it in **Tools → Settings**), new visitors wait in a queue until a slot frees.
-Live audio is an MP3 radio stream (`/live.mp3`) played by the phone's normal media player, so it
-stays smooth on WFM and keeps going when the screen locks or the browser is minimised. Tap
-**Listen live**. If the stream still drops, the page reconnects. Stereo stays stereo. Disable the
-checkbox to take the site offline.
+Live audio is **16-bit PCM at the capture sample rate** (1:1, the same idea as KiwiSDR). That is
+required for SSTV, POCSAG, weather-fax and other digital modes — MP3 would destroy them. Tap
+**Listen live**. A jitter buffer keeps WFM and voice from breaking up. On a phone the page takes a
+screen wake lock so listening is not killed when the display would sleep. Set **Live listen boost**
+to 0 dB for digital modes. If the stream still drops, the page reconnects. Stereo stays stereo.
 
 ### Public Server network
 

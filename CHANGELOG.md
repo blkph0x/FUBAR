@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.12
+
+- Live listen is 16-bit PCM at the capture rate again (1:1, KiwiSDR-style) so SSTV, POCSAG,
+  weather-fax and other non-voice modes are not smashed by MP3.
+- Playback uses a jitter buffer instead of scheduled snippets, which was the crackle.
+- Phones request a screen wake lock while listening so the stream is not killed when the
+  display would otherwise sleep. Leave live boost at 0 dB for digital modes.
+
 ## 1.1.11
 
 - Live listen is now a real MP3 radio stream in the browser's media player, not Web Audio PCM.
