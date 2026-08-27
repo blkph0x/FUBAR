@@ -91,6 +91,7 @@ button.play.playing{ background:var(--blue); }
 <div class="player">
   <div class="meta" id="now" style="margin-bottom:6px">Nothing playing</div>
   <audio id="audio" controls preload="none"></audio>
+  <audio id="liveMedia" playsinline webkit-playsinline autoplay style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></audio>
 </div>
 <script>
 const audio = document.getElementById('audio');
@@ -147,9 +148,12 @@ audio.addEventListener('play', render);
 const liveBtn = document.getElementById('liveBtn');
 const liveHint = document.getElementById('liveHint');
 const liveLevel = document.getElementById('liveLevel');
+const liveMedia = document.getElementById('liveMedia');
 let liveAbort = null;
 let livePlaying = false;
 let liveWanted = false;
+let liveAc = null;
+let liveMaster = null;
 function queueLabel(status){
   const limit = Math.max(1, Number(status && status.listenerLimit) || 5);
   const n = Number(status && status.listeners) || 0;
@@ -168,15 +172,54 @@ function stopLive(){
   liveWanted = false;
   livePlaying = false;
   if (liveAbort) { liveAbort.abort(); liveAbort = null; }
+  try { liveMedia.pause(); liveMedia.srcObject = null; } catch {}
+  try { if (navigator.mediaSession) navigator.mediaSession.playbackState = 'none'; } catch {}
+  try { if (liveAc && liveAc.state !== 'closed' && liveAc.close) liveAc.close(); } catch {}
+  liveAc = null;
+  liveMaster = null;
   setLiveUi(false, 'Same audio the app is capturing right now');
 }
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+async function keepLiveAlive(){
+  if (!liveWanted) return;
+  try { if (liveAc && liveAc.state !== 'running') await liveAc.resume(); } catch {}
+  try { if (liveMedia && liveMedia.paused) await liveMedia.play(); } catch {}
+}
+async function setupLiveGraph(){
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!liveAc || liveAc.state === 'closed') {
+    liveAc = new Ctx({latencyHint:'playback'});
+    liveMaster = liveAc.createGain();
+    const dest = liveAc.createMediaStreamDestination();
+    liveMaster.connect(liveAc.destination);
+    liveMaster.connect(dest);
+    liveMedia.setAttribute('playsinline','true');
+    liveMedia.setAttribute('webkit-playsinline','true');
+    liveMedia.srcObject = dest.stream;
+  }
+  if (navigator.audioSession) {
+    try { navigator.audioSession.type = 'playback'; } catch {}
+  }
+  await liveAc.resume();
+  try { await liveMedia.play(); } catch {}
+  if (navigator.mediaSession) {
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({title:'FUBAR Live', artist:'FUBAR'});
+      navigator.mediaSession.playbackState = 'playing';
+      navigator.mediaSession.setActionHandler('pause', () => stopLive());
+      navigator.mediaSession.setActionHandler('play', () => { if (!liveWanted) startLive(); });
+      navigator.mediaSession.setActionHandler('stop', () => stopLive());
+    } catch {}
+  }
+  liveAc.onstatechange = () => { keepLiveAlive(); };
+}
 async function playLiveSession(){
   liveAbort = new AbortController();
-  const ac = new (window.AudioContext || window.webkitAudioContext)();
-  await ac.resume();
+  await setupLiveGraph();
+  const ac = liveAc;
   const poll = setInterval(async () => {
     if (!liveWanted) return;
+    keepLiveAlive();
     try {
       const status = await (await fetch('api/status', {cache:'no-store'})).json();
       const limit = Math.max(1, Number(status.listenerLimit) || 5);
@@ -189,7 +232,7 @@ async function playLiveSession(){
   }, 800);
   let res;
   try {
-    res = await fetch('live.pcm?v=118&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
+    res = await fetch('live.pcm?v=119&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
   } finally {
     clearInterval(poll);
   }
@@ -218,40 +261,48 @@ async function playLiveSession(){
   };
   const hdr = await take(16);
   if (new TextDecoder().decode(hdr.slice(0,8)) !== 'FUBARPCM') throw new Error('bad live header');
-  const rate = new DataView(hdr.buffer, hdr.byteOffset, 16).getUint32(8, true);
-  let nextTime = ac.currentTime + 0.1;
-  setLiveUi(true, 'Live · ' + rate + ' Hz');
+  const view = new DataView(hdr.buffer, hdr.byteOffset, 16);
+  const rate = view.getUint32(8, true);
+  const channels = Math.max(1, view.getUint16(12, true) || 1);
+  let nextTime = ac.currentTime + 0.18;
+  setLiveUi(true, 'Live · ' + rate + ' Hz' + (channels>1?' stereo':''));
+  const keep = setInterval(keepLiveAlive, 1500);
   try {
     while (liveWanted) {
-      if (buf.length < 512 && !await readMore()) break;
-      const maxBytes = Math.max(512, Math.floor(rate / 10) * 2);
-      let bytes = buf.length - (buf.length % 2);
+      const frameBytes = 2 * channels;
+      if (buf.length < Math.max(512, frameBytes) && !await readMore()) break;
+      const maxBytes = Math.max(frameBytes * 256, Math.floor(rate / 8) * frameBytes);
+      let bytes = buf.length - (buf.length % frameBytes);
       if (bytes > maxBytes) bytes = maxBytes;
-      if (bytes < 2) { await sleep(10); continue; }
+      if (bytes < frameBytes) { await sleep(10); continue; }
       const chunk = buf.slice(0, bytes);
       buf = buf.slice(bytes);
       const aligned = (chunk.byteOffset % 2 === 0) ? chunk : chunk.slice();
       const samples = new Int16Array(aligned.buffer, aligned.byteOffset, aligned.byteLength / 2);
-      const audioBuf = ac.createBuffer(1, samples.length, rate);
-      const data = audioBuf.getChannelData(0);
+      const frames = Math.floor(samples.length / channels);
+      if (frames < 1) continue;
+      const audioBuf = ac.createBuffer(channels, frames, rate);
       let peak = 0;
-      for (let i = 0; i < samples.length; i++) {
-        const v = samples[i] / 32768;
-        data[i] = v;
-        const a = v < 0 ? -v : v;
-        if (a > peak) peak = a;
+      for (let ch = 0; ch < channels; ch++) {
+        const data = audioBuf.getChannelData(ch);
+        for (let i = 0; i < frames; i++) {
+          const v = samples[i * channels + ch] / 32768;
+          data[i] = v;
+          const a = v < 0 ? -v : v;
+          if (a > peak) peak = a;
+        }
       }
       liveLevel.style.width = Math.min(100, Math.round(peak * 140)) + '%';
-      if (nextTime < ac.currentTime + 0.06) nextTime = ac.currentTime + 0.08;
-      if (nextTime > ac.currentTime + 0.5) nextTime = ac.currentTime + 0.12;
+      if (nextTime < ac.currentTime + 0.08) nextTime = ac.currentTime + 0.16;
+      if (nextTime > ac.currentTime + 1.2) nextTime = ac.currentTime + 0.2;
       const src = ac.createBufferSource();
       src.buffer = audioBuf;
-      src.connect(ac.destination);
+      src.connect(liveMaster || ac.destination);
       src.start(nextTime);
       nextTime += audioBuf.duration;
     }
   } finally {
-    try { if (ac.state !== 'closed' && ac.close) ac.close(); } catch {}
+    clearInterval(keep);
   }
 }
 async function startLive(){
@@ -280,11 +331,10 @@ liveBtn.addEventListener('click', () => {
   if (liveWanted || livePlaying) { stopLive(); return; }
   startLive();
 });
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && liveWanted) {
-    try { (window.AudioContext || window.webkitAudioContext); } catch {}
-  }
-});
+document.addEventListener('visibilitychange', keepLiveAlive);
+window.addEventListener('pageshow', keepLiveAlive);
+window.addEventListener('focus', keepLiveAlive);
+document.addEventListener('resume', keepLiveAlive);
 function esc(t){
   return String(t||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -886,7 +936,7 @@ void CaptureWebServer::streamLive(std::uintptr_t clientHandle, bool wavContainer
   const SOCKET client = static_cast<SOCKET>(clientHandle);
   const BOOL nodelay = TRUE;
   setsockopt(client, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&nodelay), sizeof(nodelay));
-  DWORD sendTimeout = 20000;
+  DWORD sendTimeout = 120000;
   setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&sendTimeout),
              sizeof(sendTimeout));
   DWORD recvTimeout = 0;
@@ -926,22 +976,23 @@ void CaptureWebServer::streamLive(std::uintptr_t clientHandle, bool wavContainer
   while (hub && !hub->live() && !stop_) Sleep(25);
   if (stop_) return;
   const std::uint32_t rate = (hub && hub->sampleRate()) ? hub->sampleRate() : 48000;
+  const std::uint16_t streamChannels = (hub && hub->channels() == 2) ? 2 : 1;
   const char* prelude = wavContainer
       ? "HTTP/1.0 200 OK\r\nContent-Type: audio/wav\r\nCache-Control: no-store, no-cache, must-revalidate\r\nConnection: close\r\nicy-name: FUBAR Live\r\n\r\n"
       : "HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store, no-cache, must-revalidate\r\nConnection: close\r\n\r\n";
   if (!sendAll(client, prelude, static_cast<int>(std::strlen(prelude)))) return;
   if (wavContainer) {
     std::uint8_t wav[44];
-    LiveAudioHub::writeWavHeader(wav, rate);
+    LiveAudioHub::writeWavHeader(wav, rate, streamChannels);
     if (!sendAll(client, reinterpret_cast<const char*>(wav), 44)) return;
   } else {
     std::uint8_t pcmHeader[16];
-    LiveAudioHub::writePcmHeader(pcmHeader, rate);
+    LiveAudioHub::writePcmHeader(pcmHeader, rate, streamChannels);
     if (!sendAll(client, reinterpret_cast<const char*>(pcmHeader), 16)) return;
   }
 
   LiveAudioHub::Cursor cursor;
-  std::int16_t pcm[1024];
+  std::int16_t pcm[2048];
   std::uint32_t generation = hub ? hub->generation() : 0;
   while (!stop_) {
     if (!hub) {
@@ -950,6 +1001,7 @@ void CaptureWebServer::streamLive(std::uintptr_t clientHandle, bool wavContainer
     }
     const std::uint32_t nowRate = hub->sampleRate();
     if (nowRate && nowRate != rate) break;
+    if (hub->channels() && hub->channels() != streamChannels) break;
     if (!hub->live()) {
       Sleep(25);
       continue;

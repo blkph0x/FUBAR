@@ -28,6 +28,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 - Tools → Manage recordings deletes selected clips or anything older than a chosen number of days.
 - Live listen boost, frequency in file names, and remembered device/VOX settings for SDR + VB-CABLE.
 - Public Server directory at `https://gearsqueens.online/fubar-net` so listeners can find live stations.
+- Stereo live listen for WFM/SDR (no noisy left+right fold) and background playback when a phone locks.
 - Full terminal operation for scripts, scheduled jobs, and automation.
 - Handles shared-mode 8/16/24/32-bit PCM and 32/64-bit floating-point input safely.
 
@@ -84,9 +85,19 @@ The website is off until an admin enables it. While it is on, FUBAR serves a cap
 `http://<this-pc>:80/`. Visitors can **Listen live** to the same audio the app is capturing, and
 play saved WAV clips. Several people can listen at the same time. When the live cap is reached
 (default 5, change it in **Tools → Settings**), new visitors wait in a queue until a slot frees.
-Live audio is a shared mono PCM stream of the current capture — tap **Listen live** (the browser
-cannot play an endless WAV file, so FUBAR uses Web Audio). If the stream drops, the page reconnects
-on its own. Disable the checkbox to take the site offline.
+Live audio follows the channel route you selected in the app. Stereo stays stereo, so WFM/SDR
+does not get a noisy left+right mix. Tap **Listen live** — FUBAR uses Web Audio plus a hidden
+media player so phones can keep listening when the screen locks or the browser is in the
+background (same idea as YouTube Music). If the stream still drops, the page reconnects on its
+own. Disable the checkbox to take the site offline.
+
+### Public Server network
+
+Tick **Public Server** and set a station name. This PC heartbeats to the hub at
+`https://gearsqueens.online/fubar-net`. Every FUBAR website loads that list so listeners can jump
+between stations. The 24/7 hub player is `https://gearsqueens.online/fubar/`. A station drops off
+about 90 seconds after it goes offline. The hub PC only needs FUBAR open with **Public website**
+enabled; **Public Server** is only if you want that PC on the list too.
 
 A silent VB-CABLE input is not swapped for a microphone. Device, threshold, timing, and website
 choices are saved. New WAV names include the radio frequency so SDR hops stay identifiable.
@@ -97,7 +108,7 @@ prompts, allow FUBAR so other devices on the network can connect.
 Headless:
 
 ```powershell
-.\FUBAR.exe --cli --headless --web --live-listeners 5 --output "D:\FUBAR Recordings"
+.\FUBAR.exe --cli --headless --web --public-server --station-name "Home SDR" --live-listeners 5
 ```
 
 Use headphones when live monitoring a microphone to avoid acoustic feedback.

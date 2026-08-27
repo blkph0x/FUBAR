@@ -65,8 +65,16 @@ float peakToDb(float peak) {
 }
 
 std::int16_t floatToPcm16(float sample) {
-  const float clipped = sanitizeAudioSample(sample);
-  return static_cast<std::int16_t>(std::lrint(clipped * 32767.0f));
+  float value = sanitizeAudioSample(sample);
+  // TPDF dither at one 16-bit LSB keeps quiet WFM from turning into grainy static.
+  static std::uint32_t rng = 0xC001D00Du;
+  rng = rng * 1664525u + 1013904223u;
+  const float a = static_cast<float>(rng >> 8) * (1.0f / 16777216.0f);
+  rng = rng * 1664525u + 1013904223u;
+  const float b = static_cast<float>(rng >> 8) * (1.0f / 16777216.0f);
+  value += (a + b - 1.0f) * (1.0f / 32768.0f);
+  value = std::clamp(value, -1.0f, 1.0f);
+  return static_cast<std::int16_t>(std::lrint(value * 32767.0f));
 }
 
 enum class SampleEncoding {
@@ -738,7 +746,7 @@ void AudioEngine::captureThread() {
   }
 
   running_ = true;
-  liveHub_.beginSession(sampleRate);
+  liveHub_.beginSession(sampleRate, recordChannels);
   setStatus(L"Input format: " + decoder.description());
   setStatus(monitorWarning.empty() ? L"Listening" : monitorWarning);
   if (options_.forceRecord && beginRecording()) voxGate.activate();

@@ -70,7 +70,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.8 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.9 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -269,8 +269,28 @@ int runSelfTest() {
   }
   std::uint8_t pcmHeader[16];
   LiveAudioHub::writePcmHeader(pcmHeader, 8000);
-  if (std::memcmp(pcmHeader, "FUBARPCM", 8) != 0) {
+  if (std::memcmp(pcmHeader, "FUBARPCM", 8) != 0 || pcmHeader[12] != 1) {
     std::wcerr << L"Self-test failed: live PCM header\n";
+    return 1;
+  }
+  LiveAudioHub::writePcmHeader(pcmHeader, 8000, 2);
+  if (pcmHeader[12] != 2) {
+    std::wcerr << L"Self-test failed: stereo live PCM header\n";
+    return 1;
+  }
+  LiveAudioHub stereoHub;
+  stereoHub.beginSession(8000, 2);
+  std::vector<std::int16_t> stereoTone(2000);
+  for (int i = 0; i < 1000; ++i) {
+    stereoTone[static_cast<std::size_t>(i * 2)] = 100;
+    stereoTone[static_cast<std::size_t>(i * 2 + 1)] = 200;
+  }
+  stereoHub.pushInterleaved(stereoTone.data(), stereoTone.size(), 2);
+  LiveAudioHub::Cursor stereoCursor;
+  std::int16_t stereoOut[8]{};
+  const std::size_t stereoGot = stereoHub.pull(stereoCursor, stereoOut, 8, 0);
+  if (stereoGot < 2 || stereoOut[0] != 100 || stereoOut[1] != 200) {
+    std::wcerr << L"Self-test failed: stereo live stream was downmixed\n";
     return 1;
   }
   if (!CaptureWebServer::handlePathForTest("GET", "/live.pcm", webDir, &status, &type) ||

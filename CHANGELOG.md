@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.9
+
+- Live listen keeps stereo for WFM/SDR instead of folding left and right together, which was adding
+  static. Quiet signals are dithered so they stay clean in 16-bit.
+- Phone lock and a minimised browser keep the live stream playing, using a real media session like
+  YouTube Music. The page also reconnects if the OS still pauses it.
+
 ## 1.1.8
 
 - Public Server lists a station on the 24/7 hub at `https://gearsqueens.online/fubar-net`.
