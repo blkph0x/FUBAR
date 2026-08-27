@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.11
+
+- Live listen is now a real MP3 radio stream in the browser's media player, not Web Audio PCM.
+  That keeps WFM smooth (no JS crackle) and keeps playing when a phone locks or the tab is
+  backgrounded, the same way a normal radio stream works.
+
 ## 1.1.10
 
 - Live listen no longer plays the stream twice (Web Audio plus the hidden player), which sounded

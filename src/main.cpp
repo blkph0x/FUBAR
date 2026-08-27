@@ -13,11 +13,13 @@
 #include "web_server.h"
 #include "live_hub.h"
 #include "live_slot.h"
+#include "live_mp3.h"
 #include "fubar_net.h"
 #include "app_paths.h"
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <iostream>
@@ -70,7 +72,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.10 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.11 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -291,6 +293,28 @@ int runSelfTest() {
   const std::size_t stereoGot = stereoHub.pull(stereoCursor, stereoOut, 8, 0);
   if (stereoGot < 2 || stereoOut[0] != 100 || stereoOut[1] != 200) {
     std::wcerr << L"Self-test failed: stereo live stream was downmixed\n";
+    return 1;
+  }
+  LiveMp3Encoder mp3;
+  if (!mp3.open(48000, 1)) {
+    std::wcerr << L"Self-test failed: MP3 encoder open\n";
+    return 1;
+  }
+  std::vector<std::int16_t> mp3Pcm(static_cast<std::size_t>(mp3.samplesPerPass()) * 2, 0);
+  for (std::size_t i = 0; i < mp3Pcm.size(); ++i) {
+    mp3Pcm[i] = static_cast<std::int16_t>(std::sin(i * 0.1) * 8000);
+  }
+  std::vector<std::uint8_t> mp3Out;
+  mp3.encodeInterleaved(mp3Pcm.data(), mp3Pcm.size(), &mp3Out);
+  if (mp3Out.size() < 4 || mp3Out[0] != 0xFF || (mp3Out[1] & 0xE0) != 0xE0) {
+    std::wcerr << L"Self-test failed: MP3 encoder output\n";
+    return 1;
+  }
+  int mp3Status = 0;
+  std::string mp3Type;
+  if (!CaptureWebServer::handlePathForTest("GET", "/live.mp3", webDir, &mp3Status, &mp3Type) ||
+      mp3Status != 200) {
+    std::wcerr << L"Self-test failed: live MP3 path\n";
     return 1;
   }
   if (!CaptureWebServer::handlePathForTest("GET", "/live.pcm", webDir, &status, &type) ||

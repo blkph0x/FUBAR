@@ -85,11 +85,10 @@ The website is off until an admin enables it. While it is on, FUBAR serves a cap
 `http://<this-pc>:80/`. Visitors can **Listen live** to the same audio the app is capturing, and
 play saved WAV clips. Several people can listen at the same time. When the live cap is reached
 (default 5, change it in **Tools → Settings**), new visitors wait in a queue until a slot frees.
-Live audio follows the channel route you selected in the app. Stereo stays stereo, so WFM/SDR
-does not get a noisy left+right mix. Tap **Listen live** — FUBAR uses Web Audio plus a hidden
-media player so phones can keep listening when the screen locks or the browser is in the
-background (same idea as YouTube Music). If the stream still drops, the page reconnects on its
-own. Disable the checkbox to take the site offline.
+Live audio is an MP3 radio stream (`/live.mp3`) played by the phone's normal media player, so it
+stays smooth on WFM and keeps going when the screen locks or the browser is minimised. Tap
+**Listen live**. If the stream still drops, the page reconnects. Stereo stays stereo. Disable the
+checkbox to take the site offline.
 
 ### Public Server network
 

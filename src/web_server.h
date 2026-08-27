@@ -59,6 +59,7 @@ class CaptureWebServer {
   void acceptLoop();
   void handleClient(std::uintptr_t client);
   void streamLive(std::uintptr_t client, bool wavContainer);
+  void streamLiveMp3(std::uintptr_t client);
   std::filesystem::path rootLocked() const;
   std::string statusJson() const;
   std::string capturesJson() const;
