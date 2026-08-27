@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.7
+
+- Live listen stays up when capture restarts, and the browser reconnects if the stream drops.
+- Tools → Manage recordings deletes selected clips or files older than N days, and shows folder size.
+- Tools → Settings can boost quiet live audio (SDR/VB-CABLE) without changing saved WAVs, and can
+  auto-delete recordings older than a chosen number of days.
+- Device, VOX, and website settings are remembered. A silent VB-CABLE input is no longer replaced
+  by a microphone after two seconds.
+- New recordings include the radio frequency in the file name, e.g. `268000kHz`.
+- Copy URL puts the LAN website address on the clipboard for phones and other PCs.
+
 ## 1.1.6
 
 - Any number of people can listen live at once; a second listener no longer drops the first.

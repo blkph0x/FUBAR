@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstring>
 #include <cwctype>
 #include <filesystem>
 #include <iomanip>
@@ -69,7 +70,8 @@ enum ControlId {
   IdReplayOpen,
   IdRefreshDevices,
   IdWeb,
-  IdOpenWeb
+  IdOpenWeb,
+  IdCopyWeb
 };
 
 HWND addControl(HWND parent, const wchar_t* className, const wchar_t* text, DWORD style,
@@ -205,7 +207,7 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   RegisterClassExW(&brandClass);
 
   HMENU menu = LoadMenuW(instance_, MAKEINTRESOURCEW(IDR_MAINMENU));
-  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.6", WS_OVERLAPPEDWINDOW,
+  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.7", WS_OVERLAPPEDWINDOW,
                             CW_USEDEFAULT, CW_USEDEFAULT, 780, 780, nullptr, menu, instance_,
                             this);
   if (!window_) return 1;
@@ -255,6 +257,7 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
       populateDevices();
       applyOptionsToControls();
       reloadCapturesFromDisk();
+      pruneOldRecordings();
       applyWebServer();
       SetTimer(window, kMeterTimer, 75, nullptr);
       PostMessageW(window, WM_COMMAND, IdStart, 0);
@@ -280,7 +283,9 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
         case IdOpenFolder: openOutputDirectory(); return 0;
         case IdReplay: showReplayWindow(); return 0;
         case IdOpenWeb: openWebsite(); return 0;
+        case IdCopyWeb: copyWebsiteUrl(); return 0;
         case ID_TOOLS_SETTINGS: showSettings(); return 0;
+        case ID_TOOLS_RECORDINGS: showRecordings(); return 0;
         case IdWeb:
           if (HIWORD(wParam) == BN_CLICKED) {
             webEnabled_ = SendMessageW(webCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
@@ -429,8 +434,9 @@ void AppWindow::createControls() {
              IdOpenFolder);
   webCheck_ = addControl(window_, L"BUTTON", L"Public website on port 80", BS_AUTOCHECKBOX,
                          85, 628, 230, 24, IdWeb);
-  addControl(window_, L"BUTTON", L"Open site", BS_PUSHBUTTON, 325, 624, 90, 28, IdOpenWeb);
-  webStatus_ = addControl(window_, L"STATIC", L"Website off", 0, 430, 628, 280, 24);
+  addControl(window_, L"BUTTON", L"Open site", BS_PUSHBUTTON, 320, 624, 80, 28, IdOpenWeb);
+  addControl(window_, L"BUTTON", L"Copy URL", BS_PUSHBUTTON, 405, 624, 80, 28, IdCopyWeb);
+  webStatus_ = addControl(window_, L"STATIC", L"Website off", 0, 495, 628, 230, 24);
   addControl(window_, L"STATIC",
              L"CLI automation: FUBAR.exe --cli --headless --mode left --threshold-db -35",
               SS_CENTER, 40, 668, 680, 22);
@@ -546,6 +552,7 @@ void AppWindow::startEngine() {
   SetWindowTextW(outputEdit_, options_.outputDirectory.wstring().c_str());
   web_.setRoot(options_.outputDirectory);
   web_.setLiveHub(&engine_.liveHub());
+  engine_.liveHub().setGainDb(static_cast<float>(liveBoostDb_));
   EnableWindow(startButton_, TRUE);
   EnableWindow(stopButton_, TRUE);
   updateStatus(L"Starting...");
@@ -585,6 +592,18 @@ void AppWindow::updateMeters() {
   SetWindowTextW(inputRightValue_, dbLabel(levels.inputRightDb).c_str());
   SetWindowTextW(outputLeftValue_, dbLabel(levels.outputLeftDb).c_str());
   SetWindowTextW(outputRightValue_, dbLabel(levels.outputRightDb).c_str());
+  if (webEnabled_ && web_.running()) {
+    static int webTicks = 0;
+    if (++webTicks >= 12) {
+      webTicks = 0;
+      refreshWebStatus();
+    }
+  }
+  if (autoSelectInput_ && engine_.running()) {
+    if (isVirtualAudioEndpoint(options_.deviceName)) {
+      autoSelectInput_ = false;
+    }
+  }
   if (autoSelectInput_ && engine_.running()) {
     const float inputPeak = std::max(levels.inputLeftDb, levels.inputRightDb);
     if (inputPeak > -89.0f) {
@@ -761,6 +780,25 @@ void AppWindow::saveSettings() const {
   WritePrivateProfileStringW(L"FUBAR", L"WebEnabled", webEnabled_ ? L"1" : L"0", ini.c_str());
   WritePrivateProfileStringW(L"FUBAR", L"LiveMaxListeners",
                              std::to_wstring(liveMaxListeners_).c_str(), ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"LiveBoostDb",
+                             std::to_wstring(liveBoostDb_).c_str(), ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"PruneDays",
+                             std::to_wstring(pruneDays_).c_str(), ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"DeviceId", current.deviceId.c_str(), ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"DeviceName", current.deviceName.c_str(), ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"Mode",
+                             std::to_wstring(static_cast<int>(current.mode)).c_str(), ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"PreRoll",
+                             windowText(preRollEdit_).c_str(), ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"Hold", windowText(holdEdit_).c_str(), ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"SaveAudio", current.saveAudio ? L"1" : L"0", ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"Monitor", current.monitor ? L"1" : L"0", ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"ForceRecord", current.forceRecord ? L"1" : L"0",
+                             ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"AppendSession", current.appendSession ? L"1" : L"0",
+                             ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"SplitStereo", current.splitStereoFiles ? L"1" : L"0",
+                             ini.c_str());
 }
 
 void AppWindow::reloadCapturesFromDisk() {
@@ -796,6 +834,32 @@ void AppWindow::loadSettings() {
   webEnabled_ = GetPrivateProfileIntW(L"FUBAR", L"WebEnabled", 0, ini.c_str()) != 0;
   liveMaxListeners_ = LiveSlotGate::clampLimit(
       GetPrivateProfileIntW(L"FUBAR", L"LiveMaxListeners", LiveSlotGate::kDefaultLimit, ini.c_str()));
+  liveBoostDb_ = std::clamp(
+      static_cast<int>(GetPrivateProfileIntW(L"FUBAR", L"LiveBoostDb", 0, ini.c_str())), 0, 18);
+  pruneDays_ = std::clamp(
+      static_cast<int>(GetPrivateProfileIntW(L"FUBAR", L"PruneDays", 0, ini.c_str())), 0, 3650);
+  if (GetPrivateProfileStringW(L"FUBAR", L"DeviceId", L"", buffer, 1024, ini.c_str()) > 0) {
+    options_.deviceId = buffer;
+  }
+  if (GetPrivateProfileStringW(L"FUBAR", L"DeviceName", L"", buffer, 1024, ini.c_str()) > 0) {
+    options_.deviceName = buffer;
+  }
+  const int mode = GetPrivateProfileIntW(L"FUBAR", L"Mode", static_cast<int>(options_.mode),
+                                         ini.c_str());
+  if (mode >= 0 && mode <= 3) options_.mode = static_cast<ChannelMode>(mode);
+  if (GetPrivateProfileStringW(L"FUBAR", L"PreRoll", L"", buffer, 1024, ini.c_str()) > 0) {
+    try { options_.preRollSeconds = std::stof(buffer); } catch (...) {}
+  }
+  if (GetPrivateProfileStringW(L"FUBAR", L"Hold", L"", buffer, 1024, ini.c_str()) > 0) {
+    try { options_.holdSeconds = std::stof(buffer); } catch (...) {}
+  }
+  options_.saveAudio = GetPrivateProfileIntW(L"FUBAR", L"SaveAudio", 1, ini.c_str()) != 0;
+  options_.monitor = GetPrivateProfileIntW(L"FUBAR", L"Monitor", 1, ini.c_str()) != 0;
+  options_.forceRecord = GetPrivateProfileIntW(L"FUBAR", L"ForceRecord", 0, ini.c_str()) != 0;
+  options_.appendSession = GetPrivateProfileIntW(L"FUBAR", L"AppendSession", 0, ini.c_str()) != 0;
+  options_.splitStereoFiles = GetPrivateProfileIntW(L"FUBAR", L"SplitStereo", 0, ini.c_str()) != 0;
+  autoSelectInput_ = options_.deviceId.empty() && options_.deviceName.empty();
+  if (isVirtualAudioEndpoint(options_.deviceName)) autoSelectInput_ = false;
   if (webCheck_) {
     SendMessageW(webCheck_, BM_SETCHECK, webEnabled_ ? BST_CHECKED : BST_UNCHECKED, 0);
   }
@@ -807,8 +871,13 @@ void AppWindow::refreshWebStatus() {
     SetWindowTextW(webStatus_, webEnabled_ ? web_.lastError().c_str() : L"Website off");
     return;
   }
-  const std::wstring text = L"On air  " + web_.lanUrl() + L"  (" +
-                            std::to_wstring(web_.maxLiveListeners()) + L" live slots)";
+  std::wstring text = L"On air  " + web_.lanUrl() + L"  (" +
+                      std::to_wstring(web_.liveListeners()) + L"/" +
+                      std::to_wstring(web_.maxLiveListeners()) + L" live";
+  if (web_.liveQueued() > 0) {
+    text += L", " + std::to_wstring(web_.liveQueued()) + L" waiting";
+  }
+  text += L")";
   SetWindowTextW(webStatus_, text.c_str());
 }
 
@@ -839,12 +908,40 @@ void AppWindow::openWebsite() const {
   ShellExecuteW(window_, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
+void AppWindow::copyWebsiteUrl() const {
+  const std::wstring url = web_.running() ? web_.lanUrl() : L"http://127.0.0.1/";
+  if (!OpenClipboard(window_)) return;
+  EmptyClipboard();
+  const SIZE_T bytes = (url.size() + 1) * sizeof(wchar_t);
+  HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes);
+  if (!memory) {
+    CloseClipboard();
+    return;
+  }
+  if (void* locked = GlobalLock(memory)) {
+    std::memcpy(locked, url.c_str(), bytes);
+    GlobalUnlock(memory);
+  }
+  SetClipboardData(CF_UNICODETEXT, memory);
+  CloseClipboard();
+  if (webStatus_) SetWindowTextW(webStatus_, (L"Copied  " + url).c_str());
+}
+
+void AppWindow::pruneOldRecordings() {
+  if (pruneDays_ <= 0) return;
+  if (deleteCapturesOlderThan(options_.outputDirectory, pruneDays_) > 0) {
+    reloadCapturesFromDisk();
+  }
+}
+
 namespace {
 
 struct SettingsDialogData {
   int limit = LiveSlotGate::kDefaultLimit;
   int listeners = 0;
   int queued = 0;
+  int liveBoostDb = 0;
+  int pruneDays = 0;
 };
 
 INT_PTR CALLBACK settingsDialogProc(HWND dialog, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -852,6 +949,8 @@ INT_PTR CALLBACK settingsDialogProc(HWND dialog, UINT message, WPARAM wParam, LP
     auto* data = reinterpret_cast<SettingsDialogData*>(lParam);
     SetWindowLongPtrW(dialog, DWLP_USER, reinterpret_cast<LONG_PTR>(data));
     SetDlgItemInt(dialog, IDC_LIVE_LIMIT, static_cast<UINT>(data->limit), FALSE);
+    SetDlgItemInt(dialog, IDC_LIVE_BOOST, static_cast<UINT>(data->liveBoostDb), FALSE);
+    SetDlgItemInt(dialog, IDC_PRUNE_DAYS, static_cast<UINT>(data->pruneDays), FALSE);
     const std::wstring stats = L"Right now: " + std::to_wstring(data->listeners) +
                                L" listening, " + std::to_wstring(data->queued) + L" waiting.";
     SetDlgItemTextW(dialog, IDC_LIVE_STATS, stats.c_str());
@@ -862,8 +961,14 @@ INT_PTR CALLBACK settingsDialogProc(HWND dialog, UINT message, WPARAM wParam, LP
       case IDOK: {
         auto* data = reinterpret_cast<SettingsDialogData*>(GetWindowLongPtrW(dialog, DWLP_USER));
         BOOL translated = FALSE;
-        const int value = static_cast<int>(GetDlgItemInt(dialog, IDC_LIVE_LIMIT, &translated, FALSE));
-        if (data) data->limit = LiveSlotGate::clampLimit(translated ? value : LiveSlotGate::kDefaultLimit);
+        const int limit = static_cast<int>(GetDlgItemInt(dialog, IDC_LIVE_LIMIT, &translated, FALSE));
+        const int boost = static_cast<int>(GetDlgItemInt(dialog, IDC_LIVE_BOOST, &translated, FALSE));
+        const int days = static_cast<int>(GetDlgItemInt(dialog, IDC_PRUNE_DAYS, &translated, FALSE));
+        if (data) {
+          data->limit = LiveSlotGate::clampLimit(limit);
+          data->liveBoostDb = std::clamp(boost, 0, 18);
+          data->pruneDays = std::clamp(days, 0, 3650);
+        }
         EndDialog(dialog, IDOK);
         return TRUE;
       }
@@ -875,6 +980,106 @@ INT_PTR CALLBACK settingsDialogProc(HWND dialog, UINT message, WPARAM wParam, LP
   return FALSE;
 }
 
+struct RecordingsDialogData {
+  std::filesystem::path folder;
+  double frequencyMhz = 0.0;
+  int days = 30;
+  std::vector<ReplayEntry> items;
+  bool changed = false;
+};
+
+std::wstring recordingsLabel(const ReplayEntry& entry) {
+  const std::time_t time = std::chrono::system_clock::to_time_t(entry.started);
+  std::tm local{};
+  localtime_s(&local, &time);
+  std::error_code error;
+  const auto bytes = std::filesystem::file_size(entry.path, error);
+  std::wostringstream stream;
+  stream << std::put_time(&local, L"%Y-%m-%d %H:%M:%S") << L"  "
+         << std::fixed << std::setprecision(1) << entry.durationSeconds << L" s  "
+         << (bytes / 1024) << L" KB  " << entry.path.filename().wstring();
+  return stream.str();
+}
+
+void fillRecordingsList(HWND dialog, RecordingsDialogData* data) {
+  HWND list = GetDlgItem(dialog, IDC_REC_LIST);
+  SendMessageW(list, LB_RESETCONTENT, 0, 0);
+  data->items = loadCapturesFromDirectory(data->folder, data->frequencyMhz);
+  std::reverse(data->items.begin(), data->items.end());
+  std::uint64_t bytes = 0;
+  for (const auto& item : data->items) {
+    std::error_code error;
+    bytes += std::filesystem::file_size(item.path, error);
+    const auto label = recordingsLabel(item);
+    SendMessageW(list, LB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label.c_str()));
+  }
+  std::wostringstream stats;
+  stats << data->items.size() << L" recording" << (data->items.size() == 1 ? L"" : L"s")
+        << L"  ·  " << std::fixed << std::setprecision(1)
+        << (static_cast<double>(bytes) / (1024.0 * 1024.0)) << L" MB";
+  SetDlgItemTextW(dialog, IDC_REC_STATS, stats.str().c_str());
+}
+
+INT_PTR CALLBACK recordingsDialogProc(HWND dialog, UINT message, WPARAM wParam, LPARAM lParam) {
+  auto* data = reinterpret_cast<RecordingsDialogData*>(GetWindowLongPtrW(dialog, DWLP_USER));
+  if (message == WM_INITDIALOG) {
+    data = reinterpret_cast<RecordingsDialogData*>(lParam);
+    SetWindowLongPtrW(dialog, DWLP_USER, reinterpret_cast<LONG_PTR>(data));
+    SetDlgItemInt(dialog, IDC_REC_DAYS, static_cast<UINT>(data->days), FALSE);
+    fillRecordingsList(dialog, data);
+    return TRUE;
+  }
+  if (message != WM_COMMAND || !data) return FALSE;
+  switch (LOWORD(wParam)) {
+    case IDC_REC_REFRESH:
+      fillRecordingsList(dialog, data);
+      return TRUE;
+    case IDC_REC_OPEN:
+      ShellExecuteW(dialog, L"open", data->folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+      return TRUE;
+    case IDC_REC_DELETE: {
+      HWND list = GetDlgItem(dialog, IDC_REC_LIST);
+      const int count = static_cast<int>(SendMessageW(list, LB_GETSELCOUNT, 0, 0));
+      if (count <= 0) return TRUE;
+      if (MessageBoxW(dialog, L"Delete the selected recordings? This cannot be undone.",
+                      L"Manage recordings", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) {
+        return TRUE;
+      }
+      std::vector<int> selected(static_cast<std::size_t>(count));
+      SendMessageW(list, LB_GETSELITEMS, count, reinterpret_cast<LPARAM>(selected.data()));
+      std::vector<std::filesystem::path> paths;
+      for (int index : selected) {
+        if (index >= 0 && index < static_cast<int>(data->items.size())) {
+          paths.push_back(data->items[static_cast<std::size_t>(index)].path);
+        }
+      }
+      PlaySoundW(nullptr, nullptr, SND_PURGE);
+      if (deleteCaptureFiles(paths) > 0) data->changed = true;
+      fillRecordingsList(dialog, data);
+      return TRUE;
+    }
+    case IDC_REC_DELETE_OLD: {
+      BOOL translated = FALSE;
+      int days = static_cast<int>(GetDlgItemInt(dialog, IDC_REC_DAYS, &translated, FALSE));
+      days = std::clamp(translated ? days : data->days, 1, 3650);
+      const std::wstring prompt = L"Delete recordings older than " + std::to_wstring(days) +
+                                  L" days? This cannot be undone.";
+      if (MessageBoxW(dialog, prompt.c_str(), L"Manage recordings",
+                      MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) {
+        return TRUE;
+      }
+      PlaySoundW(nullptr, nullptr, SND_PURGE);
+      if (deleteCapturesOlderThan(data->folder, days) > 0) data->changed = true;
+      fillRecordingsList(dialog, data);
+      return TRUE;
+    }
+    case IDCANCEL:
+      EndDialog(dialog, IDOK);
+      return TRUE;
+  }
+  return FALSE;
+}
+
 }  // namespace
 
 void AppWindow::showSettings() {
@@ -882,12 +1087,28 @@ void AppWindow::showSettings() {
   data.limit = liveMaxListeners_;
   data.listeners = web_.liveListeners();
   data.queued = web_.liveQueued();
+  data.liveBoostDb = liveBoostDb_;
+  data.pruneDays = pruneDays_;
   if (DialogBoxParamW(instance_, MAKEINTRESOURCEW(IDD_SETTINGS), window_, settingsDialogProc,
                       reinterpret_cast<LPARAM>(&data)) != IDOK) {
     return;
   }
   liveMaxListeners_ = LiveSlotGate::clampLimit(data.limit);
+  liveBoostDb_ = std::clamp(data.liveBoostDb, 0, 18);
+  pruneDays_ = std::clamp(data.pruneDays, 0, 3650);
   web_.setMaxLiveListeners(liveMaxListeners_);
+  engine_.liveHub().setGainDb(static_cast<float>(liveBoostDb_));
+  pruneOldRecordings();
   refreshWebStatus();
   saveSettings();
+}
+
+void AppWindow::showRecordings() {
+  RecordingsDialogData data;
+  data.folder = options_.outputDirectory;
+  data.frequencyMhz = options_.frequencyMhz;
+  data.days = pruneDays_ > 0 ? pruneDays_ : 30;
+  DialogBoxParamW(instance_, MAKEINTRESOURCEW(IDD_RECORDINGS), window_, recordingsDialogProc,
+                  reinterpret_cast<LPARAM>(&data));
+  if (data.changed) reloadCapturesFromDisk();
 }

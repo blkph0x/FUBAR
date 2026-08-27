@@ -8,18 +8,41 @@ BEGIN
   POPUP "&Tools"
   BEGIN
     MENUITEM "&Settings...", ID_TOOLS_SETTINGS
+    MENUITEM "&Manage recordings...", ID_TOOLS_RECORDINGS
   END
 END
 
-IDD_SETTINGS DIALOGEX 0, 0, 276, 132
+IDD_SETTINGS DIALOGEX 0, 0, 276, 178
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Settings"
 FONT 9, "Segoe UI"
 BEGIN
-  LTEXT "Maximum live listeners:", -1, 14, 16, 160, 10
-  EDITTEXT IDC_LIVE_LIMIT, 180, 14, 40, 14, ES_NUMBER | ES_AUTOHSCROLL
-  LTEXT "Default is 5. Once this many people are listening live, new visitors wait in a queue until someone leaves. Lowering the number does not disconnect anyone already live.", -1, 14, 38, 248, 42
-  LTEXT "", IDC_LIVE_STATS, 14, 84, 248, 12
-  DEFPUSHBUTTON "OK", IDOK, 160, 108, 50, 14
-  PUSHBUTTON "Cancel", IDCANCEL, 214, 108, 50, 14
+  LTEXT "Maximum live listeners:", -1, 14, 14, 160, 10
+  EDITTEXT IDC_LIVE_LIMIT, 180, 12, 40, 14, ES_NUMBER | ES_AUTOHSCROLL
+  LTEXT "Live listen boost (dB):", -1, 14, 34, 160, 10
+  EDITTEXT IDC_LIVE_BOOST, 180, 32, 40, 14, ES_NUMBER | ES_AUTOHSCROLL
+  LTEXT "Delete recordings older than:", -1, 14, 54, 160, 10
+  EDITTEXT IDC_PRUNE_DAYS, 180, 52, 40, 14, ES_NUMBER | ES_AUTOHSCROLL
+  LTEXT "days  (0 = keep all)", -1, 226, 54, 44, 10
+  LTEXT "Live boost helps quiet SDR audio in the browser only. Saved WAV files stay unchanged. Extra live visitors wait in a queue. Lowering the listener cap does not kick anyone already listening.", -1, 14, 74, 248, 42
+  LTEXT "", IDC_LIVE_STATS, 14, 122, 248, 12
+  DEFPUSHBUTTON "OK", IDOK, 160, 154, 50, 14
+  PUSHBUTTON "Cancel", IDCANCEL, 214, 154, 50, 14
+END
+
+IDD_RECORDINGS DIALOGEX 0, 0, 420, 228
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Manage recordings"
+FONT 9, "Segoe UI"
+BEGIN
+  LISTBOX IDC_REC_LIST, 8, 8, 404, 148, LBS_EXTENDEDSEL | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_BORDER | WS_TABSTOP
+  LTEXT "", IDC_REC_STATS, 8, 160, 404, 10
+  LTEXT "Delete files older than", -1, 8, 178, 90, 10
+  EDITTEXT IDC_REC_DAYS, 100, 176, 32, 14, ES_NUMBER | ES_AUTOHSCROLL
+  LTEXT "days", -1, 136, 178, 24, 10
+  PUSHBUTTON "Delete selected", IDC_REC_DELETE, 8, 204, 80, 14
+  PUSHBUTTON "Delete old files", IDC_REC_DELETE_OLD, 92, 204, 80, 14
+  PUSHBUTTON "Open folder", IDC_REC_OPEN, 176, 204, 64, 14
+  PUSHBUTTON "Refresh", IDC_REC_REFRESH, 244, 204, 50, 14
+  PUSHBUTTON "Close", IDCANCEL, 362, 204, 50, 14
 END

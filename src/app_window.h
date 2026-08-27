@@ -40,13 +40,18 @@ class AppWindow {
   void applyWebServer();
   void refreshWebStatus();
   void openWebsite() const;
+  void copyWebsiteUrl() const;
   void showSettings();
+  void showRecordings();
+  void pruneOldRecordings();
 
   AudioOptions options_;
   AudioEngine engine_;
   CaptureWebServer web_;
   bool webEnabled_ = false;
   int liveMaxListeners_ = 5;
+  int liveBoostDb_ = 0;
+  int pruneDays_ = 0;
   HINSTANCE instance_ = nullptr;
   HWND window_ = nullptr;
   HWND replayWindow_ = nullptr;

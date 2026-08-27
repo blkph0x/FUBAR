@@ -69,7 +69,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.6 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.7 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -240,6 +240,22 @@ int runSelfTest() {
   std::int16_t fromB[16]{};
   if (hub.pull(listenerA, fromA, 16, 50) == 0 || hub.pull(listenerB, fromB, 16, 50) == 0) {
     std::wcerr << L"Self-test failed: second live listener starved the first\n";
+    return 1;
+  }
+  LiveAudioHub boosted;
+  boosted.beginSession(8000);
+  boosted.setGainDb(6.0f);
+  std::vector<std::int16_t> quiet(800, 1000);
+  boosted.pushInterleaved(quiet.data(), quiet.size(), 1);
+  LiveAudioHub::Cursor gainCursor;
+  std::vector<std::int16_t> gained(800);
+  const std::size_t gainedCount = boosted.pull(gainCursor, gained.data(), gained.size(), 0);
+  if (gainedCount < 100 || gained[gainedCount - 1] < 1900 || gained[gainedCount - 1] > 2100) {
+    std::wcerr << L"Self-test failed: live listen boost\n";
+    return 1;
+  }
+  if (deleteCapturesOlderThan(webDir, 0) != 0) {
+    std::wcerr << L"Self-test failed: recording cleanup ignored 0-day keep-all\n";
     return 1;
   }
   std::uint8_t wavHeader[44];

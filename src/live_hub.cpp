@@ -1,6 +1,7 @@
 #include "live_hub.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 LiveAudioHub::LiveAudioHub() {
@@ -54,6 +55,9 @@ void LiveAudioHub::pushInterleaved(const std::int16_t* samples, std::size_t coun
       for (std::uint16_t ch = 0; ch < channels; ++ch) mix += samples[frame * channels + ch];
       mix /= channels;
     }
+    mix = static_cast<std::int32_t>(std::lround(static_cast<double>(mix) * gainLinear_));
+    if (mix > 32767) mix = 32767;
+    if (mix < -32768) mix = -32768;
     buffer_[static_cast<std::size_t>(writePos_ % buffer_.size())] = static_cast<std::int16_t>(mix);
     ++writePos_;
   }
@@ -85,19 +89,34 @@ std::size_t LiveAudioHub::pull(Cursor& cursor, std::int16_t* out, std::size_t ma
 
   EnterCriticalSection(&lock_);
   std::size_t copied = copyLocked();
-  if (copied > 0 || waitMs == 0 || !event_) {
+  if (copied > 0 || waitMs == 0) {
     LeaveCriticalSection(&lock_);
     return copied;
   }
-  // Only reset when this cursor is empty. Never reset after a successful copy —
-  // that used to starve every other live listener sharing the wake event.
-  ResetEvent(event_);
   LeaveCriticalSection(&lock_);
-  WaitForSingleObject(event_, waitMs);
+  // Sleep instead of resetting a shared event. ResetEvent starved other listeners
+  // and dropped browser streams when two people listened at once.
+  Sleep(waitMs);
   EnterCriticalSection(&lock_);
   copied = copyLocked();
   LeaveCriticalSection(&lock_);
   return copied;
+}
+
+void LiveAudioHub::setGainDb(float db) {
+  if (!std::isfinite(db)) db = 0.0f;
+  db = std::clamp(db, 0.0f, 18.0f);
+  EnterCriticalSection(&lock_);
+  gainDb_ = db;
+  gainLinear_ = std::pow(10.0f, db / 20.0f);
+  LeaveCriticalSection(&lock_);
+}
+
+float LiveAudioHub::gainDb() const {
+  EnterCriticalSection(&lock_);
+  const float value = gainDb_;
+  LeaveCriticalSection(&lock_);
+  return value;
 }
 
 std::uint32_t LiveAudioHub::sampleRate() const {

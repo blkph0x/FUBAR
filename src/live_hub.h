@@ -22,6 +22,8 @@ class LiveAudioHub {
   void endSession();
   void pushInterleaved(const std::int16_t* samples, std::size_t count, std::uint16_t channels);
   std::size_t pull(Cursor& cursor, std::int16_t* out, std::size_t maxSamples, DWORD waitMs);
+  void setGainDb(float db);
+  float gainDb() const;
   std::uint32_t sampleRate() const;
   std::uint32_t generation() const;
   bool live() const;
@@ -38,5 +40,7 @@ class LiveAudioHub {
   std::uint64_t writePos_ = 0;
   std::uint32_t sampleRate_ = 0;
   std::uint32_t generation_ = 1;
+  float gainDb_ = 0.0f;
+  float gainLinear_ = 1.0f;
   bool live_ = false;
 };

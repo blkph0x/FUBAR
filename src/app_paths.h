@@ -84,9 +84,15 @@ inline ReplayEntry replayEntryFromFile(const std::filesystem::path& path, double
   else if (stem.find(L"_mono") != std::wstring::npos) entry.mode = ChannelMode::Mono;
   else entry.mode = ChannelMode::Stereo;
 
-  int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
-  if (swscanf(stem.c_str(), L"FUBAR_%4d%2d%2d_%2d%2d%2d", &year, &month, &day, &hour, &minute,
-              &second) == 6) {
+  int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0, khz = 0;
+  if (swscanf(stem.c_str(), L"FUBAR_%4d%2d%2d_%2d%2d%2d_%dkHz", &year, &month, &day, &hour,
+              &minute, &second, &khz) >= 6) {
+    if (khz > 0) entry.frequencyMhz = static_cast<double>(khz) / 1000.0;
+  }
+  if (year == 0 && swscanf(stem.c_str(), L"FUBAR_%4d%2d%2d_%2d%2d%2d", &year, &month, &day, &hour,
+                           &minute, &second) == 6) {
+  }
+  if (year > 0) {
     std::tm local{};
     local.tm_year = year - 1900;
     local.tm_mon = month - 1;
@@ -128,4 +134,49 @@ inline std::vector<ReplayEntry> loadCapturesFromDirectory(const std::filesystem:
   std::sort(captures.begin(), captures.end(),
             [](const ReplayEntry& a, const ReplayEntry& b) { return a.started < b.started; });
   return captures;
+}
+
+inline bool isWavCapturePath(const std::filesystem::path& path) {
+  auto ext = path.extension().wstring();
+  std::transform(ext.begin(), ext.end(), ext.begin(),
+                 [](wchar_t ch) { return static_cast<wchar_t>(std::towlower(ch)); });
+  return ext == L".wav";
+}
+
+inline std::uint64_t captureFolderBytes(const std::filesystem::path& directory) {
+  std::uint64_t total = 0;
+  std::error_code error;
+  if (!std::filesystem::exists(directory, error)) return 0;
+  for (const auto& entry : std::filesystem::directory_iterator(directory, error)) {
+    if (error || !entry.is_regular_file() || !isWavCapturePath(entry.path())) continue;
+    total += entry.file_size(error);
+  }
+  return total;
+}
+
+inline int deleteCaptureFiles(const std::vector<std::filesystem::path>& paths) {
+  int deleted = 0;
+  for (const auto& path : paths) {
+    if (!isWavCapturePath(path)) continue;
+    std::error_code error;
+    if (std::filesystem::remove(path, error) && !error) ++deleted;
+  }
+  return deleted;
+}
+
+inline int deleteCapturesOlderThan(const std::filesystem::path& directory, int days) {
+  if (days <= 0) return 0;
+  std::error_code error;
+  if (!std::filesystem::exists(directory, error)) return 0;
+  const auto cutoff = std::chrono::system_clock::now() - std::chrono::hours(24 * days);
+  std::vector<std::filesystem::path> old;
+  for (const auto& entry : std::filesystem::directory_iterator(directory, error)) {
+    if (error || !entry.is_regular_file() || !isWavCapturePath(entry.path())) continue;
+    const auto written = entry.last_write_time(error);
+    if (error) continue;
+    const auto system = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+        written - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
+    if (system < cutoff) old.push_back(entry.path());
+  }
+  return deleteCaptureFiles(old);
 }

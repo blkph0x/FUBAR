@@ -5,6 +5,7 @@
 #endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <mstcpip.h>
 #include <windows.h>
 
 #include <algorithm>
@@ -26,6 +27,8 @@ constexpr const char* kPage = R"HTML(<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FUBAR Captures</title>
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <style>
 :root { --ink:#e8f6c8; --muted:#8ea06a; --bg:#070807; --card:#111411; --line:#223018; --green:#b6ff2a; --blue:#3df0ff; --live:#ff3b3b; }
 *{ box-sizing:border-box; }
@@ -141,6 +144,7 @@ const liveHint = document.getElementById('liveHint');
 const liveLevel = document.getElementById('liveLevel');
 let liveAbort = null;
 let livePlaying = false;
+let liveWanted = false;
 function queueLabel(status){
   const limit = Math.max(1, Number(status && status.listenerLimit) || 5);
   const n = Number(status && status.listeners) || 0;
@@ -156,19 +160,18 @@ function setLiveUi(on, text){
   if (!on) liveLevel.style.width = '0';
 }
 function stopLive(){
+  liveWanted = false;
   livePlaying = false;
   if (liveAbort) { liveAbort.abort(); liveAbort = null; }
   setLiveUi(false, 'Same audio the app is capturing right now');
 }
-async function startLive(){
-  audio.pause();
-  stopLive();
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+async function playLiveSession(){
   liveAbort = new AbortController();
-  setLiveUi(true, 'Connecting to live capture…');
   const ac = new (window.AudioContext || window.webkitAudioContext)();
   await ac.resume();
   const poll = setInterval(async () => {
-    if (!liveAbort) return;
+    if (!liveWanted) return;
     try {
       const status = await (await fetch('/api/status', {cache:'no-store'})).json();
       const limit = Math.max(1, Number(status.listenerLimit) || 5);
@@ -181,7 +184,7 @@ async function startLive(){
   }, 800);
   let res;
   try {
-    res = await fetch('/live.pcm?t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
+    res = await fetch('/live.pcm?v=117&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
   } finally {
     clearInterval(poll);
   }
@@ -211,47 +214,71 @@ async function startLive(){
   const hdr = await take(16);
   if (new TextDecoder().decode(hdr.slice(0,8)) !== 'FUBARPCM') throw new Error('bad live header');
   const rate = new DataView(hdr.buffer, hdr.byteOffset, 16).getUint32(8, true);
-  let nextTime = ac.currentTime + 0.08;
+  let nextTime = ac.currentTime + 0.1;
   setLiveUi(true, 'Live · ' + rate + ' Hz');
-  livePlaying = true;
-  while (livePlaying) {
-    if (buf.length < 512 && !await readMore()) break;
-    const maxBytes = Math.max(512, Math.floor(rate / 10) * 2);
-    let bytes = buf.length - (buf.length % 2);
-    if (bytes > maxBytes) bytes = maxBytes;
-    if (bytes < 2) continue;
-    const chunk = buf.slice(0, bytes);
-    buf = buf.slice(bytes);
-    const samples = new Int16Array(chunk.buffer, chunk.byteOffset, chunk.byteLength / 2);
-    const audioBuf = ac.createBuffer(1, samples.length, rate);
-    const data = audioBuf.getChannelData(0);
-    let peak = 0;
-    for (let i = 0; i < samples.length; i++) {
-      const v = samples[i] / 32768;
-      data[i] = v;
-      const a = v < 0 ? -v : v;
-      if (a > peak) peak = a;
+  try {
+    while (liveWanted) {
+      if (buf.length < 512 && !await readMore()) break;
+      const maxBytes = Math.max(512, Math.floor(rate / 10) * 2);
+      let bytes = buf.length - (buf.length % 2);
+      if (bytes > maxBytes) bytes = maxBytes;
+      if (bytes < 2) { await sleep(10); continue; }
+      const chunk = buf.slice(0, bytes);
+      buf = buf.slice(bytes);
+      const aligned = (chunk.byteOffset % 2 === 0) ? chunk : chunk.slice();
+      const samples = new Int16Array(aligned.buffer, aligned.byteOffset, aligned.byteLength / 2);
+      const audioBuf = ac.createBuffer(1, samples.length, rate);
+      const data = audioBuf.getChannelData(0);
+      let peak = 0;
+      for (let i = 0; i < samples.length; i++) {
+        const v = samples[i] / 32768;
+        data[i] = v;
+        const a = v < 0 ? -v : v;
+        if (a > peak) peak = a;
+      }
+      liveLevel.style.width = Math.min(100, Math.round(peak * 140)) + '%';
+      if (nextTime < ac.currentTime + 0.06) nextTime = ac.currentTime + 0.08;
+      if (nextTime > ac.currentTime + 0.5) nextTime = ac.currentTime + 0.12;
+      const src = ac.createBufferSource();
+      src.buffer = audioBuf;
+      src.connect(ac.destination);
+      src.start(nextTime);
+      nextTime += audioBuf.duration;
     }
-    liveLevel.style.width = Math.min(100, Math.round(peak * 140)) + '%';
-    if (nextTime < ac.currentTime + 0.04) nextTime = ac.currentTime + 0.04;
-    if (nextTime > ac.currentTime + 0.35) {
-      nextTime = ac.currentTime + 0.08;
+  } finally {
+    try { if (ac.state !== 'closed' && ac.close) ac.close(); } catch {}
+  }
+}
+async function startLive(){
+  audio.pause();
+  liveWanted = true;
+  setLiveUi(true, 'Connecting to live capture…');
+  while (liveWanted) {
+    try {
+      await playLiveSession();
+      if (!liveWanted) return;
+      setLiveUi(true, 'Live paused — reconnecting…');
+      await sleep(400);
+    } catch (err) {
+      if (!liveWanted || (err && err.name === 'AbortError')) return;
+      if (err && err.message === 'queue') {
+        liveWanted = false;
+        setLiveUi(false, 'Live queue is full — tap Listen live to wait again');
+        return;
+      }
+      setLiveUi(true, 'Live dropped — reconnecting…');
+      await sleep(700);
     }
-    const src = ac.createBufferSource();
-    src.buffer = audioBuf;
-    src.connect(ac.destination);
-    src.start(nextTime);
-    nextTime += audioBuf.duration;
   }
 }
 liveBtn.addEventListener('click', () => {
-  if (livePlaying) { stopLive(); return; }
-  startLive().catch((err) => {
-    if (err && err.name === 'AbortError') return;
-    setLiveUi(false, err && err.message === 'queue'
-      ? 'Live queue is full — tap Listen live to wait again'
-      : 'Live stream dropped — tap Listen live');
-  });
+  if (liveWanted || livePlaying) { stopLive(); return; }
+  startLive();
+});
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && liveWanted) {
+    try { (window.AudioContext || window.webkitAudioContext); } catch {}
+  }
 });
 async function refresh(){
   try {
@@ -369,7 +396,8 @@ bool sendResponse(SOCKET socket, int status, const char* reason, const std::stri
   header << "HTTP/1.1 " << status << " " << reason << "\r\n"
          << "Content-Type: " << type << "\r\n"
          << "Content-Length: " << body.size() << "\r\n"
-         << "Cache-Control: no-store\r\n"
+         << "Cache-Control: no-store, no-cache, must-revalidate, max-age=0\r\n"
+         << "Pragma: no-cache\r\n"
          << "Connection: close\r\n";
   if (!extra.empty()) header << extra;
   header << "\r\n";
@@ -742,12 +770,22 @@ void CaptureWebServer::streamLive(std::uintptr_t clientHandle, bool wavContainer
   const SOCKET client = static_cast<SOCKET>(clientHandle);
   const BOOL nodelay = TRUE;
   setsockopt(client, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&nodelay), sizeof(nodelay));
-  DWORD sendTimeout = 5000;
+  DWORD sendTimeout = 20000;
   setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&sendTimeout),
              sizeof(sendTimeout));
+  DWORD recvTimeout = 0;
+  setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&recvTimeout),
+             sizeof(recvTimeout));
   BOOL keepAlive = TRUE;
   setsockopt(client, SOL_SOCKET, SO_KEEPALIVE, reinterpret_cast<const char*>(&keepAlive),
              sizeof(keepAlive));
+  tcp_keepalive ka{};
+  ka.onoff = 1;
+  ka.keepalivetime = 15000;
+  ka.keepaliveinterval = 2000;
+  DWORD bytesReturned = 0;
+  WSAIoctl(client, SIO_KEEPALIVE_VALS, &ka, sizeof(ka), nullptr, 0, &bytesReturned, nullptr,
+           nullptr);
 
   struct SlotGuard {
     LiveSlotGate* gate = nullptr;
@@ -769,11 +807,12 @@ void CaptureWebServer::streamLive(std::uintptr_t clientHandle, bool wavContainer
   LiveAudioHub* hub = liveHub_;
   LeaveCriticalSection(&lock_);
 
-  for (int wait = 0; hub && !hub->live() && wait < 40 && !stop_; ++wait) Sleep(25);
+  while (hub && !hub->live() && !stop_) Sleep(25);
+  if (stop_) return;
   const std::uint32_t rate = (hub && hub->sampleRate()) ? hub->sampleRate() : 48000;
   const char* prelude = wavContainer
-      ? "HTTP/1.0 200 OK\r\nContent-Type: audio/wav\r\nCache-Control: no-store\r\nConnection: close\r\nicy-name: FUBAR Live\r\n\r\n"
-      : "HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
+      ? "HTTP/1.0 200 OK\r\nContent-Type: audio/wav\r\nCache-Control: no-store, no-cache, must-revalidate\r\nConnection: close\r\nicy-name: FUBAR Live\r\n\r\n"
+      : "HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store, no-cache, must-revalidate\r\nConnection: close\r\n\r\n";
   if (!sendAll(client, prelude, static_cast<int>(std::strlen(prelude)))) return;
   if (wavContainer) {
     std::uint8_t wav[44];
@@ -789,17 +828,22 @@ void CaptureWebServer::streamLive(std::uintptr_t clientHandle, bool wavContainer
   std::int16_t pcm[1024];
   std::uint32_t generation = hub ? hub->generation() : 0;
   while (!stop_) {
-    if (hub && hub->sampleRate() && hub->sampleRate() != rate) break;
-    if (hub && hub->generation() != generation) {
-      if (!hub->live()) break;
+    if (!hub) {
+      Sleep(25);
+      continue;
+    }
+    const std::uint32_t nowRate = hub->sampleRate();
+    if (nowRate && nowRate != rate) break;
+    if (!hub->live()) {
+      Sleep(25);
+      continue;
+    }
+    if (hub->generation() != generation) {
       generation = hub->generation();
       cursor = {};
     }
-    const std::size_t got = hub ? hub->pull(cursor, pcm, 1024, 25) : 0;
-    if (got == 0) {
-      Sleep(5);
-      continue;
-    }
+    const std::size_t got = hub->pull(cursor, pcm, 1024, 25);
+    if (got == 0) continue;
     if (!sendAll(client, reinterpret_cast<const char*>(pcm),
                  static_cast<int>(got * sizeof(std::int16_t)))) {
       break;

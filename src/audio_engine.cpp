@@ -205,7 +205,8 @@ std::filesystem::path recordingPath(const AudioOptions& options,
   std::tm local{};
   localtime_s(&local, &time);
   std::wostringstream name;
-  name << L"FUBAR_" << std::put_time(&local, L"%Y%m%d_%H%M%S") << L"_";
+  const auto khz = static_cast<long long>(std::llround(std::max(0.0, options.frequencyMhz) * 1000.0));
+  name << L"FUBAR_" << std::put_time(&local, L"%Y%m%d_%H%M%S") << L"_" << khz << L"kHz_";
   switch (options.mode) {
     case ChannelMode::Stereo: name << L"stereo"; break;
     case ChannelMode::Left: name << L"left"; break;
