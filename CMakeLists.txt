@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(FUBAR VERSION 1.1.13 LANGUAGES C CXX)
+project(FUBAR VERSION 1.1.14 LANGUAGES C CXX)
 
 set(SHINE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/shine/src/lib)
 add_library(shine STATIC

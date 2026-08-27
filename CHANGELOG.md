@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.14
+
+- Live WFM no longer “gurgles”: the player was skipping a few samples on every audio tick
+  to catch up, which warbled stereo. The playhead now stays put.
+
 ## 1.1.13
 
 - Live playback no longer jumps when the buffer grows. It uses a continuous ring (and an audio

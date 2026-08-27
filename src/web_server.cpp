@@ -250,16 +250,11 @@ function attachScriptRing(ac, channels){
     const sr = ac.sampleRate;
     let a = avail();
     if (!primed) {
-      if (a < sr * 0.35 * channels) {
+      if (a < sr * 0.4 * channels) {
         for (let c = 0; c < channels; c++) outs[c].fill(0);
         return;
       }
       primed = true;
-    }
-    if (a > sr * 0.85 * channels) {
-      const drop = Math.min(8 * channels, a - Math.floor(sr * 0.45 * channels));
-      r = (r + drop) % n;
-      a -= drop;
     }
     if (a < need) {
       for (let c = 0; c < channels; c++) outs[c].fill(0);
@@ -281,7 +276,11 @@ function attachScriptRing(ac, channels){
   return {
     node,
     push(f32){
-      for (let i = 0; i < f32.length; i++) {
+      let used = w - r; if (used < 0) used += n;
+      const space = n - used - channels;
+      const count = Math.min(f32.length, Math.max(0, space));
+      const aligned = count - (count % channels);
+      for (let i = 0; i < aligned; i++) {
         ring[w] = f32[i];
         w++; if (w >= n) w = 0;
       }
@@ -299,7 +298,11 @@ async function attachWorkletRing(ac, channels){
           if (e.data.ch) this.ch = e.data.ch;
           const s = e.data.s;
           if (!s || !this.ring) return;
-          for (let i = 0; i < s.length; i++) {
+          let used = this.w - this.r; if (used < 0) used += this.n;
+          const space = this.n - used - this.ch;
+          const count = Math.min(s.length, Math.max(0, space));
+          const aligned = count - (count % this.ch);
+          for (let i = 0; i < aligned; i++) {
             this.ring[this.w] = s[i];
             this.w++; if (this.w >= this.n) this.w = 0;
           }
@@ -317,16 +320,11 @@ async function attachWorkletRing(ac, channels){
         const need = frames * this.ch;
         let a = this.avail();
         if (!this.primed) {
-          if (a < sampleRate * 0.35 * this.ch) {
+          if (a < sampleRate * 0.4 * this.ch) {
             for (let c = 0; c < out.length; c++) out[c].fill(0);
             return true;
           }
           this.primed = true;
-        }
-        if (a > sampleRate * 0.85 * this.ch) {
-          const drop = Math.min(8 * this.ch, a - Math.floor(sampleRate * 0.45 * this.ch));
-          this.r = (this.r + drop) % this.n;
-          a -= drop;
         }
         if (a < need) {
           for (let c = 0; c < out.length; c++) out[c].fill(0);
@@ -370,7 +368,7 @@ async function playLiveSession(){
   liveMedia.src = SILENT_WAV;
   try { await liveMedia.play(); } catch {}
   await keepLiveAlive();
-  const res = await fetch('live.pcm?v=113&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
+  const res = await fetch('live.pcm?v=114&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
   if (!res.ok || !res.body) {
     if (res.status === 503) throw new Error('queue');
     throw new Error('live unavailable');
