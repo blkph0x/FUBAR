@@ -228,7 +228,7 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   RegisterClassExW(&brandClass);
 
   HMENU menu = LoadMenuW(instance_, MAKEINTRESOURCEW(IDR_MAINMENU));
-  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.16", WS_OVERLAPPEDWINDOW,
+  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.17", WS_OVERLAPPEDWINDOW,
                             CW_USEDEFAULT, CW_USEDEFAULT, 780, 830, nullptr, menu, instance_,
                             this);
   if (!window_) return 1;
@@ -1015,7 +1015,7 @@ FubarNetStation AppWindow::currentStation() const {
   station.live = engine_.running();
   station.listeners = web_.liveListeners();
   station.listenerLimit = web_.maxLiveListeners();
-  station.version = "1.1.16";
+  station.version = "1.1.17";
   return station;
 }
 

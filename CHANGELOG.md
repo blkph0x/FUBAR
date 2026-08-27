@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.17
+
+- Live 15 kHz FM audio low-pass is automatic. It turns on when the capture has
+  wideband energy (WFM, leaked stereo pilot) and turns off for mic, P25, SSTV and
+  other already-narrow audio so digital modes stay 1:1. The live line shows
+  **FM LPF 15 kHz** while it is engaged.
+
 ## 1.1.16
 
 - Live WFM on phone/PC speakers was harsh while mic and P25 stayed clean. Broadcast

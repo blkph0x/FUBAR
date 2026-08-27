@@ -162,25 +162,31 @@ let liveWanted = false;
 let liveAbort = null;
 let liveAc = null;
 let liveNode = null;
+let liveLp = null;
 let liveWake = null;
 let livePeak = 0;
 let meterRaf = 0;
 let liveMix = 'mono';
+let liveLpfOn = false;
+let liveRate = 0;
+let liveCh = 1;
 try { liveMix = localStorage.getItem('fubarLiveMix') === 'stereo' ? 'stereo' : 'mono'; } catch {}
 function applyMixButtons(){
   document.querySelectorAll('#liveMix [data-mix]').forEach(btn => {
     btn.classList.toggle('on', btn.getAttribute('data-mix') === liveMix);
   });
 }
+function livePlayingText(){
+  return 'Live · ' + liveRate + ' Hz 16-bit PCM' + (liveCh>1?' stereo':'') +
+    ' · 1:1 · ~1s · ' + (liveMix==='stereo'?'stereo speakers':'mono to both speakers') +
+    (liveLpfOn ? ' · FM LPF 15 kHz' : '');
+}
 function setLiveMix(mode){
   liveMix = mode === 'stereo' ? 'stereo' : 'mono';
   try { localStorage.setItem('fubarLiveMix', liveMix); } catch {}
   applyMixButtons();
   try { if (liveNode && liveNode.port) liveNode.port.postMessage({mix: liveMix}); } catch {}
-  if (livePlaying && liveHint.textContent.indexOf('Live ·') === 0) {
-    liveHint.textContent = liveHint.textContent.replace(/ · (stereo speakers|mono to both speakers)$/,
-      liveMix === 'stereo' ? ' · stereo speakers' : ' · mono to both speakers');
-  }
+  if (livePlaying) setLiveUi(true, livePlayingText());
 }
 document.getElementById('liveMix').addEventListener('click', e => {
   const btn = e.target.closest('[data-mix]');
@@ -221,6 +227,9 @@ function setLiveUi(on, text){
 function closeLiveAudio(){
   try { if (liveNode) liveNode.disconnect(); } catch {}
   liveNode = null;
+  try { if (liveLp) liveLp.disconnect(); } catch {}
+  liveLp = null;
+  liveLpfOn = false;
   try { if (liveAc && liveAc.state !== 'closed' && liveAc.close) liveAc.close(); } catch {}
   liveAc = null;
 }
@@ -316,14 +325,45 @@ function writeSpeakers(outs, i, left, right, mix){
   outs[1][i] = right;
   for (let c = 2; c < outs.length; c++) outs[c][i] = left;
 }
+function makeHfTracker(sr){
+  const a = Math.exp(-2 * Math.PI * 8000 / sr);
+  let prev = 0, hp = 0, eFull = 1e-6, eHf = 0;
+  return {
+    sample(s){
+      const y = a * (hp + s - prev);
+      prev = s;
+      hp = y;
+      eFull = eFull * 0.995 + s * s;
+      eHf = eHf * 0.995 + y * y;
+    },
+    ratio(){ return eHf / eFull; }
+  };
+}
+function noteFmHf(ratio){
+  const want = liveLpfOn ? ratio > 0.05 : ratio > 0.10;
+  if (want === liveLpfOn) return;
+  liveLpfOn = want;
+  if (liveLp && liveAc) {
+    const ny = liveAc.sampleRate * 0.49;
+    try {
+      liveLp.frequency.setTargetAtTime(want ? Math.min(15000, ny) : ny, liveAc.currentTime, 0.12);
+    } catch {
+      liveLp.frequency.value = want ? Math.min(15000, ny) : ny;
+    }
+  }
+  if (livePlaying) setLiveUi(true, livePlayingText());
+}
 function connectLiveOut(ac, node){
+  liveLp = null;
+  liveLpfOn = false;
   if (ac.sampleRate >= 36000) {
     const lp = ac.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = Math.min(15000, ac.sampleRate * 0.42);
     lp.Q.value = 0.707;
+    lp.frequency.value = ac.sampleRate * 0.49;
     node.connect(lp);
     lp.connect(ac.destination);
+    liveLp = lp;
     return;
   }
   node.connect(ac.destination);
@@ -340,6 +380,7 @@ function attachScriptRing(ac, channels){
   let node;
   try { node = ac.createScriptProcessor(4096, 0, 2); }
   catch { node = ac.createScriptProcessor(4096, 1, 2); }
+  const hf = makeHfTracker(sr);
   node.onaudioprocess = (ev) => {
     const outs = [];
     for (let c = 0; c < ev.outputBuffer.numberOfChannels; c++) outs[c] = ev.outputBuffer.getChannelData(c);
@@ -374,9 +415,11 @@ function attachScriptRing(ac, channels){
       const absR = right < 0 ? -right : right;
       if (absL > peak) peak = absL;
       if (absR > peak) peak = absR;
+      hf.sample(srcCh > 1 ? (left + right) * 0.5 : left);
       writeSpeakers(outs, i, left, right, liveMix);
     }
     livePeak = peak;
+    noteFmHf(hf.ratio());
   };
   connectLiveOut(ac, node);
   return {
@@ -406,6 +449,8 @@ async function attachWorkletRing(ac, channels){
         this.n = Math.max(16384, sampleRate * 8 * 2);
         this.ring = new Float32Array(this.n);
         this.w = 0; this.r = 0; this.primed = false; this.tick = 0;
+        this.hpA = Math.exp(-2 * Math.PI * 8000 / sampleRate);
+        this.hp = 0; this.xPrev = 0; this.eFull = 1e-6; this.eHf = 0;
         this.port.onmessage = (e) => {
           const d = e.data || {};
           if (d.ch) this.ch = d.ch;
@@ -468,6 +513,12 @@ async function attachWorkletRing(ac, channels){
           const absR = right < 0 ? -right : right;
           if (absL > peak) peak = absL;
           if (absR > peak) peak = absR;
+          const mid = srcCh > 1 ? sum / 2 : left;
+          const hy = this.hpA * (this.hp + mid - this.xPrev);
+          this.xPrev = mid;
+          this.hp = hy;
+          this.eFull = this.eFull * 0.995 + mid * mid;
+          this.eHf = this.eHf * 0.995 + hy * hy;
           if (this.mix !== 'stereo' || out.length === 1) {
             const m = srcCh > 1 ? sum / 2 : left;
             out[0][i] = m;
@@ -480,7 +531,7 @@ async function attachWorkletRing(ac, channels){
         }
         this.tick++;
         if ((this.tick & 15) === 0) {
-          this.port.postMessage({p: peak, f: this.avail() / srcCh / sampleRate});
+          this.port.postMessage({p: peak, f: this.avail() / srcCh / sampleRate, hf: this.eHf / this.eFull});
         }
         return true;
       }
@@ -500,6 +551,7 @@ async function attachWorkletRing(ac, channels){
     const d = e.data || {};
     livePeak = Number(d.p) || 0;
     if (d.f != null) fillSec = Number(d.f) || 0;
+    if (d.hf != null) noteFmHf(Number(d.hf) || 0);
   };
   node.port.postMessage({ch: srcCh, mix: liveMix});
   connectLiveOut(ac, node);
@@ -525,7 +577,7 @@ async function playLiveSession(){
   liveMedia.src = SILENT_WAV;
   try { await liveMedia.play(); } catch {}
   await keepLiveAlive();
-  const res = await fetch('live.pcm?v=116&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
+  const res = await fetch('live.pcm?v=117&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
   if (!res.ok || !res.body) {
     if (res.status === 503) throw new Error('queue');
     throw new Error('live unavailable');
@@ -567,6 +619,8 @@ async function playLiveSession(){
     tap = attachScriptRing(ac, channels);
   }
   liveNode = tap.node;
+  liveRate = rate;
+  liveCh = channels;
   const resample = makeResampler(rate, ac.sampleRate, channels);
   startMeter();
   if (navigator.mediaSession) {
@@ -578,7 +632,7 @@ async function playLiveSession(){
       navigator.mediaSession.setActionHandler('stop', () => stopLive());
     } catch {}
   }
-  setLiveUi(true, 'Live · ' + rate + ' Hz 16-bit PCM' + (channels>1?' stereo':'') + ' · 1:1 · ~1s · ' + (liveMix==='stereo'?'stereo speakers':'mono to both speakers'));
+  setLiveUi(true, livePlayingText());
   const keep = setInterval(keepLiveAlive, 1500);
   try {
     while (liveWanted) {

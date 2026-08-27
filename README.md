@@ -89,10 +89,13 @@ Live audio is **16-bit PCM at the capture sample rate** (1:1, the same idea as K
 required for SSTV, POCSAG, weather-fax and other digital modes — MP3 would destroy them. Tap
 **Listen live**. A ~1 second jitter buffer keeps WFM and voice continuous (no gargle from
 underruns). Live defaults to **Mono** so WFM is clean on phone and PC speakers; tap **Stereo**
-for 1:1 left/right. On a phone the page takes a screen wake lock so listening is not killed when
-the display would sleep. Set **Live listen boost** to 0 dB for digital modes. If the stream still
-drops, the page reconnects. If you listen on the same PC that is running FUBAR, mute the app’s
-local monitor or you will hear both — that delayed double can sound like a vibration.
+for 1:1 left/right. A 15 kHz FM low-pass turns on for WFM (and similar wide analog audio) and
+turns itself off for mic, P25 and digital modes. On a phone the page takes a screen wake lock so
+listening is not killed when the display would sleep. Set **Live listen boost** to 0 dB for
+digital modes. If the stream still drops, the page reconnects. If you listen on the same PC that
+is running FUBAR, mute the app’s local monitor or you will hear both — that delayed double can
+sound like a vibration. For WFM, the SDR IF bandwidth needs to be wide enough (around 200–250 kHz);
+a too-narrow filter will still sound rough no matter how FUBAR plays it.
 
 ### Public Server network
 
