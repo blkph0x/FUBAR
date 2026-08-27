@@ -43,8 +43,11 @@ h1{ margin:.2rem 0; font-size:clamp(2.2rem,7vw,4.4rem); letter-spacing:.04em; }
 .sub{ color:var(--muted); margin:0 0 14px; }
 .pill{ display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); background:#0c100c; border-radius:999px; padding:7px 12px; font-size:13px; }
 .livebox{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:16px 0 8px; padding:14px; background:var(--card); border:1px solid var(--line); border-radius:16px; }
-.livebox button{ border:0; border-radius:999px; padding:10px 18px; font-weight:800; cursor:pointer; background:var(--live); color:#fff; }
-.livebox button.on{ background:var(--green); color:#111; }
+.livebox #liveBtn{ border:0; border-radius:999px; padding:10px 18px; font-weight:800; cursor:pointer; background:var(--live); color:#fff; }
+.livebox #liveBtn.on{ background:var(--green); color:#111; }
+.mix{ display:flex; gap:6px; }
+.mix button{ border:1px solid var(--line); background:#0c100c; color:var(--ink); border-radius:999px; padding:7px 12px; font-weight:700; cursor:pointer; }
+.mix button.on{ background:var(--green); color:#111; border-color:var(--green); }
 .level{ width:160px; height:8px; background:#1a2218; border-radius:99px; overflow:hidden; }
 .level > span{ display:block; height:100%; width:0; background:var(--green); }
 .dot{ width:9px; height:9px; border-radius:50%; background:var(--muted); }
@@ -79,6 +82,10 @@ button.play.playing{ background:var(--blue); }
     <div>
       <div class="name">Live monitor</div>
       <div class="when" id="liveHint">Same audio the app is capturing right now</div>
+    </div>
+    <div class="mix" id="liveMix" title="Mono is usually cleaner for WFM on speakers. Stereo is 1:1 left/right.">
+      <button type="button" data-mix="mono" class="on">Mono</button>
+      <button type="button" data-mix="stereo">Stereo</button>
     </div>
     <div class="level" title="Live level"><span id="liveLevel"></span></div>
   </div>
@@ -158,6 +165,28 @@ let liveNode = null;
 let liveWake = null;
 let livePeak = 0;
 let meterRaf = 0;
+let liveMix = 'mono';
+try { liveMix = localStorage.getItem('fubarLiveMix') === 'stereo' ? 'stereo' : 'mono'; } catch {}
+function applyMixButtons(){
+  document.querySelectorAll('#liveMix [data-mix]').forEach(btn => {
+    btn.classList.toggle('on', btn.getAttribute('data-mix') === liveMix);
+  });
+}
+function setLiveMix(mode){
+  liveMix = mode === 'stereo' ? 'stereo' : 'mono';
+  try { localStorage.setItem('fubarLiveMix', liveMix); } catch {}
+  applyMixButtons();
+  try { if (liveNode && liveNode.port) liveNode.port.postMessage({mix: liveMix}); } catch {}
+  if (livePlaying && liveHint.textContent.indexOf('Live ·') === 0) {
+    liveHint.textContent = liveHint.textContent.replace(/ · (stereo speakers|mono to both speakers)$/,
+      liveMix === 'stereo' ? ' · stereo speakers' : ' · mono to both speakers');
+  }
+}
+document.getElementById('liveMix').addEventListener('click', e => {
+  const btn = e.target.closest('[data-mix]');
+  if (btn) setLiveMix(btn.getAttribute('data-mix'));
+});
+applyMixButtons();
 const SILENT_WAV = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
 function queueLabel(status){
   const limit = Math.max(1, Number(status && status.listenerLimit) || 5);
@@ -236,47 +265,72 @@ function makeResampler(inRate, outRate, ch){
   let hold = new Float32Array(0);
   let phase = 0;
   const step = inRate / outRate;
+  const downsample = step > 1.01;
   return (pcm) => {
     const merged = new Float32Array(hold.length + pcm.length);
     merged.set(hold);
     for (let i = 0; i < pcm.length; i++) merged[hold.length + i] = pcm[i] * scale;
     const frames = Math.floor(merged.length / ch);
     const out = [];
-    while (phase + 1 < frames) {
-      const i0 = phase | 0;
-      const frac = phase - i0;
-      const i1 = i0 + 1;
-      for (let c = 0; c < ch; c++) {
-        const a = merged[i0 * ch + c];
-        const b = merged[i1 * ch + c];
-        out.push(a + (b - a) * frac);
+    const need = downsample ? step : 1;
+    while (phase + need < frames) {
+      if (downsample) {
+        const start = phase;
+        const end = Math.min(frames, phase + step);
+        const i0 = start | 0;
+        const i1 = Math.min(frames - 1, (end - 0.0001) | 0);
+        for (let c = 0; c < ch; c++) {
+          let s = 0, n = 0;
+          for (let i = i0; i <= i1; i++) { s += merged[i * ch + c]; n++; }
+          out.push(n ? s / n : 0);
+        }
+      } else {
+        const i0 = phase | 0;
+        const frac = phase - i0;
+        const i1 = Math.min(frames - 1, i0 + 1);
+        for (let c = 0; c < ch; c++) {
+          const a = merged[i0 * ch + c];
+          const b = merged[i1 * ch + c];
+          out.push(a + (b - a) * frac);
+        }
       }
       phase += step;
     }
-    const consumed = phase | 0;
+    const consumed = Math.min(frames, phase | 0);
     hold = merged.subarray(consumed * ch).slice();
     phase -= consumed;
     return Float32Array.from(out);
   };
 }
-function foldFrame(outs, i, samples, srcCh){
-  const outCh = outs.length;
-  if (srcCh === 1) {
-    for (let c = 0; c < outCh; c++) outs[c][i] = samples[0];
+function writeSpeakers(outs, i, left, right, mix){
+  if (mix !== 'stereo') {
+    const m = (left + right) * 0.5;
+    for (let c = 0; c < outs.length; c++) outs[c][i] = m;
     return;
   }
-  if (outCh === 1) {
-    let sum = 0;
-    for (let c = 0; c < srcCh; c++) sum += samples[c];
-    outs[0][i] = sum / srcCh;
+  if (outs.length === 1) {
+    outs[0][i] = (left + right) * 0.5;
     return;
   }
-  for (let c = 0; c < outCh; c++) outs[c][i] = samples[c < srcCh ? c : 0];
+  outs[0][i] = left;
+  outs[1][i] = right;
+  for (let c = 2; c < outs.length; c++) outs[c][i] = left;
+}
+function connectLiveOut(ac, node){
+  if (ac.sampleRate >= 36000) {
+    const lp = ac.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = Math.min(15000, ac.sampleRate * 0.42);
+    lp.Q.value = 0.707;
+    node.connect(lp);
+    lp.connect(ac.destination);
+    return;
+  }
+  node.connect(ac.destination);
 }
 function attachScriptRing(ac, channels){
   const sr = ac.sampleRate;
   const srcCh = Math.max(1, channels);
-  const outCh = Math.max(1, Math.min(2, srcCh));
   const n = Math.max(16384, Math.floor(sr * 8) * srcCh);
   const ring = new Float32Array(n);
   let w = 0, r = 0, primed = false;
@@ -284,8 +338,8 @@ function attachScriptRing(ac, channels){
   const primeNeed = Math.floor(sr * 1.0) * srcCh;
   const lowNeed = Math.floor(sr * 0.2) * srcCh;
   let node;
-  try { node = ac.createScriptProcessor(4096, 0, outCh); }
-  catch { node = ac.createScriptProcessor(4096, 1, outCh); }
+  try { node = ac.createScriptProcessor(4096, 0, 2); }
+  catch { node = ac.createScriptProcessor(4096, 1, 2); }
   node.onaudioprocess = (ev) => {
     const outs = [];
     for (let c = 0; c < ev.outputBuffer.numberOfChannels; c++) outs[c] = ev.outputBuffer.getChannelData(c);
@@ -305,20 +359,26 @@ function attachScriptRing(ac, channels){
       return;
     }
     let peak = 0;
-    const frame = new Float32Array(srcCh);
     for (let i = 0; i < frames; i++) {
-      for (let c = 0; c < srcCh; c++) {
-        const v = ring[r];
+      const left = ring[r];
+      r++; if (r >= n) r = 0;
+      let right = left;
+      if (srcCh > 1) {
+        right = ring[r];
         r++; if (r >= n) r = 0;
-        frame[c] = v;
-        const abs = v < 0 ? -v : v;
-        if (abs > peak) peak = abs;
+        for (let extra = 2; extra < srcCh; extra++) {
+          r++; if (r >= n) r = 0;
+        }
       }
-      foldFrame(outs, i, frame, srcCh);
+      const absL = left < 0 ? -left : left;
+      const absR = right < 0 ? -right : right;
+      if (absL > peak) peak = absL;
+      if (absR > peak) peak = absR;
+      writeSpeakers(outs, i, left, right, liveMix);
     }
     livePeak = peak;
   };
-  node.connect(ac.destination);
+  connectLiveOut(ac, node);
   return {
     node,
     buffered(){ return avail() / srcCh / sr; },
@@ -342,12 +402,14 @@ async function attachWorkletRing(ac, channels){
       constructor() {
         super();
         this.ch = 1;
+        this.mix = 'mono';
         this.n = Math.max(16384, sampleRate * 8 * 2);
         this.ring = new Float32Array(this.n);
         this.w = 0; this.r = 0; this.primed = false; this.tick = 0;
         this.port.onmessage = (e) => {
           const d = e.data || {};
           if (d.ch) this.ch = d.ch;
+          if (d.mix) this.mix = d.mix;
           const s = d.s;
           if (!s) return;
           let used = this.w - this.r; if (used < 0) used += this.n;
@@ -406,8 +468,11 @@ async function attachWorkletRing(ac, channels){
           const absR = right < 0 ? -right : right;
           if (absL > peak) peak = absL;
           if (absR > peak) peak = absR;
-          if (out.length === 1) out[0][i] = srcCh > 1 ? sum / 2 : left;
-          else {
+          if (this.mix !== 'stereo' || out.length === 1) {
+            const m = srcCh > 1 ? sum / 2 : left;
+            out[0][i] = m;
+            for (let c = 1; c < out.length; c++) out[c][i] = m;
+          } else {
             out[0][i] = left;
             out[1][i] = right;
             for (let c = 2; c < out.length; c++) out[c][i] = left;
@@ -426,8 +491,8 @@ async function attachWorkletRing(ac, channels){
   const node = new AudioWorkletNode(ac, 'fubar-play', {
     numberOfInputs: 0,
     numberOfOutputs: 1,
-    outputChannelCount: [srcCh > 1 ? 2 : 1],
-    channelCount: srcCh > 1 ? 2 : 1,
+    outputChannelCount: [2],
+    channelCount: 2,
     channelCountMode: 'explicit'
   });
   let fillSec = 0;
@@ -436,8 +501,8 @@ async function attachWorkletRing(ac, channels){
     livePeak = Number(d.p) || 0;
     if (d.f != null) fillSec = Number(d.f) || 0;
   };
-  node.port.postMessage({ch: srcCh});
-  node.connect(ac.destination);
+  node.port.postMessage({ch: srcCh, mix: liveMix});
+  connectLiveOut(ac, node);
   const sr = ac.sampleRate;
   return {
     node,
@@ -460,7 +525,7 @@ async function playLiveSession(){
   liveMedia.src = SILENT_WAV;
   try { await liveMedia.play(); } catch {}
   await keepLiveAlive();
-  const res = await fetch('live.pcm?v=115&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
+  const res = await fetch('live.pcm?v=116&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
   if (!res.ok || !res.body) {
     if (res.status === 503) throw new Error('queue');
     throw new Error('live unavailable');
@@ -513,7 +578,7 @@ async function playLiveSession(){
       navigator.mediaSession.setActionHandler('stop', () => stopLive());
     } catch {}
   }
-  setLiveUi(true, 'Live · ' + rate + ' Hz 16-bit PCM' + (channels>1?' stereo':'') + ' · 1:1 · ~1s buffer');
+  setLiveUi(true, 'Live · ' + rate + ' Hz 16-bit PCM' + (channels>1?' stereo':'') + ' · 1:1 · ~1s · ' + (liveMix==='stereo'?'stereo speakers':'mono to both speakers'));
   const keep = setInterval(keepLiveAlive, 1500);
   try {
     while (liveWanted) {

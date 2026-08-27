@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.16
+
+- Live WFM on phone/PC speakers was harsh while mic and P25 stayed clean. Broadcast
+  stereo (and left-only SDR audio) is a poor match for small stereo speakers; P25 and
+  mics are effectively the same on both channels so they hid it.
+- Listen live now defaults to **Mono** (same audio in both speakers). Tap **Stereo**
+  for true left/right. A 15 kHz low-pass keeps the FM pilot from rattling speakers.
+- Virtual-cable capture above 48 kHz is pulled down to 48 kHz with Windows’ quality
+  resampler so WFM treble is not aliased on phones.
+
 ## 1.1.15
 
 - Live no longer gargles or vibrates on PC and phone. The player was pumping silence
