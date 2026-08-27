@@ -141,6 +141,13 @@ const liveHint = document.getElementById('liveHint');
 const liveLevel = document.getElementById('liveLevel');
 let liveAbort = null;
 let livePlaying = false;
+function queueLabel(status){
+  const limit = Math.max(1, Number(status && status.listenerLimit) || 5);
+  const n = Number(status && status.listeners) || 0;
+  const q = Number(status && status.queued) || 0;
+  if (q > 0) return n + '/' + limit + ' listening · ' + q + ' waiting';
+  return n + '/' + limit + ' listening';
+}
 function setLiveUi(on, text){
   livePlaying = on;
   liveBtn.textContent = on ? 'Stop live' : 'Listen live';
@@ -160,8 +167,28 @@ async function startLive(){
   setLiveUi(true, 'Connecting to live capture…');
   const ac = new (window.AudioContext || window.webkitAudioContext)();
   await ac.resume();
-  const res = await fetch('/live.pcm?t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
-  if (!res.ok || !res.body) throw new Error('live unavailable');
+  const poll = setInterval(async () => {
+    if (!liveAbort) return;
+    try {
+      const status = await (await fetch('/api/status', {cache:'no-store'})).json();
+      const limit = Math.max(1, Number(status.listenerLimit) || 5);
+      const n = Number(status.listeners) || 0;
+      const q = Number(status.queued) || 0;
+      if (q > 0 || n >= limit) {
+        liveHint.textContent = 'Live is full (' + n + '/' + limit + '). Waiting in queue…';
+      }
+    } catch {}
+  }, 800);
+  let res;
+  try {
+    res = await fetch('/live.pcm?t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
+  } finally {
+    clearInterval(poll);
+  }
+  if (!res || !res.ok || !res.body) {
+    if (res && res.status === 503) throw new Error('queue');
+    throw new Error('live unavailable');
+  }
   const reader = res.body.getReader();
   let buf = new Uint8Array(0);
   const readMore = async () => {
@@ -221,7 +248,9 @@ liveBtn.addEventListener('click', () => {
   if (livePlaying) { stopLive(); return; }
   startLive().catch((err) => {
     if (err && err.name === 'AbortError') return;
-    setLiveUi(false, 'Live stream dropped — tap Listen live');
+    setLiveUi(false, err && err.message === 'queue'
+      ? 'Live queue is full — tap Listen live to wait again'
+      : 'Live stream dropped — tap Listen live');
   });
 });
 async function refresh(){
@@ -232,7 +261,8 @@ async function refresh(){
     ]);
     const status = await statusRes.json();
     items = (await listRes.json()).captures || [];
-    live.textContent = status.recording ? 'LIVE · recording' : (status.live ? 'On air · live stream ready' : (status.status || 'On air'));
+    const air = status.recording ? 'LIVE · recording' : (status.live ? 'On air · live stream ready' : (status.status || 'On air'));
+    live.textContent = air + ' · ' + queueLabel(status);
     dot.className = 'dot ' + (status.recording ? 'live' : 'on');
     render();
   } catch {
@@ -442,6 +472,11 @@ void CaptureWebServer::setLiveStatus(const std::wstring& status, bool recording)
   LeaveCriticalSection(&lock_);
 }
 
+void CaptureWebServer::setMaxLiveListeners(int limit) { liveSlots_.setLimit(limit); }
+int CaptureWebServer::maxLiveListeners() const { return liveSlots_.limit(); }
+int CaptureWebServer::liveListeners() const { return liveSlots_.active(); }
+int CaptureWebServer::liveQueued() const { return liveSlots_.queued(); }
+
 bool CaptureWebServer::running() const { return running_; }
 std::uint16_t CaptureWebServer::port() const { return port_; }
 
@@ -587,6 +622,9 @@ std::string CaptureWebServer::statusJson() const {
        << ",\"live\":" << (hub && hub->live() ? "true" : "false")
        << ",\"sampleRate\":" << (hub ? hub->sampleRate() : 0)
        << ",\"status\":\"" << jsonEscape(wideToUtf8(live)) << "\",\"port\":" << port
+       << ",\"listeners\":" << liveSlots_.active()
+       << ",\"listenerLimit\":" << liveSlots_.limit()
+       << ",\"queued\":" << liveSlots_.queued()
        << "}";
   return json.str();
 }
@@ -667,6 +705,7 @@ DWORD WINAPI CaptureWebServer::clientThreadEntry(LPVOID context) {
 void CaptureWebServer::stop() {
   stop_ = true;
   running_ = false;
+  liveSlots_.shutdown();
   if (listen_ != static_cast<std::uintptr_t>(-1)) {
     closesocket(static_cast<SOCKET>(listen_));
     listen_ = static_cast<std::uintptr_t>(-1);
@@ -706,6 +745,25 @@ void CaptureWebServer::streamLive(std::uintptr_t clientHandle, bool wavContainer
   DWORD sendTimeout = 5000;
   setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&sendTimeout),
              sizeof(sendTimeout));
+  BOOL keepAlive = TRUE;
+  setsockopt(client, SOL_SOCKET, SO_KEEPALIVE, reinterpret_cast<const char*>(&keepAlive),
+             sizeof(keepAlive));
+
+  struct SlotGuard {
+    LiveSlotGate* gate = nullptr;
+    bool held = false;
+    ~SlotGuard() {
+      if (held && gate) gate->release();
+    }
+  } slot;
+  slot.gate = &liveSlots_;
+  if (!liveSlots_.tryAcquire(INFINITE, &stop_, clientHandle)) {
+    if (!stop_) {
+      sendResponse(client, 503, "Service Unavailable", "text/plain", "live queue full");
+    }
+    return;
+  }
+  slot.held = true;
 
   EnterCriticalSection(&lock_);
   LiveAudioHub* hub = liveHub_;

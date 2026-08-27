@@ -24,6 +24,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 - Separate replay-log window with timestamp, frequency, mode, duration, peak level, playback,
   and Explorer access.
 - Optional public website on port 80 so anyone on the network can listen live and play captures.
+- Tools → Settings caps simultaneous live listeners (default 5); extra visitors wait in a queue.
 - Full terminal operation for scripts, scheduled jobs, and automation.
 - Handles shared-mode 8/16/24/32-bit PCM and 32/64-bit floating-point input safely.
 
@@ -65,14 +66,18 @@ silence for two seconds, FUBAR tries the next physical input automatically.
 9. Open **Replay log** to play completed files or locate them in Explorer.
 10. Tick **Public website on port 80** to share the capture log. Use **Open site** for this PC,
     or visit the LAN address shown next to the checkbox from a phone or another computer.
+11. Open **Tools → Settings** to choose how many people can listen live at once (default 5).
+    Anyone above that number waits in a queue until someone stops listening.
 
 ### Public website
 
 The website is off until an admin enables it. While it is on, FUBAR serves a capture player at
 `http://<this-pc>:80/`. Visitors can **Listen live** to the same audio the app is capturing, and
-play saved WAV clips. Live audio is a shared mono PCM stream of the current capture — tap
-**Listen live** (the browser cannot play an endless WAV file, so FUBAR uses Web Audio). Disable
-the checkbox to take the site offline.
+play saved WAV clips. Several people can listen at the same time. When the live cap is reached
+(default 5, change it in **Tools → Settings**), new visitors wait in a queue until a slot frees.
+Live audio is a shared mono PCM stream of the current capture — tap **Listen live** (the browser
+cannot play an endless WAV file, so FUBAR uses Web Audio). Disable the checkbox to take the site
+offline.
 
 Port 80 is the standard web port, so no extra port number is required. If Windows Firewall
 prompts, allow FUBAR so other devices on the network can connect.
@@ -80,7 +85,7 @@ prompts, allow FUBAR so other devices on the network can connect.
 Headless:
 
 ```powershell
-.\FUBAR.exe --cli --headless --web --output "D:\FUBAR Recordings"
+.\FUBAR.exe --cli --headless --web --live-listeners 5 --output "D:\FUBAR Recordings"
 ```
 
 Use headphones when live monitoring a microphone to avoid acoustic feedback.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.6
+
+- Any number of people can listen live at once; a second listener no longer drops the first.
+- Tools → Settings sets the maximum live listeners (default 5). Extra visitors wait in a queue
+  until a slot frees. Lowering the cap does not kick anyone already listening.
+- The public site shows how many people are listening and how many are waiting.
+
 ## 1.1.5
 
 - Saves captures to `%AppData%\Roaming\FUBAR\Vox_captures` and reloads that folder every start.

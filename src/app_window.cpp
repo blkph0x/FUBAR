@@ -204,8 +204,9 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   brandClass.lpszClassName = kBrandClass;
   RegisterClassExW(&brandClass);
 
-  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.5", WS_OVERLAPPEDWINDOW,
-                            CW_USEDEFAULT, CW_USEDEFAULT, 780, 780, nullptr, nullptr, instance_,
+  HMENU menu = LoadMenuW(instance_, MAKEINTRESOURCEW(IDR_MAINMENU));
+  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.6", WS_OVERLAPPEDWINDOW,
+                            CW_USEDEFAULT, CW_USEDEFAULT, 780, 780, nullptr, menu, instance_,
                             this);
   if (!window_) return 1;
   ShowWindow(window_, showCommand);
@@ -279,6 +280,7 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
         case IdOpenFolder: openOutputDirectory(); return 0;
         case IdReplay: showReplayWindow(); return 0;
         case IdOpenWeb: openWebsite(); return 0;
+        case ID_TOOLS_SETTINGS: showSettings(); return 0;
         case IdWeb:
           if (HIWORD(wParam) == BN_CLICKED) {
             webEnabled_ = SendMessageW(webCheck_, BM_GETCHECK, 0, 0) == BST_CHECKED;
@@ -757,6 +759,8 @@ void AppWindow::saveSettings() const {
                              std::to_wstring(static_cast<int>(current.thresholdDb)).c_str(),
                              ini.c_str());
   WritePrivateProfileStringW(L"FUBAR", L"WebEnabled", webEnabled_ ? L"1" : L"0", ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"LiveMaxListeners",
+                             std::to_wstring(liveMaxListeners_).c_str(), ini.c_str());
 }
 
 void AppWindow::reloadCapturesFromDisk() {
@@ -790,33 +794,100 @@ void AppWindow::loadSettings() {
     try { options_.thresholdDb = std::stof(buffer); } catch (...) {}
   }
   webEnabled_ = GetPrivateProfileIntW(L"FUBAR", L"WebEnabled", 0, ini.c_str()) != 0;
+  liveMaxListeners_ = LiveSlotGate::clampLimit(
+      GetPrivateProfileIntW(L"FUBAR", L"LiveMaxListeners", LiveSlotGate::kDefaultLimit, ini.c_str()));
   if (webCheck_) {
     SendMessageW(webCheck_, BM_SETCHECK, webEnabled_ ? BST_CHECKED : BST_UNCHECKED, 0);
   }
 }
 
+void AppWindow::refreshWebStatus() {
+  if (!webStatus_) return;
+  if (!webEnabled_ || !web_.running()) {
+    SetWindowTextW(webStatus_, webEnabled_ ? web_.lastError().c_str() : L"Website off");
+    return;
+  }
+  const std::wstring text = L"On air  " + web_.lanUrl() + L"  (" +
+                            std::to_wstring(web_.maxLiveListeners()) + L" live slots)";
+  SetWindowTextW(webStatus_, text.c_str());
+}
+
 void AppWindow::applyWebServer() {
   web_.setLiveHub(&engine_.liveHub());
   web_.setRoot(options_.outputDirectory);
+  web_.setMaxLiveListeners(liveMaxListeners_);
   if (!webEnabled_) {
     web_.stop();
-    if (webStatus_) SetWindowTextW(webStatus_, L"Website off");
+    refreshWebStatus();
     return;
   }
   if (web_.running()) {
-    if (webStatus_) SetWindowTextW(webStatus_, (L"On air  " + web_.lanUrl()).c_str());
+    refreshWebStatus();
     return;
   }
   if (!web_.start(80)) {
-    if (webStatus_) SetWindowTextW(webStatus_, web_.lastError().c_str());
     webEnabled_ = false;
     if (webCheck_) SendMessageW(webCheck_, BM_SETCHECK, BST_UNCHECKED, 0);
+    refreshWebStatus();
     return;
   }
-  if (webStatus_) SetWindowTextW(webStatus_, (L"On air  " + web_.lanUrl()).c_str());
+  refreshWebStatus();
 }
 
 void AppWindow::openWebsite() const {
   const std::wstring target = web_.running() ? web_.url() : L"http://127.0.0.1/";
   ShellExecuteW(window_, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
+namespace {
+
+struct SettingsDialogData {
+  int limit = LiveSlotGate::kDefaultLimit;
+  int listeners = 0;
+  int queued = 0;
+};
+
+INT_PTR CALLBACK settingsDialogProc(HWND dialog, UINT message, WPARAM wParam, LPARAM lParam) {
+  if (message == WM_INITDIALOG) {
+    auto* data = reinterpret_cast<SettingsDialogData*>(lParam);
+    SetWindowLongPtrW(dialog, DWLP_USER, reinterpret_cast<LONG_PTR>(data));
+    SetDlgItemInt(dialog, IDC_LIVE_LIMIT, static_cast<UINT>(data->limit), FALSE);
+    const std::wstring stats = L"Right now: " + std::to_wstring(data->listeners) +
+                               L" listening, " + std::to_wstring(data->queued) + L" waiting.";
+    SetDlgItemTextW(dialog, IDC_LIVE_STATS, stats.c_str());
+    return TRUE;
+  }
+  if (message == WM_COMMAND) {
+    switch (LOWORD(wParam)) {
+      case IDOK: {
+        auto* data = reinterpret_cast<SettingsDialogData*>(GetWindowLongPtrW(dialog, DWLP_USER));
+        BOOL translated = FALSE;
+        const int value = static_cast<int>(GetDlgItemInt(dialog, IDC_LIVE_LIMIT, &translated, FALSE));
+        if (data) data->limit = LiveSlotGate::clampLimit(translated ? value : LiveSlotGate::kDefaultLimit);
+        EndDialog(dialog, IDOK);
+        return TRUE;
+      }
+      case IDCANCEL:
+        EndDialog(dialog, IDCANCEL);
+        return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+}  // namespace
+
+void AppWindow::showSettings() {
+  SettingsDialogData data;
+  data.limit = liveMaxListeners_;
+  data.listeners = web_.liveListeners();
+  data.queued = web_.liveQueued();
+  if (DialogBoxParamW(instance_, MAKEINTRESOURCEW(IDD_SETTINGS), window_, settingsDialogProc,
+                      reinterpret_cast<LPARAM>(&data)) != IDOK) {
+    return;
+  }
+  liveMaxListeners_ = LiveSlotGate::clampLimit(data.limit);
+  web_.setMaxLiveListeners(liveMaxListeners_);
+  refreshWebStatus();
+  saveSettings();
 }

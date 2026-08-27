@@ -64,26 +64,38 @@ void LiveAudioHub::pushInterleaved(const std::int16_t* samples, std::size_t coun
 std::size_t LiveAudioHub::pull(Cursor& cursor, std::int16_t* out, std::size_t maxSamples,
                                DWORD waitMs) {
   if (!out || maxSamples == 0) return 0;
-  if (waitMs > 0 && event_) WaitForSingleObject(event_, waitMs);
+
+  auto copyLocked = [&]() -> std::size_t {
+    if (buffer_.empty() || writePos_ == 0) return 0;
+    if (cursor.generation != generation_) {
+      cursor.generation = generation_;
+      const std::uint64_t preroll = std::max<std::uint32_t>(sampleRate_ / 12, 160);
+      cursor.pos = writePos_ > preroll ? writePos_ - preroll : 0;
+    }
+    if (cursor.pos > writePos_) cursor.pos = writePos_;
+    const std::uint64_t behind = writePos_ - cursor.pos;
+    if (behind > buffer_.size()) cursor.pos = writePos_ - (buffer_.size() / 4);
+    std::size_t copied = 0;
+    while (copied < maxSamples && cursor.pos < writePos_) {
+      out[copied++] = buffer_[static_cast<std::size_t>(cursor.pos % buffer_.size())];
+      ++cursor.pos;
+    }
+    return copied;
+  };
+
   EnterCriticalSection(&lock_);
-  if (buffer_.empty() || writePos_ == 0) {
+  std::size_t copied = copyLocked();
+  if (copied > 0 || waitMs == 0 || !event_) {
     LeaveCriticalSection(&lock_);
-    return 0;
+    return copied;
   }
-  if (cursor.generation != generation_) {
-    cursor.generation = generation_;
-    const std::uint64_t preroll = std::max<std::uint32_t>(sampleRate_ / 12, 160);
-    cursor.pos = writePos_ > preroll ? writePos_ - preroll : 0;
-  }
-  if (cursor.pos > writePos_) cursor.pos = writePos_;
-  const std::uint64_t behind = writePos_ - cursor.pos;
-  if (behind > buffer_.size()) cursor.pos = writePos_ - (buffer_.size() / 4);
-  std::size_t copied = 0;
-  while (copied < maxSamples && cursor.pos < writePos_) {
-    out[copied++] = buffer_[static_cast<std::size_t>(cursor.pos % buffer_.size())];
-    ++cursor.pos;
-  }
-  if (cursor.pos >= writePos_) ResetEvent(event_);
+  // Only reset when this cursor is empty. Never reset after a successful copy —
+  // that used to starve every other live listener sharing the wake event.
+  ResetEvent(event_);
+  LeaveCriticalSection(&lock_);
+  WaitForSingleObject(event_, waitMs);
+  EnterCriticalSection(&lock_);
+  copied = copyLocked();
   LeaveCriticalSection(&lock_);
   return copied;
 }

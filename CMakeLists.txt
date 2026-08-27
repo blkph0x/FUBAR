@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(FUBAR VERSION 1.1.5 LANGUAGES CXX)
+project(FUBAR VERSION 1.1.6 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,8 +12,10 @@ add_executable(fubar
   src/app_window.cpp
   src/web_server.cpp
   src/live_hub.cpp
+  src/live_slot.cpp
   src/audio_safety.h
   src/live_hub.h
+  src/live_slot.h
   src/app_paths.h
   src/vox_gate.h
   src/web_server.h

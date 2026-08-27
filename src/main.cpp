@@ -12,6 +12,7 @@
 #include "vox_gate.h"
 #include "web_server.h"
 #include "live_hub.h"
+#include "live_slot.h"
 #include "app_paths.h"
 
 #include <atomic>
@@ -47,6 +48,17 @@ void configureConsole(int argc, wchar_t** argv) {
   FreeConsole();
 }
 
+struct SlotWaitArg {
+  LiveSlotGate* gate = nullptr;
+  bool got = false;
+};
+
+DWORD WINAPI slotWaitThread(LPVOID context) {
+  auto* arg = static_cast<SlotWaitArg*>(context);
+  arg->got = arg->gate && arg->gate->tryAcquire(4000);
+  return 0;
+}
+
 BOOL WINAPI consoleHandler(DWORD signal) {
   if (signal == CTRL_C_EVENT || signal == CTRL_CLOSE_EVENT || signal == CTRL_BREAK_EVENT) {
     consoleStop = true;
@@ -57,7 +69,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.5 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.6 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -79,7 +91,8 @@ void printHelp() {
       << L"  --force-record        Record continuously instead of VOX\n"
       << L"  --append-session      Pause on silence and resume into the same WAV\n"
       << L"  --split-stereo        Write stereo as separate mono left/right WAV files\n"
-      << L"  --web                 Serve the public capture website on TCP port 80\n";
+      << L"  --web                 Serve the public capture website on TCP port 80\n"
+      << L"  --live-listeners N    Max simultaneous live listeners (default 5, extras queue)\n";
 }
 
 ChannelMode parseMode(const std::wstring& text) {
@@ -213,6 +226,22 @@ int runSelfTest() {
     std::wcerr << L"Self-test failed: live audio hub\n";
     return 1;
   }
+  LiveAudioHub::Cursor listenerA;
+  LiveAudioHub::Cursor listenerB;
+  std::int16_t sink[1024];
+  while (hub.pull(listenerA, sink, 1024, 0) > 0) {
+  }
+  while (hub.pull(listenerB, sink, 1024, 0) > 0) {
+  }
+  std::int16_t extra[8];
+  for (int i = 0; i < 8; ++i) extra[static_cast<std::size_t>(i)] = static_cast<std::int16_t>(2000 + i);
+  hub.pushInterleaved(extra, 8, 1);
+  std::int16_t fromA[16]{};
+  std::int16_t fromB[16]{};
+  if (hub.pull(listenerA, fromA, 16, 50) == 0 || hub.pull(listenerB, fromB, 16, 50) == 0) {
+    std::wcerr << L"Self-test failed: second live listener starved the first\n";
+    return 1;
+  }
   std::uint8_t wavHeader[44];
   LiveAudioHub::writeWavHeader(wavHeader, 8000);
   if (std::memcmp(wavHeader, "RIFF", 4) != 0 || std::memcmp(wavHeader + 8, "WAVE", 4) != 0) {
@@ -260,12 +289,99 @@ int runSelfTest() {
     std::wcerr << L"Self-test failed: live stream did not send PCM audio\n";
     return 1;
   }
+
+  server.setMaxLiveListeners(5);
+  if (!server.start(18080)) {
+    std::wcerr << L"Self-test failed: could not restart website for two live listeners\n";
+    return 1;
+  }
+  Sleep(50);
+  auto connectLive = [&]() -> SOCKET {
+    SOCKET sock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sock == INVALID_SOCKET) return INVALID_SOCKET;
+    DWORD timeout = 2000;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+    if (::connect(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+      closesocket(sock);
+      return INVALID_SOCKET;
+    }
+    const char req[] = "GET /live.pcm HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+    send(sock, req, sizeof(req) - 1, 0);
+    return sock;
+  };
+  auto recvMagic = [](SOCKET sock) -> bool {
+    if (sock == INVALID_SOCKET) return false;
+    std::string body;
+    char buf[512];
+    const DWORD deadline = GetTickCount() + 2000;
+    while (body.find("FUBARPCM") == std::string::npos && GetTickCount() < deadline) {
+      const int n = recv(sock, buf, sizeof(buf), 0);
+      if (n > 0) {
+        body.append(buf, static_cast<std::size_t>(n));
+        continue;
+      }
+      if (n == 0) break;
+      if (WSAGetLastError() != WSAETIMEDOUT) break;
+    }
+    return body.find("FUBARPCM") != std::string::npos;
+  };
+  SOCKET liveA = connectLive();
+  SOCKET liveB = connectLive();
+  Sleep(40);
+  hub.pushInterleaved(tone.data(), tone.size(), 1);
+  const bool twoOk = recvMagic(liveA) && recvMagic(liveB);
+  if (liveA != INVALID_SOCKET) closesocket(liveA);
+  if (liveB != INVALID_SOCKET) closesocket(liveB);
+  server.stop();
+  if (!twoOk) {
+    std::wcerr << L"Self-test failed: two live listeners did not both receive audio\n";
+    return 1;
+  }
+
+  LiveSlotGate slots;
+  slots.setLimit(1);
+  if (!slots.tryAcquire(0) || slots.active() != 1 || slots.tryAcquire(0) ||
+      slots.queued() != 0) {
+    std::wcerr << L"Self-test failed: live listener slot cap\n";
+    return 1;
+  }
+  SlotWaitArg waitArg;
+  waitArg.gate = &slots;
+  HANDLE waiter = CreateThread(nullptr, 0, slotWaitThread, &waitArg, 0, nullptr);
+  if (!waiter) {
+    std::wcerr << L"Self-test failed: could not start slot-queue thread\n";
+    slots.release();
+    return 1;
+  }
+  Sleep(80);
+  if (slots.queued() != 1) {
+    CloseHandle(waiter);
+    slots.release();
+    std::wcerr << L"Self-test failed: overflow listener did not join the queue\n";
+    return 1;
+  }
+  slots.release();
+  const DWORD waited = WaitForSingleObject(waiter, 3000);
+  CloseHandle(waiter);
+  if (waited != WAIT_OBJECT_0 || !waitArg.got) {
+    if (waitArg.got) slots.release();
+    std::wcerr << L"Self-test failed: queued listener did not get a live slot\n";
+    return 1;
+  }
+  slots.setLimit(1);
+  if (slots.active() != 1) {
+    slots.release();
+    std::wcerr << L"Self-test failed: lowering the live cap kicked an active listener\n";
+    return 1;
+  }
+  slots.release();
+
   const auto capturesDir = defaultCaptureDirectory();
   if (capturesDir.empty() || capturesDir.filename() != L"Vox_captures") {
     std::wcerr << L"Self-test failed: default capture folder\n";
     return 1;
   }
-  std::wcout << L"Self-test passed: CLI, WAV writer, website, and live stream are operational.\n";
+  std::wcout << L"Self-test passed: CLI, WAV writer, website, live stream, and listener slots are operational.\n";
   return 0;
 }
 
@@ -279,6 +395,7 @@ int wmain(int argc, wchar_t** argv) {
   bool listDevices = false;
   bool selfTest = false;
   bool webEnabled = false;
+  int liveMaxListeners = LiveSlotGate::kDefaultLimit;
   double durationSeconds = 0.0;
   int deviceIndex = -1;
 
@@ -328,6 +445,8 @@ int wmain(int argc, wchar_t** argv) {
         options.splitStereoFiles = true;
       } else if (argument == L"--web") {
         webEnabled = true;
+      } else if (argument == L"--live-listeners") {
+        liveMaxListeners = LiveSlotGate::clampLimit(std::stoi(next()));
       } else {
         std::wcerr << L"Unknown option: " << argument << L"\n";
         printHelp();
@@ -375,6 +494,7 @@ int wmain(int argc, wchar_t** argv) {
   if (webEnabled) {
     website.setRoot(options.outputDirectory);
     website.setLiveHub(&engine.liveHub());
+    website.setMaxLiveListeners(liveMaxListeners);
     if (!website.start(80)) {
       std::wcerr << L"Website failed: " << website.lastError() << L"\n";
     } else {

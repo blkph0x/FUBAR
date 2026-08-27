@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "live_hub.h"
+#include "live_slot.h"
 
 #include <windows.h>
 
@@ -38,6 +39,10 @@ class CaptureWebServer {
   void setRoot(const std::filesystem::path& directory);
   void setLiveHub(LiveAudioHub* hub);
   void setLiveStatus(const std::wstring& status, bool recording);
+  void setMaxLiveListeners(int limit);
+  int maxLiveListeners() const;
+  int liveListeners() const;
+  int liveQueued() const;
 
   static std::vector<CaptureItem> listCaptures(const std::filesystem::path& directory);
   static bool safeCaptureId(const std::string& id);
@@ -66,6 +71,7 @@ class CaptureWebServer {
   mutable CRITICAL_SECTION lock_{};
   std::filesystem::path root_;
   LiveAudioHub* liveHub_ = nullptr;
+  LiveSlotGate liveSlots_;
   std::wstring liveStatus_ = L"Idle";
   std::wstring lastError_;
 };

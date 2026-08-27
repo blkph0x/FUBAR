@@ -1,3 +1,8 @@
 #pragma once
 
 #define IDI_APPICON 101
+#define IDR_MAINMENU 102
+#define IDD_SETTINGS 200
+#define IDC_LIVE_LIMIT 201
+#define IDC_LIVE_STATS 202
+#define ID_TOOLS_SETTINGS 40001
