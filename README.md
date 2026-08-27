@@ -1,7 +1,8 @@
 # FUBAR
 
-FUBAR is a Windows C++ VOX monitor and recorder. It starts as a console program and opens a
-native GUI unless `--headless` is supplied. Both interfaces use the same WASAPI capture engine.
+FUBAR is a Windows C++ VOX monitor and recorder. It opens its native GUI without leaving a
+terminal window visible. Add `--cli` for terminal diagnostics and automation, and `--headless`
+to run without the GUI. Both interfaces use the same WASAPI capture engine.
 
 ## Features
 
@@ -45,8 +46,8 @@ a release asset after authenticating the GitHub CLI, run:
 
 ## GUI operation
 
-Run `FUBAR.exe` with no arguments. The console remains available for diagnostics and the GUI
-opens on top. Capture starts with the Windows default input. If that endpoint produces digital
+Run `FUBAR.exe` with no arguments. The app detaches from the terminal and opens the GUI.
+Capture starts with the Windows default input. If that endpoint produces digital
 silence for two seconds, FUBAR tries the next physical input automatically.
 
 1. Select the recording device and channel route.
@@ -81,30 +82,30 @@ the recording side. See the [official VB-CABLE reference manual](https://vb-audi
 List capture devices:
 
 ```powershell
-.\FUBAR.exe --list-devices
+.\FUBAR.exe --cli --list-devices
 ```
 
 Monitor the left channel and create clips at -32 dBFS:
 
 ```powershell
-.\FUBAR.exe --headless --device 2 --mode left --threshold-db -32 `
+.\FUBAR.exe --cli --headless --device 2 --mode left --threshold-db -32 `
   --pre-roll 1 --hold 1.5 --output "D:\FUBAR Recordings"
 ```
 
 Run a ten-second mono capture test without speaker monitoring:
 
 ```powershell
-.\FUBAR.exe --headless --mode mono --duration 10 --force-record --no-monitor
+.\FUBAR.exe --cli --headless --mode mono --duration 10 --force-record --no-monitor
 ```
 
 Keep one VOX session open across quiet periods and save stereo channels separately:
 
 ```powershell
-.\FUBAR.exe --headless --mode stereo --append-session --split-stereo `
+.\FUBAR.exe --cli --headless --mode stereo --append-session --split-stereo `
   --threshold-db -32 --hold 1.5 --output "D:\FUBAR Recordings"
 ```
 
-Run `FUBAR.exe --help` for every option. A headless run with no duration continues until
+Run `FUBAR.exe --cli --help` for every option. A headless run with no duration continues until
 `Ctrl+C`.
 
 ## Recording behavior

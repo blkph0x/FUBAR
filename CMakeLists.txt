@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(FUBAR VERSION 1.1.0 LANGUAGES CXX)
+project(FUBAR VERSION 1.1.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,5 +32,5 @@ target_link_libraries(fubar PRIVATE ole32 uuid winmm comctl32 shell32)
 set_target_properties(fubar PROPERTIES OUTPUT_NAME "FUBAR")
 
 enable_testing()
-add_test(NAME cli_help COMMAND fubar --help)
-add_test(NAME self_test COMMAND fubar --self-test)
+add_test(NAME cli_help COMMAND fubar --cli --help)
+add_test(NAME self_test COMMAND fubar --cli --self-test)

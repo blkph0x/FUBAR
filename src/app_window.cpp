@@ -208,7 +208,7 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   brandClass.lpszClassName = kBrandClass;
   RegisterClassExW(&brandClass);
 
-  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.0", WS_OVERLAPPEDWINDOW,
+  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.1", WS_OVERLAPPEDWINDOW,
                             CW_USEDEFAULT, CW_USEDEFAULT, 780, 735, nullptr, nullptr, instance_,
                             this);
   if (!window_) return 1;
@@ -415,7 +415,7 @@ void AppWindow::createControls() {
   addControl(window_, L"BUTTON", L"Open recordings", BS_PUSHBUTTON, 490, 575, 150, 38,
              IdOpenFolder);
   addControl(window_, L"STATIC",
-             L"CLI automation: FUBAR.exe --headless --mode left --threshold-db -35",
+             L"CLI automation: FUBAR.exe --cli --headless --mode left --threshold-db -35",
               SS_CENTER, 40, 630, 680, 22);
 }
 

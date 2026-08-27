@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1
+
+- The GUI now detaches from its console by default so no terminal remains visible.
+- Added `--cli` to explicitly retain terminal output for headless operation, diagnostics, and automation.
+
 ## 1.1.0
 
 - Renamed the program, executable, package, recording prefix, and repository to FUBAR.

@@ -11,11 +11,32 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
 
 std::atomic<bool> consoleStop{false};
+
+bool hasCliFlag(int argc, wchar_t** argv) {
+  for (int index = 1; index < argc; ++index) {
+    if (std::wstring_view(argv[index]) == L"--cli") return true;
+  }
+  return false;
+}
+
+void configureConsole(int argc, wchar_t** argv) {
+  if (hasCliFlag(argc, argv)) return;
+
+  const HWND consoleWindow = GetConsoleWindow();
+  if (consoleWindow == nullptr) return;
+
+  DWORD consoleProcesses[2]{};
+  if (GetConsoleProcessList(consoleProcesses, 2) == 1) {
+    ShowWindow(consoleWindow, SW_HIDE);
+  }
+  FreeConsole();
+}
 
 BOOL WINAPI consoleHandler(DWORD signal) {
   if (signal == CTRL_C_EVENT || signal == CTRL_CLOSE_EVENT || signal == CTRL_BREAK_EVENT) {
@@ -27,13 +48,14 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.0 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.1 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
-      << L"  FUBAR.exe                            Open GUI and start listening\n"
-      << L"  FUBAR.exe --list-devices             List capture devices\n"
-      << L"  FUBAR.exe --headless [options]       Run without GUI\n"
-      << L"  FUBAR.exe --self-test                Test WAV output and CLI\n\n"
+      << L"  FUBAR.exe                                  Open GUI without a console\n"
+      << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
+      << L"  FUBAR.exe --cli --headless [options]       Run without GUI\n"
+      << L"  FUBAR.exe --cli --self-test                Test WAV output and CLI\n\n"
       << L"Options:\n"
+      << L"  --cli                 Keep the terminal attached for logs and input\n"
       << L"  --device N            Capture device index from --list-devices\n"
       << L"  --mode MODE           stereo, left, right, or mono\n"
       << L"  --threshold-db DB     VOX threshold, e.g. -35\n"
@@ -119,6 +141,8 @@ int runSelfTest() {
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
+  configureConsole(argc, argv);
+
   AudioOptions options;
   bool headless = false;
   bool listDevices = false;
@@ -133,7 +157,9 @@ int wmain(int argc, wchar_t** argv) {
       return argv[++index];
     };
     try {
-      if (argument == L"--help" || argument == L"-h") {
+      if (argument == L"--cli") {
+        continue;
+      } else if (argument == L"--help" || argument == L"-h") {
         printHelp();
         return 0;
       } else if (argument == L"--list-devices") {
