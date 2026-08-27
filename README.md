@@ -29,6 +29,13 @@ cd "C:\Users\Blkph0x\Documents\New project 2\AudioVox"
 
 The resulting executable is in `build-release-mingw\AudioVox.exe`.
 
+To build, create a public GitHub repository, push the source/tag, and publish the portable ZIP as
+a release asset after authenticating the GitHub CLI, run:
+
+```powershell
+.\scripts\publish-github.ps1
+```
+
 ## GUI operation
 
 Run `AudioVox.exe` with no arguments. The console remains available for diagnostics and the GUI
