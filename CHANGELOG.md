@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.20
+
+- Phones play live through a real WAV media stream so Android can keep going when
+  the browser is minimised, and iPhone can hear live the same way it already plays
+  saved clips. Desktop still uses the PCM jitter buffer.
+- Minimising no longer treats a cancelled fetch as “stop”; it reconnects when the
+  tab wakes. iPhone unlocks Web Audio on the Listen tap if WAV needs a fallback.
+
 ## 1.1.19
 
 - Live listen no longer guesses FM or applies a 15 kHz low-pass. The SDR already

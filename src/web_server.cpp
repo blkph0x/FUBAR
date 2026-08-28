@@ -99,7 +99,7 @@ button.play.playing{ background:var(--blue); }
 <div class="player">
   <div class="meta" id="now" style="margin-bottom:6px">Nothing playing</div>
   <audio id="audio" controls preload="none"></audio>
-  <audio id="liveMedia" muted playsinline webkit-playsinline autoplay style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></audio>
+  <audio id="liveMedia" playsinline webkit-playsinline style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></audio>
 </div>
 <script>
 const audio = document.getElementById('audio');
@@ -168,6 +168,26 @@ let meterRaf = 0;
 let liveMix = 'mono';
 let liveRate = 0;
 let liveCh = 1;
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+const isiOS = /iP(hone|od|ad)/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isAndroid = /Android/i.test(navigator.userAgent);
+const useMediaLive = isiOS || isAndroid;
+function unlockLiveAudio(){
+  try {
+    if (AudioCtx && (!liveAc || liveAc.state === 'closed')) {
+      liveAc = new AudioCtx({latencyHint:'playback'});
+    }
+    if (liveAc && liveAc.resume) liveAc.resume();
+  } catch {}
+  try {
+    liveMedia.muted = false;
+    liveMedia.volume = 1;
+    liveMedia.playsInline = true;
+    liveMedia.setAttribute('playsinline', '');
+    liveMedia.setAttribute('webkit-playsinline', '');
+  } catch {}
+}
 try { liveMix = localStorage.getItem('fubarLiveMix') === 'stereo' ? 'stereo' : 'mono'; } catch {}
 function applyMixButtons(){
   document.querySelectorAll('#liveMix [data-mix]').forEach(btn => {
@@ -242,12 +262,19 @@ async function keepLiveAlive(){
   if (!liveWanted) return;
   try { if (liveAc && liveAc.state !== 'running') await liveAc.resume(); } catch {}
   try {
-    liveMedia.muted = true;
-    liveMedia.volume = 0;
-    if (liveMedia.paused) {
-      liveMedia.src = SILENT_WAV;
-      liveMedia.loop = true;
-      await liveMedia.play();
+    liveMedia.playsInline = true;
+    if (useMediaLive) {
+      liveMedia.muted = false;
+      liveMedia.volume = 1;
+      if (liveMedia.paused) await liveMedia.play();
+    } else {
+      liveMedia.muted = true;
+      liveMedia.volume = 0;
+      if (liveMedia.paused) {
+        liveMedia.src = SILENT_WAV;
+        liveMedia.loop = true;
+        await liveMedia.play();
+      }
     }
   } catch {}
   try {
@@ -332,8 +359,8 @@ function attachScriptRing(ac, channels){
   const primeNeed = Math.floor(sr * 1.0) * srcCh;
   const lowNeed = Math.floor(sr * 0.2) * srcCh;
   let node;
-  try { node = ac.createScriptProcessor(4096, 0, 2); }
-  catch { node = ac.createScriptProcessor(4096, 1, 2); }
+  try { node = ac.createScriptProcessor(4096, 1, 2); }
+  catch { node = ac.createScriptProcessor(4096, 0, 2); }
   node.onaudioprocess = (ev) => {
     const outs = [];
     for (let c = 0; c < ev.outputBuffer.numberOfChannels; c++) outs[c] = ev.outputBuffer.getChannelData(c);
@@ -508,18 +535,75 @@ async function attachWorkletRing(ac, channels){
     }
   };
 }
-async function playLiveSession(){
-  audio.pause();
-  closeLiveAudio();
+async function playLiveMediaSession(){
   liveAbort = new AbortController();
   if (navigator.audioSession) { try { navigator.audioSession.type = 'playback'; } catch {} }
-  liveMedia.muted = true;
-  liveMedia.volume = 0;
-  liveMedia.loop = true;
-  liveMedia.src = SILENT_WAV;
-  try { await liveMedia.play(); } catch {}
+  liveMedia.muted = false;
+  liveMedia.volume = 1;
+  liveMedia.loop = false;
+  liveMedia.autoplay = true;
+  liveMedia.playsInline = true;
+  liveMedia.src = 'live.wav?v=120&t=' + Date.now();
+  startMeter();
+  if (navigator.mediaSession) {
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({title:'FUBAR Live', artist:'FUBAR'});
+      navigator.mediaSession.playbackState = 'playing';
+      navigator.mediaSession.setActionHandler('pause', () => liveMedia.pause());
+      navigator.mediaSession.setActionHandler('play', () => liveMedia.play());
+      navigator.mediaSession.setActionHandler('stop', () => stopLive());
+    } catch {}
+  }
+  setLiveUi(true, 'Live · phone · WAV 1:1 · stays on when you leave the page');
+  await liveMedia.play();
+  await new Promise((resolve, reject) => {
+    let lastT = -1;
+    let stall = 0;
+    const done = (err) => {
+      liveMedia.onended = null;
+      liveMedia.onerror = null;
+      clearInterval(tick);
+      if (err) reject(err);
+      else resolve();
+    };
+    liveMedia.onended = () => done(new Error('live ended'));
+    liveMedia.onerror = () => done(new Error('live media error'));
+    const tick = setInterval(() => {
+      if (!liveWanted) { done(); return; }
+      try { if (liveMedia.paused) liveMedia.play().catch(()=>{}); } catch {}
+      const t = Number(liveMedia.currentTime) || 0;
+      if (t <= lastT + 0.02) stall++;
+      else stall = 0;
+      lastT = t;
+      if (t > 0) livePeak = Math.max(livePeak, 0.25);
+      if (stall >= 10) done(new Error('live stalled'));
+    }, 500);
+  });
+}
+async function playLiveSession(){
+  audio.pause();
+  try { if (liveNode) liveNode.disconnect(); } catch {}
+  liveNode = null;
+  liveAbort = new AbortController();
+  if (navigator.audioSession) { try { navigator.audioSession.type = 'playback'; } catch {} }
+  if (useMediaLive) {
+    try {
+      await playLiveMediaSession();
+      return;
+    } catch (err) {
+      if (!liveWanted) throw err;
+      try { liveMedia.pause(); liveMedia.removeAttribute('src'); liveMedia.load(); } catch {}
+      setLiveUi(true, 'Phone stream stalled — trying PCM…');
+    }
+  } else {
+    liveMedia.muted = true;
+    liveMedia.volume = 0;
+    liveMedia.loop = true;
+    liveMedia.src = SILENT_WAV;
+    try { await liveMedia.play(); } catch {}
+  }
   await keepLiveAlive();
-  const res = await fetch('live.pcm?v=119&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
+  const res = await fetch('live.pcm?v=120&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
   if (!res.ok || !res.body) {
     if (res.status === 503) throw new Error('queue');
     throw new Error('live unavailable');
@@ -548,14 +632,21 @@ async function playLiveSession(){
   const view = new DataView(hdr.buffer, hdr.byteOffset, 16);
   const rate = view.getUint32(8, true);
   const channels = Math.max(1, view.getUint16(12, true) || 1);
-  let ac;
-  try { ac = new (window.AudioContext || window.webkitAudioContext)({sampleRate: rate, latencyHint:'playback'}); }
-  catch { ac = new (window.AudioContext || window.webkitAudioContext)({latencyHint:'playback'}); }
+  let ac = (liveAc && liveAc.state !== 'closed') ? liveAc : null;
+  if (!ac) {
+    if (isiOS) {
+      try { ac = new AudioCtx({latencyHint:'playback'}); }
+      catch { ac = new AudioCtx(); }
+    } else {
+      try { ac = new AudioCtx({sampleRate: rate, latencyHint:'playback'}); }
+      catch { ac = new AudioCtx({latencyHint:'playback'}); }
+    }
+  }
   liveAc = ac;
   await ac.resume();
   let tap;
   try {
-    if (ac.audioWorklet) tap = await attachWorkletRing(ac, channels);
+    if (!isiOS && ac.audioWorklet) tap = await attachWorkletRing(ac, channels);
     else tap = attachScriptRing(ac, channels);
   } catch {
     tap = attachScriptRing(ac, channels);
@@ -598,8 +689,6 @@ async function playLiveSession(){
     clearInterval(keep);
     try { tap.node.disconnect(); } catch {}
     liveNode = null;
-    try { if (liveAc === ac && ac.state !== 'closed' && ac.close) ac.close(); } catch {}
-    if (liveAc === ac) liveAc = null;
   }
 }
 async function startLive(){
@@ -612,7 +701,7 @@ async function startLive(){
       setLiveUi(true, 'Live paused — reconnecting…');
       await new Promise(r => setTimeout(r, 400));
     } catch (err) {
-      if (!liveWanted || (err && err.name === 'AbortError')) return;
+      if (!liveWanted) return;
       if (err && err.message === 'queue') {
         liveWanted = false;
         setLiveUi(false, 'Live queue is full — tap Listen live to wait again');
@@ -625,12 +714,13 @@ async function startLive(){
 }
 liveBtn.addEventListener('click', () => {
   if (liveWanted || livePlaying) { stopLive(); return; }
+  unlockLiveAudio();
   startLive();
 });
-document.addEventListener('visibilitychange', keepLiveAlive);
-window.addEventListener('pageshow', keepLiveAlive);
-window.addEventListener('focus', keepLiveAlive);
-document.addEventListener('resume', keepLiveAlive);
+document.addEventListener('visibilitychange', () => { if (liveWanted) keepLiveAlive(); });
+window.addEventListener('pageshow', () => { if (liveWanted) keepLiveAlive(); });
+window.addEventListener('focus', () => { if (liveWanted) keepLiveAlive(); });
+document.addEventListener('resume', () => { if (liveWanted) keepLiveAlive(); });
 function esc(t){
   return String(t||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -1279,7 +1369,7 @@ void CaptureWebServer::streamLive(std::uintptr_t clientHandle, bool wavContainer
   const std::uint32_t rate = (hub && hub->sampleRate()) ? hub->sampleRate() : 48000;
   const std::uint16_t streamChannels = (hub && hub->channels() == 2) ? 2 : 1;
   const char* prelude = wavContainer
-      ? "HTTP/1.0 200 OK\r\nContent-Type: audio/wav\r\nCache-Control: no-store, no-cache, must-revalidate\r\nConnection: close\r\nicy-name: FUBAR Live\r\n\r\n"
+      ? "HTTP/1.0 200 OK\r\nContent-Type: audio/wav\r\nCache-Control: no-store, no-cache, no-transform, must-revalidate\r\nPragma: no-cache\r\nX-Accel-Buffering: no\r\nAccept-Ranges: none\r\nConnection: close\r\nicy-name: FUBAR Live\r\n\r\n"
       : "HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store, no-transform\r\nX-Accel-Buffering: no\r\nConnection: close\r\n\r\n";
   if (!sendAll(client, prelude, static_cast<int>(std::strlen(prelude)))) return;
   if (wavContainer) {
