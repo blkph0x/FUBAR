@@ -87,6 +87,7 @@ button.play.playing{ background:var(--blue); }
     <div class="mix" id="liveMix" title="Mono is usually cleaner for WFM on speakers. Stereo is 1:1 left/right.">
       <button type="button" data-mix="mono" class="on">Mono</button>
       <button type="button" data-mix="stereo">Stereo</button>
+      <button type="button" id="radioModeBtn" title="Force the Samsung-style radio player (needed for Chrome notifications)">Phone radio</button>
     </div>
     <div class="level" title="Live level"><span id="liveLevel"></span></div>
   </div>
@@ -207,7 +208,33 @@ function pickStrategy(h){
   return { hold:'silent-wav', unlock:false, avoidSampleRate:false, avoidWorklet:false, silentWav:true, label:'Web Audio' };
 }
 const host = detectHost();
-const strategy = pickStrategy(host);
+let strategy = pickStrategy(host);
+let forceRadio = false;
+try { forceRadio = localStorage.getItem('fubarForceRadio') === '1'; } catch {}
+function applyStrategy(){
+  const next = pickStrategy(host);
+  if (forceRadio) {
+    next.hold = 'media-url';
+    next.unlock = true;
+    next.silentWav = false;
+    next.avoidSampleRate = true;
+    next.avoidWorklet = true;
+    next.label = 'forced radio stream';
+  }
+  strategy = next;
+  const btn = document.getElementById('radioModeBtn');
+  if (btn) btn.classList.toggle('on', forceRadio || strategy.hold === 'media-url');
+}
+applyStrategy();
+if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+  navigator.userAgentData.getHighEntropyValues(['platform']).then((d) => {
+    if (/Android/i.test(d.platform || '')) {
+      host.android = true;
+      if (!host.samsung) host.name = 'Android Chrome';
+      applyStrategy();
+    }
+  }).catch(()=>{});
+}
 function holdEl(){ return strategy.hold === 'video-stream' ? liveVideo : liveMedia; }
 function armHold(el){
   try {
@@ -249,6 +276,22 @@ function bindMediaSession(el, ac){
     navigator.mediaSession.setActionHandler('stop', () => stopLive());
   } catch {}
 }
+function startRadioFromGesture(){
+  const el = liveMedia;
+  showRadioPlayer(true);
+  armHold(el);
+  el.muted = false;
+  el.volume = 1;
+  el.loop = false;
+  el.preload = 'auto';
+  try { el.srcObject = null; } catch {}
+  el.src = 'live.mp3?v=125&t=' + Date.now();
+  bindMediaSession(el, null);
+  document.title = 'FUBAR Live';
+  const playAttempt = el.play();
+  if (playAttempt && playAttempt.catch) playAttempt.catch(()=>{});
+  return el;
+}
 function unlockLiveAudio(){
   try {
     if (AudioCtx && (!liveAc || liveAc.state === 'closed')) {
@@ -256,18 +299,13 @@ function unlockLiveAudio(){
     }
     if (liveAc && liveAc.resume) liveAc.resume();
   } catch {}
+  if (strategy.hold === 'media-url') {
+    startRadioFromGesture();
+    return;
+  }
   const el = holdEl();
   armHold(el);
   try {
-    if (strategy.hold === 'media-url') {
-      showRadioPlayer(true);
-      el.muted = false;
-      el.volume = 1;
-      el.src = SILENT_WAV;
-      el.loop = true;
-      el.play();
-      return;
-    }
     if (!el.srcObject && strategy.unlock) {
       el.src = SILENT_WAV;
       el.loop = true;
@@ -301,6 +339,14 @@ document.getElementById('liveMix').addEventListener('click', e => {
   if (btn) setLiveMix(btn.getAttribute('data-mix'));
 });
 applyMixButtons();
+document.getElementById('radioModeBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  forceRadio = !forceRadio;
+  try { localStorage.setItem('fubarForceRadio', forceRadio ? '1' : '0'); } catch {}
+  applyStrategy();
+  if (livePlaying) setLiveUi(true, livePlayingText());
+});
 function queueLabel(status){
   const limit = Math.max(1, Number(status && status.listenerLimit) || 5);
   const n = Number(status && status.listeners) || 0;
@@ -659,7 +705,9 @@ async function playLiveWavUrl(){
   el.volume = 1;
   el.loop = false;
   el.preload = 'auto';
-  el.src = 'live.mp3?v=124&t=' + Date.now();
+  if (!/live\.mp3/i.test(el.currentSrc || el.src || '')) {
+    el.src = 'live.mp3?v=125&t=' + Date.now();
+  }
   bindMediaSession(el, null);
   document.title = 'FUBAR Live';
   startMeter();
@@ -667,7 +715,7 @@ async function playLiveWavUrl(){
   try {
     navigator.mediaSession.setPositionState({duration: 86400, playbackRate: 1, position: 0});
   } catch {}
-  await el.play();
+  try { await el.play(); } catch { await el.play(); }
   await new Promise((resolve, reject) => {
     const done = (err) => {
       el.onended = null;
@@ -820,7 +868,8 @@ async function startLive(){
 }
 liveBtn.addEventListener('click', () => {
   if (liveWanted || livePlaying) { stopLive(); return; }
-  if (strategy.unlock) unlockLiveAudio();
+  if (strategy.hold === 'media-url') startRadioFromGesture();
+  else if (strategy.unlock) unlockLiveAudio();
   startLive();
 });
 document.addEventListener('visibilitychange', () => { if (liveWanted) keepLiveAlive(); });

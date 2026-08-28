@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.25
+
+- Samsung Internet already treated live as a real radio stream; Chrome did not if
+  it first played a silent WAV or thought the phone was a desktop. Listen live on
+  Chrome now starts the MP3 radio stream on the tap (same path Samsung uses).
+  **Phone radio** forces that mode if Chrome still mis-detects.
+
 ## 1.1.24
 
 - Android Chrome was still pausing after a few seconds with no status-bar player.
