@@ -88,15 +88,17 @@ play saved WAV clips. Several people can listen at the same time. When the live 
 (default 5, change it in **Tools → Settings**), new visitors wait in a queue until a slot frees.
 Live audio is **16-bit PCM at the capture sample rate** (1:1, the same idea as KiwiSDR). That is
 required for SSTV, POCSAG, weather-fax and other digital modes — MP3 would destroy them. Tap
-**Listen live**. A ~1 second jitter buffer keeps WFM and voice continuous (no gargle from
-underruns). Live defaults to **Mono** so WFM is clean on phone and PC speakers; tap **Stereo**
-for 1:1 left/right. A 15 kHz FM low-pass turns on for WFM (and similar wide analog audio) and
-turns itself off for mic, P25 and digital modes. On a phone the page takes a screen wake lock so
-listening is not killed when the display would sleep. Set **Live listen boost** to 0 dB for
-digital modes. If the stream still drops, the page reconnects. If you listen on the same PC that
-is running FUBAR, mute the app’s local monitor or you will hear both — that delayed double can
-sound like a vibration. For WFM, the SDR IF bandwidth needs to be wide enough (around 200–250 kHz);
-a too-narrow filter will still sound rough no matter how FUBAR plays it.
+**Listen live**. A ~1 second jitter buffer keeps audio continuous. FUBAR does **not**
+low-pass, de-emphasize, or resample the capture — AM, NFM, WFM, and digital modes are
+streamed 1:1 as the SDR (or mic) already produced them. Live defaults to **Mono** so
+both speakers play the same mix; tap **Stereo** for true left/right. On a phone the page
+takes a screen wake lock so listening is not killed when the display would sleep. Set
+**Live listen boost** to 0 dB for digital modes. If a VB-CABLE input is not 44.1/48 kHz
+stereo, the admin status bar warns you to fix it in VB-Audio Control Panel. If the
+stream still drops, the page reconnects. If you listen on the same PC that is running
+FUBAR, mute the app’s local monitor or you will hear both. WFM still needs a wide SDR
+IF bandwidth (around 200–250 kHz); a too-narrow filter will sound rough no matter how
+FUBAR plays it.
 
 ### Public Server network
 

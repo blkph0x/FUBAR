@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.19
+
+- Live listen no longer guesses FM or applies a 15 kHz low-pass. The SDR already
+  filters AM/NFM/WFM; FUBAR streams what it gets, 1:1, with no extra EQ.
+- Capture no longer downsamples high-rate VB-CABLE to 48 kHz.
+- If a virtual cable is not 44.1/48 kHz stereo (for example 96 kHz or 7.1), the
+  admin banner warns to fix it in VB-Audio Control Panel.
+
 ## 1.1.18
 
 - The website can use a port other than 80. From a terminal:

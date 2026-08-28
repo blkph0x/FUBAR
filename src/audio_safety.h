@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cwctype>
 #include <string>
 
@@ -31,6 +32,18 @@ inline bool isVirtualAudioEndpoint(const std::wstring& name) {
   return normalized.find(L"vb-audio") != std::wstring::npos ||
          normalized.find(L"voicemeeter") != std::wstring::npos ||
          normalized.find(L"virtual cable") != std::wstring::npos;
+}
+
+inline std::wstring virtualCableFormatWarning(const std::wstring& captureName,
+                                              std::uint32_t sampleRate,
+                                              std::uint16_t channels) {
+  if (!isVirtualAudioEndpoint(captureName)) return {};
+  const bool oddRate = sampleRate != 44100 && sampleRate != 48000;
+  const bool oddCh = channels > 2;
+  if (!oddRate && !oddCh) return {};
+  return L"LISTENING - CABLE WARNING: " + std::to_wstring(sampleRate) + L" Hz, " +
+         std::to_wstring(channels) +
+         L" ch. FUBAR streams 1:1 (no resample, no LPF). Set VB-Audio Control Panel to 48000 Hz stereo.";
 }
 
 inline bool isVirtualCableMonitorLoop(const std::wstring& captureName,

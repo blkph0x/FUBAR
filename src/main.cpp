@@ -73,7 +73,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.18 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.19 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -123,6 +123,11 @@ int runSelfTest() {
       isVirtualCableMonitorLoop(L"Microphone (USB Audio)", L"Speakers (USB Audio)") ||
       !isVirtualAudioEndpoint(L"CABLE Output (VB-Audio Virtual Cable)") ||
       isVirtualAudioEndpoint(L"Microphone (USB Audio)") ||
+      virtualCableFormatWarning(L"CABLE Output (VB-Audio Virtual Cable)", 48000, 2) != L"" ||
+      virtualCableFormatWarning(L"Microphone (USB Audio)", 192000, 8) != L"" ||
+      virtualCableFormatWarning(L"CABLE Output (VB-Audio Virtual Cable)", 192000, 8).find(
+          L"CABLE WARNING") == std::wstring::npos ||
+      virtualCableFormatWarning(L"CABLE Output (VB-Audio Virtual Cable)", 44100, 2) != L"" ||
       sanitizeAudioSample(INFINITY) != 0.0f || sanitizeAudioSample(NAN) != 0.0f ||
       sanitizeAudioSample(2.0) != 1.0f || sanitizeAudioSample(-2.0) != -1.0f) {
     std::wcerr << L"Self-test failed: virtual-cable safety error\n";

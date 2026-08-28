@@ -12,13 +12,6 @@
 #include <mmsystem.h>
 #include <propvarutil.h>
 
-#ifndef AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
-#define AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM 0x80000000
-#endif
-#ifndef AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY
-#define AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY 0x08000000
-#endif
-
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -586,41 +579,18 @@ void AudioEngine::captureThread() {
     return;
   }
 
-  const DWORD nativeRate = mixFormat->nSamplesPerSec;
-  DWORD streamFlags = AUDCLNT_STREAMFLAGS_NOPERSIST;
-  if (nativeRate > 48000 && mixFormat->nBlockAlign) {
-    mixFormat->nSamplesPerSec = 48000;
-    mixFormat->nAvgBytesPerSec = 48000u * mixFormat->nBlockAlign;
-    result = client->Initialize(
-        AUDCLNT_SHAREMODE_SHARED,
-        streamFlags | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM |
-            AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
-        10000000, 0, mixFormat, nullptr);
-    if (FAILED(result)) {
-      mixFormat->nSamplesPerSec = nativeRate;
-      mixFormat->nAvgBytesPerSec = nativeRate * mixFormat->nBlockAlign;
-      client.reset();
-      result = device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
-                                reinterpret_cast<void**>(client.put()));
-      if (SUCCEEDED(result)) {
-        result = client->Initialize(AUDCLNT_SHAREMODE_SHARED, streamFlags, 10000000, 0,
-                                    mixFormat, nullptr);
-      }
-    }
-  } else {
-    result = client->Initialize(AUDCLNT_SHAREMODE_SHARED, streamFlags, 10000000, 0,
-                                mixFormat, nullptr);
-  }
-  if (FAILED(result)) {
-    setStatus(hresultText(L"Starting shared audio capture", result));
+  const SampleDecoder decoder(mixFormat);
+  if (!decoder.valid()) {
+    setStatus(L"Unsupported input format: " + decoder.description());
     CoTaskMemFree(mixFormat);
     if (uninitialize) CoUninitialize();
     return;
   }
 
-  const SampleDecoder decoder(mixFormat);
-  if (!decoder.valid()) {
-    setStatus(L"Unsupported input format: " + decoder.description());
+  result = client->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_NOPERSIST,
+                              10000000, 0, mixFormat, nullptr);
+  if (FAILED(result)) {
+    setStatus(hresultText(L"Starting shared audio capture", result));
     CoTaskMemFree(mixFormat);
     if (uninitialize) CoUninitialize();
     return;
@@ -668,6 +638,11 @@ void AudioEngine::captureThread() {
     monitorEnabled = false;
     monitorWarning = L"LISTENING - live monitor unavailable for this output format";
   }
+  const std::wstring cableWarning =
+      virtualCableFormatWarning(captureName, sampleRate, inputChannels);
+  const std::wstring idleStatus =
+      !cableWarning.empty() ? cableWarning
+                            : (monitorWarning.empty() ? L"Listening" : monitorWarning);
 
   std::deque<std::int16_t> preRoll;
   WavWriter writer;
@@ -745,7 +720,7 @@ void AudioEngine::captureThread() {
     if (rightWriter.isOpen()) rightWriter.close();
     currentEntry.durationSeconds = static_cast<double>(recordingFrames) / sampleRate;
     recording_ = false;
-    setStatus(L"Listening");
+    setStatus(idleStatus);
     if (replayCallback_) {
       if (splitStereo) {
         currentEntry.mode = ChannelMode::Left;
@@ -777,13 +752,8 @@ void AudioEngine::captureThread() {
 
   running_ = true;
   liveHub_.beginSession(sampleRate, recordChannels);
-  if (nativeRate != sampleRate) {
-    setStatus(L"Input format: " + decoder.description() + L" (Windows resampled from " +
-              std::to_wstring(nativeRate) + L" Hz)");
-  } else {
-    setStatus(L"Input format: " + decoder.description());
-  }
-  setStatus(monitorWarning.empty() ? L"Listening" : monitorWarning);
+  setStatus(L"Input format: " + decoder.description());
+  setStatus(idleStatus);
   if (options_.forceRecord && beginRecording()) voxGate.activate();
 
   while (!stopRequested_) {
