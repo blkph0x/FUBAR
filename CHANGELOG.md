@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.22
+
+- Live picks a keep-alive per device/browser, still 1:1 PCM: iPhone uses a hidden
+  video element, Android Chrome a hidden audio element, Firefox Web Audio, desktop
+  a silent hold. The live line shows which method is active.
+
 ## 1.1.21
 
 - Live is 1:1 PCM again on every device (phones included). The phone WAV player is

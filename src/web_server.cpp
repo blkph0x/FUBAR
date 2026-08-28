@@ -100,6 +100,7 @@ button.play.playing{ background:var(--blue); }
   <div class="meta" id="now" style="margin-bottom:6px">Nothing playing</div>
   <audio id="audio" controls preload="none"></audio>
   <audio id="liveMedia" playsinline webkit-playsinline style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></audio>
+  <video id="liveVideo" playsinline webkit-playsinline style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></video>
 </div>
 <script>
 const audio = document.getElementById('audio');
@@ -157,6 +158,7 @@ const liveBtn = document.getElementById('liveBtn');
 const liveHint = document.getElementById('liveHint');
 const liveLevel = document.getElementById('liveLevel');
 const liveMedia = document.getElementById('liveMedia');
+const liveVideo = document.getElementById('liveVideo');
 let livePlaying = false;
 let liveWanted = false;
 let liveAbort = null;
@@ -170,10 +172,53 @@ let liveMix = 'mono';
 let liveRate = 0;
 let liveCh = 1;
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
-const isiOS = /iP(hone|od|ad)/.test(navigator.userAgent) ||
-  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const isAndroid = /Android/i.test(navigator.userAgent);
-const isPhone = isiOS || isAndroid;
+const SILENT_WAV = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+function detectHost(){
+  const ua = navigator.userAgent || '';
+  const iOS = /iP(hone|od|ad)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const android = /Android/i.test(ua);
+  const firefox = /Firefox|FxiOS/i.test(ua);
+  const samsung = /SamsungBrowser/i.test(ua);
+  const chrome = /Chrome|CriOS|Chromium/i.test(ua) && !firefox && !samsung;
+  const safari = /Safari/i.test(ua) && !/Chrome|CriOS|Chromium|FxiOS|EdgiOS|OPiOS|Android/i.test(ua);
+  let name = 'Browser';
+  if (iOS && firefox) name = 'iOS Firefox';
+  else if (iOS && chrome) name = 'iOS Chrome';
+  else if (iOS) name = 'iPhone Safari';
+  else if (android && firefox) name = 'Android Firefox';
+  else if (android && samsung) name = 'Samsung Internet';
+  else if (android) name = 'Android Chrome';
+  else if (firefox) name = 'Firefox';
+  else if (safari) name = 'Safari';
+  else if (chrome) name = 'Chrome';
+  return { iOS, android, firefox, samsung, chrome, safari, mobile: iOS || android, name };
+}
+function pickStrategy(h){
+  if (h.iOS) return { hold:'video-stream', unlock:true, avoidSampleRate:true, avoidWorklet:true, silentWav:false, label:'hidden video hold' };
+  if (h.android && h.firefox) return { hold:'webaudio', unlock:true, avoidSampleRate:false, avoidWorklet:false, silentWav:false, label:'Web Audio' };
+  if (h.android) return { hold:'audio-stream', unlock:true, avoidSampleRate:false, avoidWorklet:false, silentWav:false, label:'hidden audio hold' };
+  return { hold:'silent-wav', unlock:false, avoidSampleRate:false, avoidWorklet:false, silentWav:true, label:'Web Audio' };
+}
+const host = detectHost();
+const strategy = pickStrategy(host);
+function holdEl(){ return strategy.hold === 'video-stream' ? liveVideo : liveMedia; }
+function armHold(el){
+  try {
+    el.muted = strategy.silentWav;
+    el.volume = strategy.silentWav ? 0 : 1;
+    el.playsInline = true;
+    el.setAttribute('playsinline', '');
+    el.setAttribute('webkit-playsinline', '');
+  } catch {}
+}
+function resetHold(el){
+  try {
+    el.pause();
+    el.srcObject = null;
+    el.removeAttribute('src');
+    el.load();
+  } catch {}
+}
 function unlockLiveAudio(){
   try {
     if (AudioCtx && (!liveAc || liveAc.state === 'closed')) {
@@ -181,12 +226,14 @@ function unlockLiveAudio(){
     }
     if (liveAc && liveAc.resume) liveAc.resume();
   } catch {}
+  const el = holdEl();
+  armHold(el);
   try {
-    liveMedia.muted = false;
-    liveMedia.volume = 1;
-    liveMedia.playsInline = true;
-    liveMedia.setAttribute('playsinline', '');
-    liveMedia.setAttribute('webkit-playsinline', '');
+    if (!el.srcObject && strategy.unlock) {
+      el.src = SILENT_WAV;
+      el.loop = true;
+      el.play();
+    }
   } catch {}
 }
 try { liveMix = localStorage.getItem('fubarLiveMix') === 'stereo' ? 'stereo' : 'mono'; } catch {}
@@ -197,7 +244,8 @@ function applyMixButtons(){
 }
 function livePlayingText(){
   return 'Live · ' + liveRate + ' Hz 16-bit PCM' + (liveCh>1?' stereo':'') +
-    ' · 1:1 · ~1s · ' + (liveMix==='stereo'?'stereo speakers':'mono to both speakers');
+    ' · 1:1 · ~1s · ' + (liveMix==='stereo'?'stereo speakers':'mono to both speakers') +
+    ' · ' + host.name + ' · ' + strategy.label;
 }
 function setLiveMix(mode){
   liveMix = mode === 'stereo' ? 'stereo' : 'mono';
@@ -211,7 +259,6 @@ document.getElementById('liveMix').addEventListener('click', e => {
   if (btn) setLiveMix(btn.getAttribute('data-mix'));
 });
 applyMixButtons();
-const SILENT_WAV = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
 function queueLabel(status){
   const limit = Math.max(1, Number(status && status.listenerLimit) || 5);
   const n = Number(status && status.listeners) || 0;
@@ -255,12 +302,8 @@ function stopLive(){
   livePlaying = false;
   if (liveAbort) { liveAbort.abort(); liveAbort = null; }
   closeLiveAudio();
-  try {
-    liveMedia.pause();
-    liveMedia.srcObject = null;
-    liveMedia.removeAttribute('src');
-    liveMedia.load();
-  } catch {}
+  resetHold(liveMedia);
+  resetHold(liveVideo);
   try { if (liveWake) liveWake.release(); } catch {}
   liveWake = null;
   try { if (navigator.mediaSession) navigator.mediaSession.playbackState = 'none'; } catch {}
@@ -270,12 +313,9 @@ async function keepLiveAlive(){
   if (!liveWanted) return;
   try { if (liveAc && liveAc.state !== 'running') await liveAc.resume(); } catch {}
   try {
-    liveMedia.playsInline = true;
-    if (isPhone) {
-      liveMedia.muted = false;
-      liveMedia.volume = 1;
-      if (liveMedia.paused) await liveMedia.play();
-    } else {
+    const el = holdEl();
+    armHold(el);
+    if (strategy.silentWav) {
       liveMedia.muted = true;
       liveMedia.volume = 0;
       if (liveMedia.paused && !liveMedia.srcObject) {
@@ -283,7 +323,12 @@ async function keepLiveAlive(){
         liveMedia.loop = true;
         await liveMedia.play();
       }
+    } else if (el.paused) {
+      await el.play();
     }
+  } catch {}
+  try {
+    if (navigator.audioSession) navigator.audioSession.type = 'playback';
   } catch {}
   try {
     if (navigator.wakeLock && document.visibilityState === 'visible') {
@@ -357,15 +402,16 @@ function writeSpeakers(outs, i, left, right, mix){
 function connectLiveOut(ac, node){
   try { if (liveStreamDest) liveStreamDest.disconnect(); } catch {}
   liveStreamDest = null;
-  if (isPhone && ac.createMediaStreamDestination) {
+  if ((strategy.hold === 'audio-stream' || strategy.hold === 'video-stream') &&
+      ac.createMediaStreamDestination) {
     liveStreamDest = ac.createMediaStreamDestination();
     node.connect(liveStreamDest);
+    const el = holdEl();
+    armHold(el);
     try {
-      liveMedia.srcObject = liveStreamDest.stream;
-      liveMedia.muted = false;
-      liveMedia.volume = 1;
-      liveMedia.loop = false;
-      liveMedia.play().catch(() => node.connect(ac.destination));
+      el.srcObject = liveStreamDest.stream;
+      el.loop = false;
+      el.play().catch(() => node.connect(ac.destination));
     } catch {
       node.connect(ac.destination);
     }
@@ -565,7 +611,7 @@ async function playLiveSession(){
   liveNode = null;
   liveAbort = new AbortController();
   if (navigator.audioSession) { try { navigator.audioSession.type = 'playback'; } catch {} }
-  if (!isPhone) {
+  if (strategy.silentWav) {
     liveMedia.muted = true;
     liveMedia.volume = 0;
     liveMedia.loop = true;
@@ -573,7 +619,7 @@ async function playLiveSession(){
     try { await liveMedia.play(); } catch {}
   }
   await keepLiveAlive();
-  const res = await fetch('live.pcm?v=121&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
+  const res = await fetch('live.pcm?v=122&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
   if (!res.ok || !res.body) {
     if (res.status === 503) throw new Error('queue');
     throw new Error('live unavailable');
@@ -604,7 +650,7 @@ async function playLiveSession(){
   const channels = Math.max(1, view.getUint16(12, true) || 1);
   let ac = (liveAc && liveAc.state !== 'closed') ? liveAc : null;
   if (!ac) {
-    if (isiOS) {
+    if (strategy.avoidSampleRate) {
       try { ac = new AudioCtx({latencyHint:'playback'}); }
       catch { ac = new AudioCtx(); }
     } else {
@@ -616,7 +662,7 @@ async function playLiveSession(){
   await ac.resume();
   let tap;
   try {
-    if (!isiOS && ac.audioWorklet) tap = await attachWorkletRing(ac, channels);
+    if (!strategy.avoidWorklet && ac.audioWorklet) tap = await attachWorkletRing(ac, channels);
     else tap = attachScriptRing(ac, channels);
   } catch {
     tap = attachScriptRing(ac, channels);
@@ -631,12 +677,12 @@ async function playLiveSession(){
       navigator.mediaSession.metadata = new MediaMetadata({title:'FUBAR Live', artist:'FUBAR'});
       navigator.mediaSession.playbackState = 'playing';
       navigator.mediaSession.setActionHandler('pause', () => {
-        try { liveMedia.pause(); } catch {}
+        try { holdEl().pause(); } catch {}
         try { ac.suspend(); } catch {}
       });
       navigator.mediaSession.setActionHandler('play', () => {
         try { ac.resume(); } catch {}
-        try { liveMedia.play(); } catch {}
+        try { holdEl().play(); } catch {}
       });
       navigator.mediaSession.setActionHandler('stop', () => stopLive());
     } catch {}
@@ -690,7 +736,7 @@ async function startLive(){
 }
 liveBtn.addEventListener('click', () => {
   if (liveWanted || livePlaying) { stopLive(); return; }
-  unlockLiveAudio();
+  if (strategy.unlock) unlockLiveAudio();
   startLive();
 });
 document.addEventListener('visibilitychange', () => { if (liveWanted) keepLiveAlive(); });
