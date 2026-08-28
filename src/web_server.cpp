@@ -176,12 +176,18 @@ const AudioCtx = window.AudioContext || window.webkitAudioContext;
 const SILENT_WAV = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
 function detectHost(){
   const ua = navigator.userAgent || '';
+  const ch = navigator.userAgentData;
+  const platform = (ch && ch.platform) || '';
+  const mobileCH = !!(ch && ch.mobile);
   const iOS = /iP(hone|od|ad)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const android = /Android/i.test(ua);
   const firefox = /Firefox|FxiOS/i.test(ua);
   const samsung = /SamsungBrowser/i.test(ua);
-  const chrome = /Chrome|CriOS|Chromium/i.test(ua) && !firefox && !samsung;
+  const chrome = /Chrome|CriOS|Chromium|EdgA|Edg\//i.test(ua) && !firefox;
   const safari = /Safari/i.test(ua) && !/Chrome|CriOS|Chromium|FxiOS|EdgiOS|OPiOS|Android/i.test(ua);
+  const coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+  const touch = (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
+  const android = /Android/i.test(ua) || /Android/i.test(platform) ||
+    (!iOS && chrome && (mobileCH || /Mobile/i.test(ua) || (coarse && touch)));
   let name = 'Browser';
   if (iOS && firefox) name = 'iOS Firefox';
   else if (iOS && chrome) name = 'iOS Chrome';
@@ -197,7 +203,7 @@ function detectHost(){
 function pickStrategy(h){
   if (h.iOS) return { hold:'video-stream', unlock:true, avoidSampleRate:true, avoidWorklet:true, silentWav:false, label:'hidden video hold' };
   if (h.android && h.firefox) return { hold:'webaudio', unlock:true, avoidSampleRate:false, avoidWorklet:false, silentWav:false, label:'Web Audio' };
-  if (h.android) return { hold:'media-url', unlock:true, avoidSampleRate:true, avoidWorklet:true, silentWav:false, label:'notification player' };
+  if (h.android) return { hold:'media-url', unlock:true, avoidSampleRate:true, avoidWorklet:true, silentWav:false, label:'Android radio stream' };
   return { hold:'silent-wav', unlock:false, avoidSampleRate:false, avoidWorklet:false, silentWav:true, label:'Web Audio' };
 }
 const host = detectHost();
@@ -278,7 +284,7 @@ function applyMixButtons(){
 function livePlayingText(){
   const fmt = liveRate
     ? (liveRate + ' Hz 16-bit PCM' + (liveCh>1?' stereo':''))
-    : '16-bit PCM WAV';
+    : (strategy.hold === 'media-url' ? 'MP3 radio (PCM 1:1 is PC-only; Android needs this to stay playing)' : '16-bit PCM');
   return 'Live · ' + fmt +
     ' · 1:1 · ' + (liveMix==='stereo'?'stereo speakers':'mono to both speakers') +
     ' · ' + host.name + ' · ' + strategy.label;
@@ -653,11 +659,14 @@ async function playLiveWavUrl(){
   el.volume = 1;
   el.loop = false;
   el.preload = 'auto';
-  el.src = 'live.wav?v=123&t=' + Date.now();
+  el.src = 'live.mp3?v=124&t=' + Date.now();
   bindMediaSession(el, null);
   document.title = 'FUBAR Live';
   startMeter();
   setLiveUi(true, livePlayingText());
+  try {
+    navigator.mediaSession.setPositionState({duration: 86400, playbackRate: 1, position: 0});
+  } catch {}
   await el.play();
   await new Promise((resolve, reject) => {
     const done = (err) => {
@@ -1552,8 +1561,11 @@ void CaptureWebServer::streamLiveMp3(std::uintptr_t clientHandle) {
   LiveMp3Encoder encoder;
   if (!encoder.open(rate, streamChannels)) return;
   const char prelude[] =
-      "HTTP/1.0 200 OK\r\nContent-Type: audio/mpeg\r\nCache-Control: no-store\r\n"
-      "Connection: close\r\nicy-name: FUBAR Live\r\nicy-br: 192\r\n\r\n";
+      "HTTP/1.0 200 OK\r\nContent-Type: audio/mpeg\r\n"
+      "Cache-Control: no-store, no-cache, no-transform, must-revalidate\r\n"
+      "Pragma: no-cache\r\nX-Accel-Buffering: no\r\nAccept-Ranges: none\r\n"
+      "Connection: close\r\n"
+      "icy-name: FUBAR Live\r\nicy-genre: Radio\r\nicy-pub: 1\r\nicy-br: 128\r\n\r\n";
   if (!sendAll(client, prelude, static_cast<int>(std::strlen(prelude)))) return;
 
   LiveAudioHub::Cursor cursor;
@@ -1563,6 +1575,16 @@ void CaptureWebServer::streamLiveMp3(std::uintptr_t clientHandle) {
   int emptyPulls = 0;
   const std::size_t silenceFrames = static_cast<std::size_t>(encoder.samplesPerPass());
   std::vector<std::int16_t> silence(silenceFrames * streamChannels, 0);
+  {
+    std::vector<std::uint8_t> prime;
+    encoder.encodeInterleaved(silence.data(), silence.size(), &prime);
+    encoder.encodeInterleaved(silence.data(), silence.size(), &prime);
+    if (!prime.empty() &&
+        !sendAll(client, reinterpret_cast<const char*>(prime.data()),
+                 static_cast<int>(prime.size()))) {
+      return;
+    }
+  }
   while (!stop_) {
     if (!hub) {
       Sleep(20);

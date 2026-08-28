@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.24
+
+- Android Chrome was still pausing after a few seconds with no status-bar player.
+  Chrome only keeps background audio (and the notification icon) for a real radio
+  stream the phone can decode. Android Chrome now uses the MP3 live stream for that;
+  PC stays 1:1 PCM. Also detects “desktop site” Android Chrome.
+
 ## 1.1.23
 
 - Android Chrome uses a real media player on 1:1 PCM WAV so the status-bar icon
