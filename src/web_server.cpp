@@ -48,6 +48,7 @@ h1{ margin:.2rem 0; font-size:clamp(2.2rem,7vw,4.4rem); letter-spacing:.04em; }
 .mix{ display:flex; gap:6px; }
 .mix button{ border:1px solid var(--line); background:#0c100c; color:var(--ink); border-radius:999px; padding:7px 12px; font-weight:700; cursor:pointer; }
 .mix button.on{ background:var(--green); color:#111; border-color:var(--green); }
+#liveMedia.radio{ position:static; width:min(100%,420px); height:40px; opacity:1; pointer-events:auto; flex:1 1 240px; }
 .level{ width:160px; height:8px; background:#1a2218; border-radius:99px; overflow:hidden; }
 .level > span{ display:block; height:100%; width:0; background:var(--green); }
 .dot{ width:9px; height:9px; border-radius:50%; background:var(--muted); }
@@ -196,7 +197,7 @@ function detectHost(){
 function pickStrategy(h){
   if (h.iOS) return { hold:'video-stream', unlock:true, avoidSampleRate:true, avoidWorklet:true, silentWav:false, label:'hidden video hold' };
   if (h.android && h.firefox) return { hold:'webaudio', unlock:true, avoidSampleRate:false, avoidWorklet:false, silentWav:false, label:'Web Audio' };
-  if (h.android) return { hold:'audio-stream', unlock:true, avoidSampleRate:false, avoidWorklet:false, silentWav:false, label:'hidden audio hold' };
+  if (h.android) return { hold:'media-url', unlock:true, avoidSampleRate:true, avoidWorklet:true, silentWav:false, label:'notification player' };
   return { hold:'silent-wav', unlock:false, avoidSampleRate:false, avoidWorklet:false, silentWav:true, label:'Web Audio' };
 }
 const host = detectHost();
@@ -219,6 +220,29 @@ function resetHold(el){
     el.load();
   } catch {}
 }
+function showRadioPlayer(on){
+  liveMedia.classList.toggle('radio', !!on);
+  liveMedia.controls = !!on;
+  if (!on) liveMedia.removeAttribute('controls');
+}
+function bindMediaSession(el, ac){
+  if (!navigator.mediaSession) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: 'FUBAR Live',
+      artist: 'FUBAR',
+      album: 'Listen live',
+      artwork: [{src:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAVUlEQVR4nO3SMQEAIAwDsZ3/p7N5gAQkmTt3S5K0/wMwM8/cPQGYmQEwMwNgZgbAzAyAmRkAMzMAZmYAzMwAmJkBMDMDYGYGwMwMgJkZADMzAGZmAMzMAJiZAfhpC+sDEp6nH5sAAAAASUVORK5CYII=', sizes:'64x64', type:'image/png'}]
+    });
+    navigator.mediaSession.playbackState = 'playing';
+    navigator.mediaSession.setActionHandler('play', () => {
+      try { if (ac) ac.resume(); } catch {}
+      try { el.play(); } catch {}
+    });
+    navigator.mediaSession.setActionHandler('pause', () => { try { el.pause(); } catch {} });
+    navigator.mediaSession.setActionHandler('stop', () => stopLive());
+  } catch {}
+}
 function unlockLiveAudio(){
   try {
     if (AudioCtx && (!liveAc || liveAc.state === 'closed')) {
@@ -229,6 +253,15 @@ function unlockLiveAudio(){
   const el = holdEl();
   armHold(el);
   try {
+    if (strategy.hold === 'media-url') {
+      showRadioPlayer(true);
+      el.muted = false;
+      el.volume = 1;
+      el.src = SILENT_WAV;
+      el.loop = true;
+      el.play();
+      return;
+    }
     if (!el.srcObject && strategy.unlock) {
       el.src = SILENT_WAV;
       el.loop = true;
@@ -243,8 +276,11 @@ function applyMixButtons(){
   });
 }
 function livePlayingText(){
-  return 'Live · ' + liveRate + ' Hz 16-bit PCM' + (liveCh>1?' stereo':'') +
-    ' · 1:1 · ~1s · ' + (liveMix==='stereo'?'stereo speakers':'mono to both speakers') +
+  const fmt = liveRate
+    ? (liveRate + ' Hz 16-bit PCM' + (liveCh>1?' stereo':''))
+    : '16-bit PCM WAV';
+  return 'Live · ' + fmt +
+    ' · 1:1 · ' + (liveMix==='stereo'?'stereo speakers':'mono to both speakers') +
     ' · ' + host.name + ' · ' + strategy.label;
 }
 function setLiveMix(mode){
@@ -302,8 +338,10 @@ function stopLive(){
   livePlaying = false;
   if (liveAbort) { liveAbort.abort(); liveAbort = null; }
   closeLiveAudio();
+  showRadioPlayer(false);
   resetHold(liveMedia);
   resetHold(liveVideo);
+  try { document.title = 'FUBAR Captures'; } catch {}
   try { if (liveWake) liveWake.release(); } catch {}
   liveWake = null;
   try { if (navigator.mediaSession) navigator.mediaSession.playbackState = 'none'; } catch {}
@@ -605,12 +643,49 @@ async function attachWorkletRing(ac, channels){
     }
   };
 }
+async function playLiveWavUrl(){
+  liveAbort = new AbortController();
+  if (navigator.audioSession) { try { navigator.audioSession.type = 'playback'; } catch {} }
+  const el = liveMedia;
+  showRadioPlayer(true);
+  armHold(el);
+  el.muted = false;
+  el.volume = 1;
+  el.loop = false;
+  el.preload = 'auto';
+  el.src = 'live.wav?v=123&t=' + Date.now();
+  bindMediaSession(el, null);
+  document.title = 'FUBAR Live';
+  startMeter();
+  setLiveUi(true, livePlayingText());
+  await el.play();
+  await new Promise((resolve, reject) => {
+    const done = (err) => {
+      el.onended = null;
+      el.onerror = null;
+      clearInterval(tick);
+      if (err) reject(err); else resolve();
+    };
+    el.onended = () => done(new Error('live ended'));
+    el.onerror = () => done(new Error('live media error'));
+    const tick = setInterval(() => {
+      if (!liveWanted) { done(); return; }
+      if (el.paused && document.visibilityState === 'hidden') el.play().catch(()=>{});
+      if (!el.paused) livePeak = Math.max(livePeak, 0.28);
+      try { navigator.mediaSession.playbackState = el.paused ? 'paused' : 'playing'; } catch {}
+    }, 1000);
+  });
+}
 async function playLiveSession(){
   audio.pause();
   try { if (liveNode) liveNode.disconnect(); } catch {}
   liveNode = null;
   liveAbort = new AbortController();
   if (navigator.audioSession) { try { navigator.audioSession.type = 'playback'; } catch {} }
+  if (strategy.hold === 'media-url') {
+    await playLiveWavUrl();
+    return;
+  }
   if (strategy.silentWav) {
     liveMedia.muted = true;
     liveMedia.volume = 0;

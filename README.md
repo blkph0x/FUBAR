@@ -92,9 +92,9 @@ required for SSTV, POCSAG, weather-fax and other digital modes — MP3 would des
 low-pass, de-emphasize, or resample the capture — AM, NFM, WFM, and digital modes are
 streamed 1:1 as the SDR (or mic) already produced them. Live defaults to **Mono** so
 both speakers play the same mix; tap **Stereo** for true left/right. Live is always the
-capture PCM (1:1). The page detects the browser and uses a hidden hold element matched
-to that device (video on iPhone, audio on Android Chrome) so the stream can stay up when
-the app is backgrounded. A screen wake lock is still taken while the page is in front. Set
+capture PCM (1:1). The page detects the browser and uses the keep-alive that device allows: Android Chrome
+plays 1:1 PCM as a WAV media player (status-bar icon and pull-down controls), iPhone uses
+a hidden video hold, desktop uses Web Audio. A screen wake lock is still taken while the page is in front. Set
 **Live listen boost** to 0 dB for digital modes. If a VB-CABLE input is not 44.1/48 kHz
 stereo, the admin status bar warns you to fix it in VB-Audio Control Panel. If the
 stream still drops, the page reconnects. If you listen on the same PC that is running

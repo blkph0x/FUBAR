@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.23
+
+- Android Chrome uses a real media player on 1:1 PCM WAV so the status-bar icon
+  and pull-down controls appear, and the stream keeps playing when you switch apps.
+  Web Audio is what Chrome was pausing after a few seconds in the background.
+
 ## 1.1.22
 
 - Live picks a keep-alive per device/browser, still 1:1 PCM: iPhone uses a hidden
