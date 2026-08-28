@@ -23,7 +23,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 - Optional continuous recording mode for testing or unattended capture.
 - Separate replay-log window with timestamp, frequency, mode, duration, peak level, playback,
   and Explorer access.
-- Optional public website on port 80 so anyone on the network can listen live and play captures.
+- Optional public website (default port 80, or `--port N`) so anyone on the network can listen live and play captures.
 - Tools → Settings caps simultaneous live listeners (default 5); extra visitors wait in a queue.
 - Tools → Manage recordings deletes selected clips or anything older than a chosen number of days.
 - Live listen boost, frequency in file names, and remembered device/VOX settings for SDR + VB-CABLE.
@@ -68,8 +68,9 @@ silence for two seconds, FUBAR tries the next physical input automatically.
 8. Device, route, and checkbox changes apply immediately. Click **Apply / Restart** after editing
    threshold, timing, frequency, or output-folder values.
 9. Open **Replay log** to play completed files or locate them in Explorer.
-10. Tick **Public website on port 80** to share the capture log. Use **Open site** for this PC,
-    or visit the LAN address shown next to the checkbox from a phone or another computer.
+10. Tick **Public website** to share the capture log. Default is port 80; change it in
+    **Tools → Settings** or with `--port 8080`. Use **Open site** for this PC, or visit the LAN
+    address shown next to the checkbox from a phone or another computer.
 11. Open **Tools → Settings** to choose how many people can listen live at once (default 5),
     add live listen boost for quiet SDR audio, and auto-delete old recordings.
     Anyone above the live cap waits in a queue until someone stops listening.
@@ -108,13 +109,20 @@ enabled; **Public Server** is only if you want that PC on the list too.
 A silent VB-CABLE input is not swapped for a microphone. Device, threshold, timing, and website
 choices are saved. New WAV names include the radio frequency so SDR hops stay identifiable.
 
-Port 80 is the standard web port, so no extra port number is required. If Windows Firewall
-prompts, allow FUBAR so other devices on the network can connect.
+Port 80 is the default so phones can open `http://<this-pc>/` with no port number. If 80 is
+taken (IIS, Skype, another FUBAR), pick another:
+
+```powershell
+.\FUBAR.exe --cli --headless --web --port 8080
+```
+
+Then visit `http://<this-pc>:8080/`. Ports below 1024 may need “Run as administrator”. If Windows
+Firewall prompts, allow FUBAR so other devices on the network can connect.
 
 Headless:
 
 ```powershell
-.\FUBAR.exe --cli --headless --web --public-server --station-name "Home SDR" --live-listeners 5
+.\FUBAR.exe --cli --headless --web --port 8080 --public-server --station-name "Home SDR" --live-listeners 5
 ```
 
 Use headphones when live monitoring a microphone to avoid acoustic feedback.
@@ -158,6 +166,12 @@ Keep one VOX session open across quiet periods and save stereo channels separate
 ```powershell
 .\FUBAR.exe --cli --headless --mode stereo --append-session --split-stereo `
   --threshold-db -32 --hold 1.5 --output "D:\FUBAR Recordings"
+```
+
+Serve the live site on port 8080 instead of 80:
+
+```powershell
+.\FUBAR.exe --cli --headless --web --port 8080
 ```
 
 Run `FUBAR.exe --cli --help` for every option. A headless run with no duration continues until

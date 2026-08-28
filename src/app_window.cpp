@@ -181,7 +181,8 @@ std::wstring replayLabel(const ReplayEntry& entry) {
 
 }  // namespace
 
-AppWindow::AppWindow(AudioOptions initialOptions) : options_(std::move(initialOptions)) {
+AppWindow::AppWindow(AudioOptions initialOptions, std::uint16_t webPort)
+    : options_(std::move(initialOptions)), cliWebPort_(webPort) {
   autoSelectInput_ = options_.deviceId.empty() && options_.deviceName.empty();
 }
 
@@ -228,7 +229,7 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   RegisterClassExW(&brandClass);
 
   HMENU menu = LoadMenuW(instance_, MAKEINTRESOURCEW(IDR_MAINMENU));
-  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.17", WS_OVERLAPPEDWINDOW,
+  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.18", WS_OVERLAPPEDWINDOW,
                             CW_USEDEFAULT, CW_USEDEFAULT, 780, 830, nullptr, menu, instance_,
                             this);
   if (!window_) return 1;
@@ -275,6 +276,8 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
       recordingStatusBrush_ = CreateSolidBrush(RGB(25, 150, 70));
       createControls();
       loadSettings();
+      if (cliWebPort_) webPort_ = cliWebPort_;
+      refreshWebCheckLabel();
       populateDevices();
       applyOptionsToControls();
       reloadCapturesFromDisk();
@@ -481,7 +484,7 @@ void AppWindow::createControls() {
   addControl(window_, L"BUTTON", L"Open recordings", BS_PUSHBUTTON, 490, 575, 150, 38,
              IdOpenFolder);
   webCheck_ = addControl(window_, L"BUTTON", L"Public website on port 80", BS_AUTOCHECKBOX,
-                         85, 616, 230, 24, IdWeb);
+                         85, 616, 250, 24, IdWeb);
   addControl(window_, L"BUTTON", L"Open site", BS_PUSHBUTTON, 320, 612, 80, 28, IdOpenWeb);
   addControl(window_, L"BUTTON", L"Copy URL", BS_PUSHBUTTON, 405, 612, 80, 28, IdCopyWeb);
   webStatus_ = addControl(window_, L"STATIC", L"Website off", 0, 495, 616, 230, 24);
@@ -494,7 +497,7 @@ void AppWindow::createControls() {
              L"Public Server lists this station at https://gearsqueens.online/fubar-net",
               SS_CENTER, 40, 678, 680, 22);
   addControl(window_, L"STATIC",
-             L"CLI automation: FUBAR.exe --cli --headless --web --public-server",
+             L"CLI: FUBAR.exe --cli --headless --web --port 8080 --public-server",
               SS_CENTER, 40, 704, 680, 22);
 }
 
@@ -839,6 +842,7 @@ void AppWindow::saveSettings() const {
                              std::to_wstring(static_cast<int>(current.thresholdDb)).c_str(),
                              ini.c_str());
   WritePrivateProfileStringW(L"FUBAR", L"WebEnabled", webEnabled_ ? L"1" : L"0", ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"WebPort", std::to_wstring(webPort_).c_str(), ini.c_str());
   WritePrivateProfileStringW(L"FUBAR", L"LiveMaxListeners",
                              std::to_wstring(liveMaxListeners_).c_str(), ini.c_str());
   WritePrivateProfileStringW(L"FUBAR", L"LiveBoostDb",
@@ -901,6 +905,8 @@ void AppWindow::loadSettings() {
     try { options_.thresholdDb = std::stof(buffer); } catch (...) {}
   }
   webEnabled_ = GetPrivateProfileIntW(L"FUBAR", L"WebEnabled", 0, ini.c_str()) != 0;
+  webPort_ = CaptureWebServer::clampPort(
+      GetPrivateProfileIntW(L"FUBAR", L"WebPort", 80, ini.c_str()), 80);
   liveMaxListeners_ = LiveSlotGate::clampLimit(
       GetPrivateProfileIntW(L"FUBAR", L"LiveMaxListeners", LiveSlotGate::kDefaultLimit, ini.c_str()));
   liveBoostDb_ = std::clamp(
@@ -979,20 +985,27 @@ void AppWindow::refreshWebStatus() {
   SetWindowTextW(webStatus_, text.c_str());
 }
 
+void AppWindow::refreshWebCheckLabel() {
+  if (!webCheck_) return;
+  SetWindowTextW(webCheck_, (L"Public website on port " + std::to_wstring(webPort_)).c_str());
+}
+
 void AppWindow::applyWebServer() {
   web_.setLiveHub(&engine_.liveHub());
   web_.setRoot(options_.outputDirectory);
   web_.setMaxLiveListeners(liveMaxListeners_);
+  refreshWebCheckLabel();
   if (!webEnabled_) {
     web_.stop();
     refreshWebStatus();
     return;
   }
-  if (web_.running()) {
+  if (web_.running() && web_.port() == webPort_) {
     refreshWebStatus();
     return;
   }
-  if (!web_.start(80)) {
+  if (web_.running()) web_.stop();
+  if (!web_.start(webPort_)) {
     webEnabled_ = false;
     if (webCheck_) SendMessageW(webCheck_, BM_SETCHECK, BST_UNCHECKED, 0);
     refreshWebStatus();
@@ -1015,7 +1028,7 @@ FubarNetStation AppWindow::currentStation() const {
   station.live = engine_.running();
   station.listeners = web_.liveListeners();
   station.listenerLimit = web_.maxLiveListeners();
-  station.version = "1.1.17";
+  station.version = "1.1.18";
   return station;
 }
 
@@ -1071,6 +1084,7 @@ struct SettingsDialogData {
   int queued = 0;
   int liveBoostDb = 0;
   int pruneDays = 0;
+  int webPort = 80;
   std::wstring publicHost;
 };
 
@@ -1081,6 +1095,7 @@ INT_PTR CALLBACK settingsDialogProc(HWND dialog, UINT message, WPARAM wParam, LP
     SetDlgItemInt(dialog, IDC_LIVE_LIMIT, static_cast<UINT>(data->limit), FALSE);
     SetDlgItemInt(dialog, IDC_LIVE_BOOST, static_cast<UINT>(data->liveBoostDb), FALSE);
     SetDlgItemInt(dialog, IDC_PRUNE_DAYS, static_cast<UINT>(data->pruneDays), FALSE);
+    SetDlgItemInt(dialog, IDC_WEB_PORT, static_cast<UINT>(data->webPort), FALSE);
     SetDlgItemTextW(dialog, IDC_PUBLIC_HOST, data->publicHost.c_str());
     const std::wstring stats = L"Right now: " + std::to_wstring(data->listeners) +
                                L" listening, " + std::to_wstring(data->queued) + L" waiting.";
@@ -1095,10 +1110,12 @@ INT_PTR CALLBACK settingsDialogProc(HWND dialog, UINT message, WPARAM wParam, LP
         const int limit = static_cast<int>(GetDlgItemInt(dialog, IDC_LIVE_LIMIT, &translated, FALSE));
         const int boost = static_cast<int>(GetDlgItemInt(dialog, IDC_LIVE_BOOST, &translated, FALSE));
         const int days = static_cast<int>(GetDlgItemInt(dialog, IDC_PRUNE_DAYS, &translated, FALSE));
+        const int port = static_cast<int>(GetDlgItemInt(dialog, IDC_WEB_PORT, &translated, FALSE));
         if (data) {
           data->limit = LiveSlotGate::clampLimit(limit);
           data->liveBoostDb = std::clamp(boost, 0, 18);
           data->pruneDays = std::clamp(days, 0, 3650);
+          data->webPort = CaptureWebServer::clampPort(port, 80);
           wchar_t host[128]{};
           GetDlgItemTextW(dialog, IDC_PUBLIC_HOST, host, 128);
           data->publicHost = host;
@@ -1223,6 +1240,7 @@ void AppWindow::showSettings() {
   data.queued = web_.liveQueued();
   data.liveBoostDb = liveBoostDb_;
   data.pruneDays = pruneDays_;
+  data.webPort = webPort_;
   data.publicHost = utf8ToWideLocal(publicHost_);
   if (DialogBoxParamW(instance_, MAKEINTRESOURCEW(IDD_SETTINGS), window_, settingsDialogProc,
                       reinterpret_cast<LPARAM>(&data)) != IDOK) {
@@ -1231,10 +1249,12 @@ void AppWindow::showSettings() {
   liveMaxListeners_ = LiveSlotGate::clampLimit(data.limit);
   liveBoostDb_ = std::clamp(data.liveBoostDb, 0, 18);
   pruneDays_ = std::clamp(data.pruneDays, 0, 3650);
+  webPort_ = CaptureWebServer::clampPort(data.webPort, 80);
   publicHost_ = FubarNetDirectory::sanitizeHost(wideToUtf8(data.publicHost));
   web_.setMaxLiveListeners(liveMaxListeners_);
   engine_.liveHub().setGainDb(static_cast<float>(liveBoostDb_));
   pruneOldRecordings();
+  applyWebServer();
   applyPublicListing();
   refreshWebStatus();
   saveSettings();

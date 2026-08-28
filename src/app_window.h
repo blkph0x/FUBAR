@@ -6,13 +6,14 @@
 #include <windows.h>
 
 #include <chrono>
+#include <cstdint>
 #include <mutex>
 #include <string>
 #include <vector>
 
 class AppWindow {
  public:
-  explicit AppWindow(AudioOptions initialOptions);
+  explicit AppWindow(AudioOptions initialOptions, std::uint16_t webPort = 0);
   int run(HINSTANCE instance, int showCommand);
 
  private:
@@ -39,6 +40,7 @@ class AppWindow {
   void loadSettings();
   void reloadCapturesFromDisk();
   void applyWebServer();
+  void refreshWebCheckLabel();
   void refreshWebStatus();
   void openWebsite() const;
   void copyWebsiteUrl() const;
@@ -54,6 +56,8 @@ class AppWindow {
   FubarNetClient netClient_;
   bool webEnabled_ = false;
   bool publicServer_ = false;
+  std::uint16_t webPort_ = 80;
+  std::uint16_t cliWebPort_ = 0;
   int liveMaxListeners_ = 5;
   int liveBoostDb_ = 0;
   int pruneDays_ = 0;

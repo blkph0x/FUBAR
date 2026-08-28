@@ -12,7 +12,7 @@ BEGIN
   END
 END
 
-IDD_SETTINGS DIALOGEX 0, 0, 276, 198
+IDD_SETTINGS DIALOGEX 0, 0, 276, 218
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Settings"
 FONT 9, "Segoe UI"
@@ -24,12 +24,15 @@ BEGIN
   LTEXT "Delete recordings older than:", -1, 14, 54, 160, 10
   EDITTEXT IDC_PRUNE_DAYS, 180, 52, 40, 14, ES_NUMBER | ES_AUTOHSCROLL
   LTEXT "days  (0 = keep all)", -1, 226, 54, 44, 10
-  LTEXT "Public hostname (optional):", -1, 14, 74, 160, 10
-  EDITTEXT IDC_PUBLIC_HOST, 14, 86, 248, 14, ES_AUTOHSCROLL
-  LTEXT "Leave hostname empty unless this PC has its own domain. The 24/7 hub is always https://gearsqueens.online/fubar/", -1, 14, 106, 248, 28
-  LTEXT "", IDC_LIVE_STATS, 14, 140, 248, 12
-  DEFPUSHBUTTON "OK", IDOK, 160, 174, 50, 14
-  PUSHBUTTON "Cancel", IDCANCEL, 214, 174, 50, 14
+  LTEXT "Website port:", -1, 14, 74, 80, 10
+  EDITTEXT IDC_WEB_PORT, 100, 72, 50, 14, ES_NUMBER | ES_AUTOHSCROLL
+  LTEXT "default 80", -1, 156, 74, 60, 10
+  LTEXT "Public hostname (optional):", -1, 14, 94, 160, 10
+  EDITTEXT IDC_PUBLIC_HOST, 14, 106, 248, 14, ES_AUTOHSCROLL
+  LTEXT "Leave hostname empty unless this PC has its own domain. The 24/7 hub is always https://gearsqueens.online/fubar/", -1, 14, 126, 248, 28
+  LTEXT "", IDC_LIVE_STATS, 14, 158, 248, 12
+  DEFPUSHBUTTON "OK", IDOK, 160, 194, 50, 14
+  PUSHBUTTON "Cancel", IDCANCEL, 214, 194, 50, 14
 END
 
 IDD_RECORDINGS DIALOGEX 0, 0, 420, 228

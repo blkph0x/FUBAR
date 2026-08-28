@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.18
+
+- The website can use a port other than 80. From a terminal:
+  `FUBAR.exe --cli --headless --web --port 8080`
+  `--port` also works with the GUI and is saved in Settings.
+
 ## 1.1.17
 
 - Live 15 kHz FM audio low-pass is automatic. It turns on when the capture has

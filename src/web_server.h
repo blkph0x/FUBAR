@@ -29,6 +29,11 @@ class CaptureWebServer {
   CaptureWebServer(const CaptureWebServer&) = delete;
   CaptureWebServer& operator=(const CaptureWebServer&) = delete;
 
+  static std::uint16_t clampPort(int value, std::uint16_t fallback = 80) {
+    if (value < 1 || value > 65535) return fallback;
+    return static_cast<std::uint16_t>(value);
+  }
+
   bool start(std::uint16_t port = 80);
   void stop();
   bool running() const;

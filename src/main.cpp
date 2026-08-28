@@ -20,6 +20,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <iostream>
@@ -72,7 +73,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.17 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.18 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -80,7 +81,8 @@ void printHelp() {
       << L"  FUBAR.exe --cli --self-test                Test WAV output, web UI, and CLI\n\n"
       << L"Options:\n"
       << L"  --cli                 Keep the terminal attached for logs and input\n"
-      << L"  --web                 Enable the public capture website on port 80\n"
+      << L"  --web                 Enable the public capture website (default port 80)\n"
+      << L"  --port N              Website TCP port, 1-65535 (default 80). Implies --web\n"
       << L"  --device N            Capture device index from --list-devices\n"
       << L"  --mode MODE           stereo, left, right, or mono\n"
       << L"  --threshold-db DB     VOX threshold, e.g. -35\n"
@@ -94,7 +96,6 @@ void printHelp() {
       << L"  --force-record        Record continuously instead of VOX\n"
       << L"  --append-session      Pause on silence and resume into the same WAV\n"
       << L"  --split-stereo        Write stereo as separate mono left/right WAV files\n"
-      << L"  --web                 Serve the public capture website on TCP port 80\n"
       << L"  --live-listeners N    Max simultaneous live listeners (default 5, extras queue)\n"
       << L"  --public-server       List this station on https://gearsqueens.online/fubar-net\n"
       << L"  --station-name NAME   Public station name used in the directory\n";
@@ -317,6 +318,11 @@ int runSelfTest() {
     std::wcerr << L"Self-test failed: live MP3 path\n";
     return 1;
   }
+  if (CaptureWebServer::clampPort(8080) != 8080 || CaptureWebServer::clampPort(0, 80) != 80 ||
+      CaptureWebServer::clampPort(70000, 80) != 80) {
+    std::wcerr << L"Self-test failed: website port clamp\n";
+    return 1;
+  }
   if (!CaptureWebServer::handlePathForTest("GET", "/live.pcm", webDir, &status, &type) ||
       status != 200) {
     std::wcerr << L"Self-test failed: live stream path\n";
@@ -499,6 +505,8 @@ int wmain(int argc, wchar_t** argv) {
   bool selfTest = false;
   bool webEnabled = false;
   bool publicServer = false;
+  std::uint16_t webPort = 80;
+  bool webPortSet = false;
   std::wstring stationName = L"FUBAR";
   int liveMaxListeners = LiveSlotGate::kDefaultLimit;
   double durationSeconds = 0.0;
@@ -550,6 +558,14 @@ int wmain(int argc, wchar_t** argv) {
         options.splitStereoFiles = true;
       } else if (argument == L"--web") {
         webEnabled = true;
+      } else if (argument == L"--port") {
+        const int value = std::stoi(next());
+        if (value < 1 || value > 65535) {
+          throw std::runtime_error("Port must be 1-65535");
+        }
+        webPort = static_cast<std::uint16_t>(value);
+        webPortSet = true;
+        webEnabled = true;
       } else if (argument == L"--live-listeners") {
         liveMaxListeners = LiveSlotGate::clampLimit(std::stoi(next()));
       } else if (argument == L"--public-server") {
@@ -595,7 +611,7 @@ int wmain(int argc, wchar_t** argv) {
   }
 
   if (!headless) {
-    AppWindow app(options);
+    AppWindow app(options, webPortSet ? webPort : 0);
     return app.run(GetModuleHandleW(nullptr), SW_SHOWDEFAULT);
   }
 
@@ -607,7 +623,7 @@ int wmain(int argc, wchar_t** argv) {
     website.setRoot(options.outputDirectory);
     website.setLiveHub(&engine.liveHub());
     website.setMaxLiveListeners(liveMaxListeners);
-    if (!website.start(80)) {
+    if (!website.start(webPort)) {
       std::wcerr << L"Website failed: " << website.lastError() << L"\n";
     } else {
       std::wcout << L"[web] " << website.lanUrl() << L"\n";
