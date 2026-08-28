@@ -162,6 +162,7 @@ let liveWanted = false;
 let liveAbort = null;
 let liveAc = null;
 let liveNode = null;
+let liveStreamDest = null;
 let liveWake = null;
 let livePeak = 0;
 let meterRaf = 0;
@@ -172,7 +173,7 @@ const AudioCtx = window.AudioContext || window.webkitAudioContext;
 const isiOS = /iP(hone|od|ad)/.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isAndroid = /Android/i.test(navigator.userAgent);
-const useMediaLive = isiOS || isAndroid;
+const isPhone = isiOS || isAndroid;
 function unlockLiveAudio(){
   try {
     if (AudioCtx && (!liveAc || liveAc.state === 'closed')) {
@@ -244,6 +245,8 @@ function setLiveUi(on, text){
 function closeLiveAudio(){
   try { if (liveNode) liveNode.disconnect(); } catch {}
   liveNode = null;
+  try { if (liveStreamDest) liveStreamDest.disconnect(); } catch {}
+  liveStreamDest = null;
   try { if (liveAc && liveAc.state !== 'closed' && liveAc.close) liveAc.close(); } catch {}
   liveAc = null;
 }
@@ -252,7 +255,12 @@ function stopLive(){
   livePlaying = false;
   if (liveAbort) { liveAbort.abort(); liveAbort = null; }
   closeLiveAudio();
-  try { liveMedia.pause(); liveMedia.removeAttribute('src'); liveMedia.load(); } catch {}
+  try {
+    liveMedia.pause();
+    liveMedia.srcObject = null;
+    liveMedia.removeAttribute('src');
+    liveMedia.load();
+  } catch {}
   try { if (liveWake) liveWake.release(); } catch {}
   liveWake = null;
   try { if (navigator.mediaSession) navigator.mediaSession.playbackState = 'none'; } catch {}
@@ -263,14 +271,14 @@ async function keepLiveAlive(){
   try { if (liveAc && liveAc.state !== 'running') await liveAc.resume(); } catch {}
   try {
     liveMedia.playsInline = true;
-    if (useMediaLive) {
+    if (isPhone) {
       liveMedia.muted = false;
       liveMedia.volume = 1;
       if (liveMedia.paused) await liveMedia.play();
     } else {
       liveMedia.muted = true;
       liveMedia.volume = 0;
-      if (liveMedia.paused) {
+      if (liveMedia.paused && !liveMedia.srcObject) {
         liveMedia.src = SILENT_WAV;
         liveMedia.loop = true;
         await liveMedia.play();
@@ -347,6 +355,22 @@ function writeSpeakers(outs, i, left, right, mix){
   for (let c = 2; c < outs.length; c++) outs[c][i] = left;
 }
 function connectLiveOut(ac, node){
+  try { if (liveStreamDest) liveStreamDest.disconnect(); } catch {}
+  liveStreamDest = null;
+  if (isPhone && ac.createMediaStreamDestination) {
+    liveStreamDest = ac.createMediaStreamDestination();
+    node.connect(liveStreamDest);
+    try {
+      liveMedia.srcObject = liveStreamDest.stream;
+      liveMedia.muted = false;
+      liveMedia.volume = 1;
+      liveMedia.loop = false;
+      liveMedia.play().catch(() => node.connect(ac.destination));
+    } catch {
+      node.connect(ac.destination);
+    }
+    return;
+  }
   node.connect(ac.destination);
 }
 function attachScriptRing(ac, channels){
@@ -535,67 +559,13 @@ async function attachWorkletRing(ac, channels){
     }
   };
 }
-async function playLiveMediaSession(){
-  liveAbort = new AbortController();
-  if (navigator.audioSession) { try { navigator.audioSession.type = 'playback'; } catch {} }
-  liveMedia.muted = false;
-  liveMedia.volume = 1;
-  liveMedia.loop = false;
-  liveMedia.autoplay = true;
-  liveMedia.playsInline = true;
-  liveMedia.src = 'live.wav?v=120&t=' + Date.now();
-  startMeter();
-  if (navigator.mediaSession) {
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({title:'FUBAR Live', artist:'FUBAR'});
-      navigator.mediaSession.playbackState = 'playing';
-      navigator.mediaSession.setActionHandler('pause', () => liveMedia.pause());
-      navigator.mediaSession.setActionHandler('play', () => liveMedia.play());
-      navigator.mediaSession.setActionHandler('stop', () => stopLive());
-    } catch {}
-  }
-  setLiveUi(true, 'Live · phone · WAV 1:1 · stays on when you leave the page');
-  await liveMedia.play();
-  await new Promise((resolve, reject) => {
-    let lastT = -1;
-    let stall = 0;
-    const done = (err) => {
-      liveMedia.onended = null;
-      liveMedia.onerror = null;
-      clearInterval(tick);
-      if (err) reject(err);
-      else resolve();
-    };
-    liveMedia.onended = () => done(new Error('live ended'));
-    liveMedia.onerror = () => done(new Error('live media error'));
-    const tick = setInterval(() => {
-      if (!liveWanted) { done(); return; }
-      try { if (liveMedia.paused) liveMedia.play().catch(()=>{}); } catch {}
-      const t = Number(liveMedia.currentTime) || 0;
-      if (t <= lastT + 0.02) stall++;
-      else stall = 0;
-      lastT = t;
-      if (t > 0) livePeak = Math.max(livePeak, 0.25);
-      if (stall >= 10) done(new Error('live stalled'));
-    }, 500);
-  });
-}
 async function playLiveSession(){
   audio.pause();
   try { if (liveNode) liveNode.disconnect(); } catch {}
   liveNode = null;
   liveAbort = new AbortController();
   if (navigator.audioSession) { try { navigator.audioSession.type = 'playback'; } catch {} }
-  if (useMediaLive) {
-    try {
-      await playLiveMediaSession();
-      return;
-    } catch (err) {
-      if (!liveWanted) throw err;
-      try { liveMedia.pause(); liveMedia.removeAttribute('src'); liveMedia.load(); } catch {}
-      setLiveUi(true, 'Phone stream stalled — trying PCM…');
-    }
-  } else {
+  if (!isPhone) {
     liveMedia.muted = true;
     liveMedia.volume = 0;
     liveMedia.loop = true;
@@ -603,7 +573,7 @@ async function playLiveSession(){
     try { await liveMedia.play(); } catch {}
   }
   await keepLiveAlive();
-  const res = await fetch('live.pcm?v=120&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
+  const res = await fetch('live.pcm?v=121&t=' + Date.now(), {signal: liveAbort.signal, cache:'no-store'});
   if (!res.ok || !res.body) {
     if (res.status === 503) throw new Error('queue');
     throw new Error('live unavailable');
@@ -660,8 +630,14 @@ async function playLiveSession(){
     try {
       navigator.mediaSession.metadata = new MediaMetadata({title:'FUBAR Live', artist:'FUBAR'});
       navigator.mediaSession.playbackState = 'playing';
-      navigator.mediaSession.setActionHandler('pause', () => ac.suspend());
-      navigator.mediaSession.setActionHandler('play', () => ac.resume());
+      navigator.mediaSession.setActionHandler('pause', () => {
+        try { liveMedia.pause(); } catch {}
+        try { ac.suspend(); } catch {}
+      });
+      navigator.mediaSession.setActionHandler('play', () => {
+        try { ac.resume(); } catch {}
+        try { liveMedia.play(); } catch {}
+      });
       navigator.mediaSession.setActionHandler('stop', () => stopLive());
     } catch {}
   }

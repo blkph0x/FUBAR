@@ -91,9 +91,9 @@ required for SSTV, POCSAG, weather-fax and other digital modes — MP3 would des
 **Listen live**. A ~1 second jitter buffer keeps audio continuous. FUBAR does **not**
 low-pass, de-emphasize, or resample the capture — AM, NFM, WFM, and digital modes are
 streamed 1:1 as the SDR (or mic) already produced them. Live defaults to **Mono** so
-both speakers play the same mix; tap **Stereo** for true left/right. Phones play live as a
-WAV media stream so Android can keep going when the browser is minimised and iPhone can
-hear live the same way it plays saved clips. A screen wake lock is still taken while the
+both speakers play the same mix; tap **Stereo** for true left/right. Live is always the
+capture PCM (1:1). On a phone that PCM is also fed to the OS media player so Android can
+keep playing when the browser is minimised. A screen wake lock is still taken while the
 page is in front. Set
 **Live listen boost** to 0 dB for digital modes. If a VB-CABLE input is not 44.1/48 kHz
 stereo, the admin status bar warns you to fix it in VB-Audio Control Panel. If the

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.21
+
+- Live is 1:1 PCM again on every device (phones included). The phone WAV player is
+  gone. Phones still tap that same PCM into the OS media player so Android can keep
+  the stream when the browser is minimised, with no extra encode.
+
 ## 1.1.20
 
 - Phones play live through a real WAV media stream so Android can keep going when
