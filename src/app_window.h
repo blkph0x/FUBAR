@@ -55,6 +55,7 @@ class AppWindow {
   AudioEngine engine_;
   CaptureWebServer web_;
   FubarNetClient netClient_;
+  SdrTownBridgeConfig sdrTownControl_;
   bool webEnabled_ = false;
   bool publicServer_ = false;
   std::uint16_t webPort_ = 80;

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(FUBAR VERSION 1.1.25 LANGUAGES C CXX)
+project(FUBAR VERSION 1.1.27 LANGUAGES C CXX)
 
 set(SHINE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/shine/src/lib)
 add_library(shine STATIC
@@ -31,10 +31,12 @@ add_executable(fubar
   src/live_hub.cpp
   src/live_slot.cpp
   src/fubar_net.cpp
+  src/sdr_town_bridge.cpp
   src/live_mp3.cpp
   src/audio_safety.h
   src/live_mp3.h
   src/fubar_net.h
+  src/sdr_town_bridge.h
   src/live_hub.h
   src/live_slot.h
   src/app_paths.h

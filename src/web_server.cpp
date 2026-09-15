@@ -50,6 +50,13 @@ h1{ margin:.2rem 0; font-size:clamp(2.2rem,7vw,4.4rem); letter-spacing:.04em; }
 .nowboard .title{ margin:0; font-size:clamp(1.45rem,5vw,2.55rem); font-weight:800; letter-spacing:.03em; line-height:1.15; color:#f6ffd8; word-break:break-word; }
 .nowboard.empty{ border-color:var(--line); box-shadow:none; background:var(--card); }
 .nowboard.empty .title{ color:var(--muted); font-size:1.05rem; font-weight:600; letter-spacing:.02em; }
+.sdrtown{ display:none; margin:16px 0 8px; padding:14px; background:#0c100c; border:1px solid var(--line); border-radius:16px; }
+.sdrtown.on{ display:block; }
+.sdrgrid{ display:grid; grid-template-columns:1.2fr .8fr .8fr auto auto; gap:8px; align-items:end; }
+.sdrgrid label{ display:block; color:var(--muted); font-size:12px; margin-bottom:3px; }
+.sdrgrid input,.sdrgrid select{ width:100%; border:1px solid var(--line); border-radius:10px; background:#070807; color:var(--ink); padding:9px 10px; }
+.sdrgrid button{ border:0; border-radius:999px; padding:10px 14px; font-weight:800; cursor:pointer; background:var(--green); color:#111; }
+.sdrmeta{ color:var(--muted); font-size:13px; margin-top:8px; min-height:18px; }
 .mix{ display:flex; gap:6px; }
 .mix button{ border:1px solid var(--line); background:#0c100c; color:var(--ink); border-radius:999px; padding:7px 12px; font-weight:700; cursor:pointer; }
 .mix button.on{ background:var(--green); color:#111; border-color:var(--green); }
@@ -75,6 +82,7 @@ button.play.playing{ background:var(--blue); }
 .station:hover{ border-color:var(--green); }
 .visit{ border:0; border-radius:999px; padding:8px 14px; font-weight:700; background:#1a2618; color:var(--green); }
 @media (max-width:700px){ .card{ grid-template-columns:auto 1fr; } .stats{ grid-column:1 / -1; } }
+@media (max-width:820px){ .sdrgrid{ grid-template-columns:1fr 1fr; } }
 </style>
 </head>
 <body>
@@ -86,6 +94,18 @@ button.play.playing{ background:var(--blue); }
   <section class="nowboard empty" id="nowBoard" aria-live="polite">
     <p class="kicker">Now playing</p>
     <p class="title" id="nowPlayingText">Waiting for the operator</p>
+  </section>
+  <section class="sdrtown" id="sdrTownPanel">
+    <p class="kicker">SDR Town control</p>
+    <div class="sdrgrid">
+      <div><label for="sdrFreq">Frequency MHz</label><input id="sdrFreq" inputmode="decimal" value="420.35000"></div>
+      <div><label for="sdrMode">Mode</label><select id="sdrMode"><option>AUTO</option><option>NFM</option><option>WFM</option><option>AM</option><option>USB</option><option>LSB</option><option>CW</option><option>P25</option></select></div>
+      <div><label for="sdrBw">Bandwidth kHz</label><input id="sdrBw" inputmode="decimal" placeholder="auto"></div>
+      <div><label for="sdrGain">RF gain dB</label><input id="sdrGain" inputmode="decimal" placeholder="leave"></div>
+      <button id="sdrTuneBtn" type="button">Tune</button>
+      <button id="sdrP25Btn" type="button">P25 CC</button>
+    </div>
+    <div class="sdrmeta" id="sdrTownStatus">Checking SDR Town bridge...</div>
   </section>
   <div class="livebox">
     <button id="liveBtn" type="button">Listen live</button>
@@ -123,6 +143,7 @@ const now = document.getElementById('now');
 let items = [];
 let current = '';
 let nowPlayingTitle = '';
+let sdrTownConfig = {enabled:false};
 
 function fmt(sec){
   sec = Math.max(0, Number(sec)||0);
@@ -939,6 +960,76 @@ function showNowPlaying(text){
   title.textContent = value;
   document.title = value + ' · FUBAR';
 }
+function sdrTownMessage(text){
+  const el = document.getElementById('sdrTownStatus');
+  if (el) el.textContent = text || '';
+}
+async function loadSdrTownControl(){
+  const panel = document.getElementById('sdrTownPanel');
+  try {
+    const res = await fetch('api/sdr-town/config', {cache:'no-store'});
+    sdrTownConfig = await res.json();
+    panel.classList.toggle('on', !!sdrTownConfig.enabled);
+    if (!sdrTownConfig.enabled) return;
+    document.getElementById('sdrMode').disabled = !sdrTownConfig.allowMode;
+    document.getElementById('sdrBw').disabled = !sdrTownConfig.allowTune;
+    document.getElementById('sdrGain').disabled = !sdrTownConfig.allowRfGain;
+    document.getElementById('sdrTuneBtn').disabled = !sdrTownConfig.allowTune;
+    document.getElementById('sdrP25Btn').disabled = !sdrTownConfig.allowP25Control;
+    const statusRes = await fetch('api/sdr-town/status', {cache:'no-store'});
+    const status = await statusRes.json();
+    if (status.ok && status.state) {
+      const s = status.state;
+      if (s.frequencyMHz) document.getElementById('sdrFreq').value = Number(s.frequencyMHz).toFixed(5);
+      if (s.mode && sdrTownConfig.allowMode) document.getElementById('sdrMode').value = s.mode;
+      if (s.bandwidthHz) document.getElementById('sdrBw').value = Number(s.bandwidthHz / 1000).toFixed(1);
+      if (s.rfGainDb != null && sdrTownConfig.allowRfGain) document.getElementById('sdrGain').value = Number(s.rfGainDb).toFixed(1);
+      sdrTownMessage('SDR Town ready · ' + Number(s.frequencyMHz || 0).toFixed(5) + ' MHz · ' + (s.mode || '') + ' · BW ' + Number((s.bandwidthHz || 0) / 1000).toFixed(1) + ' kHz');
+    } else {
+      sdrTownMessage(status.error || 'SDR Town not reachable. Start SDR Town with --control-server.');
+    }
+  } catch {
+    panel.classList.remove('on');
+  }
+}
+async function postSdrTown(path, payload){
+  sdrTownMessage('Sending command...');
+  try {
+    const res = await fetch(path, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload || {})
+    });
+    const text = await res.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; }
+    catch { data = {ok:false, error:text || ('HTTP ' + res.status)}; }
+    if (data.ok) {
+      const s = data.state || {};
+      const bw = s.bandwidthHz || (payload.bandwidthKHz ? payload.bandwidthKHz * 1000 : 0);
+      sdrTownMessage('Applied · ' + Number(s.frequencyMHz || payload.frequencyMHz || 0).toFixed(5) + ' MHz · ' + (s.mode || payload.mode || '') + (bw ? (' · BW ' + Number(bw / 1000).toFixed(1) + ' kHz') : ''));
+      await loadSdrTownControl();
+    } else {
+      sdrTownMessage(data.error || ('Command failed · HTTP ' + res.status));
+    }
+  } catch (error) {
+    sdrTownMessage('Command failed · ' + (error && error.message ? error.message : 'network error'));
+  }
+}
+document.getElementById('sdrTuneBtn').addEventListener('click', () => {
+  const frequencyMHz = Number(document.getElementById('sdrFreq').value);
+  const mode = document.getElementById('sdrMode').value;
+  const bwText = document.getElementById('sdrBw').value.trim();
+  const gainText = document.getElementById('sdrGain').value.trim();
+  const payload = {frequencyMHz, mode};
+  if (bwText) payload.bandwidthKHz = Number(bwText);
+  if (gainText) payload.rfGainDb = Number(gainText);
+  postSdrTown('api/sdr-town/tune', payload);
+});
+document.getElementById('sdrP25Btn').addEventListener('click', () => {
+  const frequencyMHz = Number(document.getElementById('sdrFreq').value);
+  postSdrTown('api/sdr-town/p25-control', {frequencyMHz, autoFollow:true});
+});
 async function refresh(){
   try {
     const [statusRes, listRes] = await Promise.all([
@@ -958,8 +1049,10 @@ async function refresh(){
   }
 }
 refresh();
+loadSdrTownControl();
 loadStations();
 setInterval(refresh, 4000);
+setInterval(loadSdrTownControl, 10000);
 setInterval(loadStations, 15000);
 </script>
 </body>
@@ -1220,6 +1313,11 @@ std::string CaptureWebServer::nowPlaying() const {
 }
 
 void CaptureWebServer::setMaxLiveListeners(int limit) { liveSlots_.setLimit(limit); }
+void CaptureWebServer::setSdrTownControlConfig(const SdrTownBridgeConfig& config) {
+  EnterCriticalSection(&lock_);
+  sdrTownControl_ = config;
+  LeaveCriticalSection(&lock_);
+}
 int CaptureWebServer::maxLiveListeners() const { return liveSlots_.limit(); }
 int CaptureWebServer::liveListeners() const { return liveSlots_.active(); }
 int CaptureWebServer::liveQueued() const { return liveSlots_.queued(); }
@@ -1253,6 +1351,13 @@ std::wstring CaptureWebServer::lanUrl() const {
 std::filesystem::path CaptureWebServer::rootLocked() const {
   EnterCriticalSection(&lock_);
   std::filesystem::path value = root_;
+  LeaveCriticalSection(&lock_);
+  return value;
+}
+
+SdrTownBridgeConfig CaptureWebServer::sdrTownControlConfigLocked() const {
+  EnterCriticalSection(&lock_);
+  SdrTownBridgeConfig value = sdrTownControl_;
   LeaveCriticalSection(&lock_);
   return value;
 }
@@ -1337,6 +1442,27 @@ bool CaptureWebServer::handlePathForTest(const std::string& method, const std::s
     *contentType = "text/plain";
     return false;
   }
+  if (path == "/api/sdr-town/config" || path == "/api/sdr-town/status") {
+    if (method == "GET" || method == "OPTIONS") {
+      *status = 200;
+      *contentType = "application/json";
+      return true;
+    }
+    *status = 405;
+    *contentType = "application/json";
+    return false;
+  }
+  if (path == "/api/sdr-town/tune" || path == "/api/sdr-town/rf-gain" ||
+      path == "/api/sdr-town/p25-control") {
+    if (method == "POST" || method == "OPTIONS") {
+      *status = 200;
+      *contentType = "application/json";
+      return true;
+    }
+    *status = 405;
+    *contentType = "application/json";
+    return false;
+  }
   if (method != "GET") {
     *status = 405;
     *contentType = "text/plain";
@@ -1396,6 +1522,7 @@ std::string CaptureWebServer::statusJson() const {
   const std::wstring live = liveStatus_;
   const std::string playing = nowPlaying_;
   const std::uint16_t port = port_;
+  const SdrTownBridgeConfig sdrTown = sdrTownControl_;
   LeaveCriticalSection(&lock_);
   std::ostringstream json;
   LiveAudioHub* hub = liveHub_;
@@ -1407,7 +1534,20 @@ std::string CaptureWebServer::statusJson() const {
        << ",\"listenerLimit\":" << liveSlots_.limit()
        << ",\"queued\":" << liveSlots_.queued()
        << ",\"nowPlaying\":\"" << jsonEscape(playing) << "\""
+       << ",\"sdrTownControl\":" << (sdrTown.enabled ? "true" : "false")
        << "}";
+  return json.str();
+}
+
+std::string CaptureWebServer::sdrTownControlConfigJson() const {
+  const auto cfg = sdrTownControlConfigLocked();
+  std::ostringstream json;
+  json << "{\"ok\":true,\"enabled\":" << (cfg.enabled ? "true" : "false")
+       << ",\"allowTune\":" << (cfg.allowTune ? "true" : "false")
+       << ",\"allowMode\":" << (cfg.allowMode ? "true" : "false")
+       << ",\"allowRfGain\":" << (cfg.allowRfGain ? "true" : "false")
+       << ",\"allowP25Control\":" << (cfg.allowP25Control ? "true" : "false")
+       << ",\"port\":" << cfg.port << "}";
   return json.str();
 }
 
@@ -1751,11 +1891,19 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     sendResponse(client, 204, "No Content", "text/plain", "", kCors);
     return;
   }
+  if (method == "OPTIONS" && path.rfind("/api/sdr-town", 0) == 0) {
+    sendResponse(client, 204, "No Content", "text/plain", "", kCors);
+    return;
+  }
 
   int status = 0;
   std::string type;
   if (!handlePathForTest(method, path, rootLocked(), &status, &type)) {
-    sendResponse(client, status ? status : 404, "Error", type.empty() ? "text/plain" : type, "error",
+    const bool wantsJson = type.find("application/json") != std::string::npos;
+    const std::string body = wantsJson
+        ? std::string("{\"ok\":false,\"error\":\"HTTP ") + std::to_string(status ? status : 404) + "\"}"
+        : std::string("error");
+    sendResponse(client, status ? status : 404, "Error", type.empty() ? "text/plain" : type, body,
                  kCors);
     return;
   }
@@ -1769,6 +1917,55 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
   }
   if (path == "/api/captures") {
     sendResponse(client, 200, "OK", "application/json", capturesJson());
+    return;
+  }
+  if (path == "/api/sdr-town/config") {
+    sendResponse(client, 200, "OK", "application/json", sdrTownControlConfigJson(), kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/status") {
+    SdrTownBridge bridge;
+    const std::string response = bridge.status(sdrTownControlConfigLocked());
+    sendResponse(client, 200, "OK", "application/json", response, kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/tune") {
+    const auto cfg = sdrTownControlConfigLocked();
+    const double mhz = FubarNetDirectory::jsonGetNumber(body, "frequencyMHz", 0.0);
+    double hz = FubarNetDirectory::jsonGetNumber(body, "frequencyHz", 0.0);
+    if (hz <= 0.0 && mhz > 0.0) hz = mhz * 1000000.0;
+    const std::string mode = FubarNetDirectory::jsonGetString(body, "mode");
+    const double bwK = FubarNetDirectory::jsonGetNumber(body, "bandwidthKHz", 0.0);
+    const double rfGain = FubarNetDirectory::jsonGetNumber(body, "rfGainDb", NAN);
+    std::string error;
+    SdrTownBridge bridge;
+    const std::string response = bridge.tune(cfg, hz, mode, bwK > 0.0 ? bwK * 1000.0 : 0.0,
+                                             rfGain, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json", response, kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/rf-gain") {
+    const auto cfg = sdrTownControlConfigLocked();
+    const double rfGain = FubarNetDirectory::jsonGetNumber(body, "rfGainDb", NAN);
+    std::string error;
+    SdrTownBridge bridge;
+    const std::string response = bridge.setRfGain(cfg, rfGain, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json", response, kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/p25-control") {
+    const auto cfg = sdrTownControlConfigLocked();
+    const double mhz = FubarNetDirectory::jsonGetNumber(body, "frequencyMHz", 0.0);
+    double hz = FubarNetDirectory::jsonGetNumber(body, "frequencyHz", 0.0);
+    if (hz <= 0.0 && mhz > 0.0) hz = mhz * 1000000.0;
+    const bool autoFollow = FubarNetDirectory::jsonGetBool(body, "autoFollow", true);
+    std::string error;
+    SdrTownBridge bridge;
+    const std::string response = bridge.startP25Control(cfg, hz, autoFollow, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json", response, kCors);
     return;
   }
   if (path == "/fubar-net" || path == "/fubar-net/" || path == "/fubar-net/servers") {

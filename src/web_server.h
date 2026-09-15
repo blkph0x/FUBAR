@@ -9,6 +9,7 @@
 #include "live_hub.h"
 #include "live_slot.h"
 #include "fubar_net.h"
+#include "sdr_town_bridge.h"
 
 #include <windows.h>
 
@@ -48,6 +49,7 @@ class CaptureWebServer {
   void setNowPlaying(const std::string& text);
   std::string nowPlaying() const;
   void setMaxLiveListeners(int limit);
+  void setSdrTownControlConfig(const SdrTownBridgeConfig& config);
   int maxLiveListeners() const;
   int liveListeners() const;
   int liveQueued() const;
@@ -70,6 +72,8 @@ class CaptureWebServer {
   std::filesystem::path rootLocked() const;
   std::string statusJson() const;
   std::string capturesJson() const;
+  std::string sdrTownControlConfigJson() const;
+  SdrTownBridgeConfig sdrTownControlConfigLocked() const;
 
   static DWORD WINAPI acceptThreadEntry(LPVOID context);
   static DWORD WINAPI clientThreadEntry(LPVOID context);
@@ -85,6 +89,7 @@ class CaptureWebServer {
   LiveAudioHub* liveHub_ = nullptr;
   LiveSlotGate liveSlots_;
   FubarNetDirectory directory_;
+  SdrTownBridgeConfig sdrTownControl_;
   std::wstring liveStatus_ = L"Idle";
   std::string nowPlaying_;
   std::wstring lastError_;

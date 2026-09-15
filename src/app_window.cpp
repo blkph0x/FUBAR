@@ -230,7 +230,7 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   RegisterClassExW(&brandClass);
 
   HMENU menu = LoadMenuW(instance_, MAKEINTRESOURCEW(IDR_MAINMENU));
-  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.26", WS_OVERLAPPEDWINDOW,
+  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.27", WS_OVERLAPPEDWINDOW,
                             CW_USEDEFAULT, CW_USEDEFAULT, 780, 880, nullptr, menu, instance_,
                             this);
   if (!window_) return 1;
@@ -888,6 +888,18 @@ void AppWindow::saveSettings() const {
                              ini.c_str());
   WritePrivateProfileStringW(L"FUBAR", L"PublicHost", utf8ToWideLocal(publicHost_).c_str(),
                              ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"SdrControlEnabled",
+                             sdrTownControl_.enabled ? L"1" : L"0", ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"SdrControlAllowTune",
+                             sdrTownControl_.allowTune ? L"1" : L"0", ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"SdrControlAllowMode",
+                             sdrTownControl_.allowMode ? L"1" : L"0", ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"SdrControlAllowRfGain",
+                             sdrTownControl_.allowRfGain ? L"1" : L"0", ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"SdrControlAllowP25",
+                             sdrTownControl_.allowP25Control ? L"1" : L"0", ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"SdrControlPort",
+                             std::to_wstring(sdrTownControl_.port).c_str(), ini.c_str());
 }
 
 void AppWindow::reloadCapturesFromDisk() {
@@ -973,6 +985,19 @@ void AppWindow::loadSettings() {
   if (GetPrivateProfileStringW(L"FUBAR", L"PublicHost", L"", buffer, 1024, ini.c_str()) > 0) {
     publicHost_ = FubarNetDirectory::sanitizeHost(wideToUtf8(buffer));
   }
+  sdrTownControl_.enabled =
+      GetPrivateProfileIntW(L"FUBAR", L"SdrControlEnabled", 0, ini.c_str()) != 0;
+  sdrTownControl_.allowTune =
+      GetPrivateProfileIntW(L"FUBAR", L"SdrControlAllowTune", 1, ini.c_str()) != 0;
+  sdrTownControl_.allowMode =
+      GetPrivateProfileIntW(L"FUBAR", L"SdrControlAllowMode", 1, ini.c_str()) != 0;
+  sdrTownControl_.allowRfGain =
+      GetPrivateProfileIntW(L"FUBAR", L"SdrControlAllowRfGain", 0, ini.c_str()) != 0;
+  sdrTownControl_.allowP25Control =
+      GetPrivateProfileIntW(L"FUBAR", L"SdrControlAllowP25", 1, ini.c_str()) != 0;
+  sdrTownControl_.port = CaptureWebServer::clampPort(
+      GetPrivateProfileIntW(L"FUBAR", L"SdrControlPort", 8765, ini.c_str()), 8765);
+  web_.setSdrTownControlConfig(sdrTownControl_);
   if (publicCheck_) {
     SendMessageW(publicCheck_, BM_SETCHECK, publicServer_ ? BST_CHECKED : BST_UNCHECKED, 0);
   }
@@ -1015,6 +1040,7 @@ void AppWindow::applyWebServer() {
   web_.setLiveHub(&engine_.liveHub());
   web_.setRoot(options_.outputDirectory);
   web_.setMaxLiveListeners(liveMaxListeners_);
+  web_.setSdrTownControlConfig(sdrTownControl_);
   refreshWebCheckLabel();
   if (!webEnabled_) {
     web_.stop();
@@ -1053,7 +1079,7 @@ FubarNetStation AppWindow::currentStation() const {
   station.listenerLimit = web_.maxLiveListeners();
   station.nowPlaying = FubarNetDirectory::sanitizeNowPlaying(
       wideToUtf8(nowPlayingEdit_ ? windowText(nowPlayingEdit_) : nowPlaying_));
-  station.version = "1.1.26";
+  station.version = "1.1.27";
   return station;
 }
 
@@ -1130,6 +1156,12 @@ struct SettingsDialogData {
   int liveBoostDb = 0;
   int pruneDays = 0;
   int webPort = 80;
+  int sdrControlPort = 8765;
+  bool sdrControlEnabled = false;
+  bool sdrAllowTune = true;
+  bool sdrAllowMode = true;
+  bool sdrAllowRfGain = false;
+  bool sdrAllowP25Control = true;
   std::wstring publicHost;
 };
 
@@ -1141,7 +1173,18 @@ INT_PTR CALLBACK settingsDialogProc(HWND dialog, UINT message, WPARAM wParam, LP
     SetDlgItemInt(dialog, IDC_LIVE_BOOST, static_cast<UINT>(data->liveBoostDb), FALSE);
     SetDlgItemInt(dialog, IDC_PRUNE_DAYS, static_cast<UINT>(data->pruneDays), FALSE);
     SetDlgItemInt(dialog, IDC_WEB_PORT, static_cast<UINT>(data->webPort), FALSE);
+    SetDlgItemInt(dialog, IDC_SDR_CONTROL_PORT, static_cast<UINT>(data->sdrControlPort), FALSE);
     SetDlgItemTextW(dialog, IDC_PUBLIC_HOST, data->publicHost.c_str());
+    CheckDlgButton(dialog, IDC_SDR_CONTROL_ENABLED,
+                   data->sdrControlEnabled ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(dialog, IDC_SDR_CONTROL_TUNE,
+                   data->sdrAllowTune ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(dialog, IDC_SDR_CONTROL_MODE,
+                   data->sdrAllowMode ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(dialog, IDC_SDR_CONTROL_GAIN,
+                   data->sdrAllowRfGain ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(dialog, IDC_SDR_CONTROL_P25,
+                   data->sdrAllowP25Control ? BST_CHECKED : BST_UNCHECKED);
     const std::wstring stats = L"Right now: " + std::to_wstring(data->listeners) +
                                L" listening, " + std::to_wstring(data->queued) + L" waiting.";
     SetDlgItemTextW(dialog, IDC_LIVE_STATS, stats.c_str());
@@ -1156,11 +1199,24 @@ INT_PTR CALLBACK settingsDialogProc(HWND dialog, UINT message, WPARAM wParam, LP
         const int boost = static_cast<int>(GetDlgItemInt(dialog, IDC_LIVE_BOOST, &translated, FALSE));
         const int days = static_cast<int>(GetDlgItemInt(dialog, IDC_PRUNE_DAYS, &translated, FALSE));
         const int port = static_cast<int>(GetDlgItemInt(dialog, IDC_WEB_PORT, &translated, FALSE));
+        const int sdrPort =
+            static_cast<int>(GetDlgItemInt(dialog, IDC_SDR_CONTROL_PORT, &translated, FALSE));
         if (data) {
           data->limit = LiveSlotGate::clampLimit(limit);
           data->liveBoostDb = std::clamp(boost, 0, 18);
           data->pruneDays = std::clamp(days, 0, 3650);
           data->webPort = CaptureWebServer::clampPort(port, 80);
+          data->sdrControlPort = CaptureWebServer::clampPort(sdrPort, 8765);
+          data->sdrControlEnabled =
+              IsDlgButtonChecked(dialog, IDC_SDR_CONTROL_ENABLED) == BST_CHECKED;
+          data->sdrAllowTune =
+              IsDlgButtonChecked(dialog, IDC_SDR_CONTROL_TUNE) == BST_CHECKED;
+          data->sdrAllowMode =
+              IsDlgButtonChecked(dialog, IDC_SDR_CONTROL_MODE) == BST_CHECKED;
+          data->sdrAllowRfGain =
+              IsDlgButtonChecked(dialog, IDC_SDR_CONTROL_GAIN) == BST_CHECKED;
+          data->sdrAllowP25Control =
+              IsDlgButtonChecked(dialog, IDC_SDR_CONTROL_P25) == BST_CHECKED;
           wchar_t host[128]{};
           GetDlgItemTextW(dialog, IDC_PUBLIC_HOST, host, 128);
           data->publicHost = host;
@@ -1286,6 +1342,12 @@ void AppWindow::showSettings() {
   data.liveBoostDb = liveBoostDb_;
   data.pruneDays = pruneDays_;
   data.webPort = webPort_;
+  data.sdrControlPort = sdrTownControl_.port;
+  data.sdrControlEnabled = sdrTownControl_.enabled;
+  data.sdrAllowTune = sdrTownControl_.allowTune;
+  data.sdrAllowMode = sdrTownControl_.allowMode;
+  data.sdrAllowRfGain = sdrTownControl_.allowRfGain;
+  data.sdrAllowP25Control = sdrTownControl_.allowP25Control;
   data.publicHost = utf8ToWideLocal(publicHost_);
   if (DialogBoxParamW(instance_, MAKEINTRESOURCEW(IDD_SETTINGS), window_, settingsDialogProc,
                       reinterpret_cast<LPARAM>(&data)) != IDOK) {
@@ -1296,7 +1358,14 @@ void AppWindow::showSettings() {
   pruneDays_ = std::clamp(data.pruneDays, 0, 3650);
   webPort_ = CaptureWebServer::clampPort(data.webPort, 80);
   publicHost_ = FubarNetDirectory::sanitizeHost(wideToUtf8(data.publicHost));
+  sdrTownControl_.enabled = data.sdrControlEnabled;
+  sdrTownControl_.allowTune = data.sdrAllowTune;
+  sdrTownControl_.allowMode = data.sdrAllowMode;
+  sdrTownControl_.allowRfGain = data.sdrAllowRfGain;
+  sdrTownControl_.allowP25Control = data.sdrAllowP25Control;
+  sdrTownControl_.port = CaptureWebServer::clampPort(data.sdrControlPort, 8765);
   web_.setMaxLiveListeners(liveMaxListeners_);
+  web_.setSdrTownControlConfig(sdrTownControl_);
   engine_.liveHub().setGainDb(static_cast<float>(liveBoostDb_));
   pruneOldRecordings();
   applyWebServer();

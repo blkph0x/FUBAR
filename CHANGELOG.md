@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.27
+
+- Added optional SDR Town website controls through `SdrTownControl.dll`.
+- Website operators can tune SDR Town frequency, mode, bandwidth, RF gain, and P25 control-channel monitoring when enabled in FUBAR settings.
+- Release ZIP now includes `SdrTownControl.dll` so testers do not need to copy the bridge module manually.
+
 ## 1.1.26
 
 - Operators can type a **Now playing** line (letters, numbers, and spaces). The public website
