@@ -73,7 +73,8 @@ enum ControlId {
   IdOpenWeb,
   IdCopyWeb,
   IdPublic,
-  IdStationName
+  IdStationName,
+  IdNowPlaying
 };
 
 HWND addControl(HWND parent, const wchar_t* className, const wchar_t* text, DWORD style,
@@ -229,8 +230,8 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   RegisterClassExW(&brandClass);
 
   HMENU menu = LoadMenuW(instance_, MAKEINTRESOURCEW(IDR_MAINMENU));
-  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.25", WS_OVERLAPPEDWINDOW,
-                            CW_USEDEFAULT, CW_USEDEFAULT, 780, 830, nullptr, menu, instance_,
+  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.26", WS_OVERLAPPEDWINDOW,
+                            CW_USEDEFAULT, CW_USEDEFAULT, 780, 880, nullptr, menu, instance_,
                             this);
   if (!window_) return 1;
   ShowWindow(window_, showCommand);
@@ -340,6 +341,10 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
             applyPublicListing();
             saveSettings();
           }
+          return 0;
+        case IdNowPlaying:
+          if (HIWORD(wParam) == EN_CHANGE) applyNowPlaying(false);
+          if (HIWORD(wParam) == EN_KILLFOCUS) applyNowPlaying(true);
           return 0;
         case IdDevice:
           if (HIWORD(wParam) == CBN_SELCHANGE) {
@@ -493,12 +498,16 @@ void AppWindow::createControls() {
   addControl(window_, L"STATIC", L"Station name:", SS_RIGHT, 215, 650, 95, 22);
   stationEdit_ = addControl(window_, L"EDIT", L"FUBAR", WS_BORDER | ES_AUTOHSCROLL, 318, 646, 280,
                             24, IdStationName, WS_EX_CLIENTEDGE);
+  addControl(window_, L"STATIC", L"Now playing:", SS_RIGHT, 40, 680, 160, 22);
+  nowPlayingEdit_ = addControl(window_, L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL, 210, 676, 500,
+                               24, IdNowPlaying, WS_EX_CLIENTEDGE);
+  SendMessageW(nowPlayingEdit_, EM_SETLIMITTEXT, 80, 0);
   addControl(window_, L"STATIC",
              L"Public Server lists this station at https://gearsqueens.online/fubar-net",
-              SS_CENTER, 40, 678, 680, 22);
+              SS_CENTER, 40, 708, 680, 22);
   addControl(window_, L"STATIC",
              L"CLI: FUBAR.exe --cli --headless --web --port 8080 --public-server",
-              SS_CENTER, 40, 704, 680, 22);
+              SS_CENTER, 40, 734, 680, 22);
 }
 
 void AppWindow::populateDevices() {
@@ -873,6 +882,10 @@ void AppWindow::saveSettings() const {
   WritePrivateProfileStringW(L"FUBAR", L"StationName",
                              stationEdit_ ? windowText(stationEdit_).c_str() : stationName_.c_str(),
                              ini.c_str());
+  WritePrivateProfileStringW(L"FUBAR", L"NowPlaying",
+                             nowPlayingEdit_ ? windowText(nowPlayingEdit_).c_str()
+                                             : nowPlaying_.c_str(),
+                             ini.c_str());
   WritePrivateProfileStringW(L"FUBAR", L"PublicHost", utf8ToWideLocal(publicHost_).c_str(),
                              ini.c_str());
 }
@@ -964,6 +977,11 @@ void AppWindow::loadSettings() {
     SendMessageW(publicCheck_, BM_SETCHECK, publicServer_ ? BST_CHECKED : BST_UNCHECKED, 0);
   }
   if (stationEdit_) SetWindowTextW(stationEdit_, stationName_.c_str());
+  if (GetPrivateProfileStringW(L"FUBAR", L"NowPlaying", L"", buffer, 1024, ini.c_str()) > 0) {
+    nowPlaying_ = utf8ToWideLocal(FubarNetDirectory::sanitizeNowPlaying(wideToUtf8(buffer)));
+  }
+  if (nowPlayingEdit_) SetWindowTextW(nowPlayingEdit_, nowPlaying_.c_str());
+  applyNowPlaying(false);
 }
 
 void AppWindow::refreshWebStatus() {
@@ -1004,6 +1022,7 @@ void AppWindow::applyWebServer() {
     return;
   }
   if (web_.running() && web_.port() == webPort_) {
+    applyNowPlaying(false);
     refreshWebStatus();
     return;
   }
@@ -1015,6 +1034,7 @@ void AppWindow::applyWebServer() {
     return;
   }
   refreshWebStatus();
+  applyNowPlaying(false);
   applyPublicListing();
 }
 
@@ -1031,8 +1051,30 @@ FubarNetStation AppWindow::currentStation() const {
   station.live = engine_.running();
   station.listeners = web_.liveListeners();
   station.listenerLimit = web_.maxLiveListeners();
-  station.version = "1.1.25";
+  station.nowPlaying = FubarNetDirectory::sanitizeNowPlaying(
+      wideToUtf8(nowPlayingEdit_ ? windowText(nowPlayingEdit_) : nowPlaying_));
+  station.version = "1.1.26";
   return station;
+}
+
+void AppWindow::applyNowPlaying(bool persist) {
+  const std::wstring raw = nowPlayingEdit_ ? windowText(nowPlayingEdit_) : nowPlaying_;
+  const std::string clean = FubarNetDirectory::sanitizeNowPlaying(wideToUtf8(raw));
+  nowPlaying_ = utf8ToWideLocal(clean);
+  if (persist && nowPlayingEdit_ && windowText(nowPlayingEdit_) != nowPlaying_) {
+    DWORD start = 0;
+    DWORD end = 0;
+    SendMessageW(nowPlayingEdit_, EM_GETSEL, reinterpret_cast<WPARAM>(&start),
+                 reinterpret_cast<LPARAM>(&end));
+    SetWindowTextW(nowPlayingEdit_, nowPlaying_.c_str());
+    const DWORD len = static_cast<DWORD>(nowPlaying_.size());
+    SendMessageW(nowPlayingEdit_, EM_SETSEL, start > len ? len : start, end > len ? len : end);
+  }
+  web_.setNowPlaying(clean);
+  if (persist) {
+    applyPublicListing();
+    saveSettings();
+  }
 }
 
 void AppWindow::applyPublicListing() {

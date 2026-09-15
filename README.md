@@ -23,7 +23,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 - Optional continuous recording mode for testing or unattended capture.
 - Separate replay-log window with timestamp, frequency, mode, duration, peak level, playback,
   and Explorer access.
-- Optional public website (default port 80, or `--port N`) so anyone on the network can listen live and play captures.
+- Optional public website (default port 80, or `--port N`) so anyone on the network can listen live, see **now playing**, and play captures.
 - Tools → Settings caps simultaneous live listeners (default 5); extra visitors wait in a queue.
 - Tools → Manage recordings deletes selected clips or anything older than a chosen number of days.
 - Live listen boost, frequency in file names, and remembered device/VOX settings for SDR + VB-CABLE.
@@ -79,12 +79,14 @@ silence for two seconds, FUBAR tries the next physical input automatically.
 13. Tick **Public Server** and set a station name to list this PC on
     `https://gearsqueens.online/fubar-net`. Other FUBAR websites show that live list. The 24/7 hub
     is `https://gearsqueens.online/fubar/`.
+14. Type **Now playing** (letters, numbers, and spaces) so website visitors can see what you are
+    listening to. It updates on the site as you type.
 
 ### Public website
 
 The website is off until an admin enables it. While it is on, FUBAR serves a capture player at
-`http://<this-pc>:80/`. Visitors can **Listen live** to the same audio the app is capturing, and
-play saved WAV clips. Several people can listen at the same time. When the live cap is reached
+`http://<this-pc>:80/`. Visitors can **Listen live** to the same audio the app is capturing, see
+the **Now playing** line the operator typed, and play saved WAV clips. Several people can listen at the same time. When the live cap is reached
 (default 5, change it in **Tools → Settings**), new visitors wait in a queue until a slot frees.
 Live audio is **16-bit PCM at the capture sample rate** (1:1, the same idea as KiwiSDR). That is
 required for SSTV, POCSAG, weather-fax and other digital modes — MP3 would destroy them. Tap

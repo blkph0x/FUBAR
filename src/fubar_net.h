@@ -20,6 +20,7 @@ struct FubarNetStation {
   int listeners = 0;
   int listenerLimit = 5;
   std::string version = "1.1.8";
+  std::string nowPlaying;
   ULONGLONG lastSeen = 0;
 };
 
@@ -41,6 +42,7 @@ class FubarNetDirectory {
 
   static bool validStationId(const std::string& id);
   static std::string sanitizeName(const std::string& name);
+  static std::string sanitizeNowPlaying(const std::string& text);
   static std::string sanitizeHost(const std::string& host);
   static std::string sanitizePath(const std::string& path);
   static bool isPrivateIp(const std::string& host);

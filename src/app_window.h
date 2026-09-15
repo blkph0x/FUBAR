@@ -49,6 +49,7 @@ class AppWindow {
   void pruneOldRecordings();
   FubarNetStation currentStation() const;
   void applyPublicListing();
+  void applyNowPlaying(bool persist);
 
   AudioOptions options_;
   AudioEngine engine_;
@@ -63,6 +64,7 @@ class AppWindow {
   int pruneDays_ = 0;
   std::string stationId_;
   std::wstring stationName_;
+  std::wstring nowPlaying_;
   std::string publicHost_;
   HINSTANCE instance_ = nullptr;
   HWND window_ = nullptr;
@@ -87,6 +89,7 @@ class AppWindow {
   HWND webCheck_ = nullptr;
   HWND publicCheck_ = nullptr;
   HWND stationEdit_ = nullptr;
+  HWND nowPlayingEdit_ = nullptr;
   HWND webStatus_ = nullptr;
   HWND inputLeftMeter_ = nullptr;
   HWND inputRightMeter_ = nullptr;

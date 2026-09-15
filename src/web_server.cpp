@@ -45,6 +45,11 @@ h1{ margin:.2rem 0; font-size:clamp(2.2rem,7vw,4.4rem); letter-spacing:.04em; }
 .livebox{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:16px 0 8px; padding:14px; background:var(--card); border:1px solid var(--line); border-radius:16px; }
 .livebox #liveBtn{ border:0; border-radius:999px; padding:10px 18px; font-weight:800; cursor:pointer; background:var(--live); color:#fff; }
 .livebox #liveBtn.on{ background:var(--green); color:#111; }
+.nowboard{ margin:16px 0 8px; padding:18px 20px; background:linear-gradient(180deg,#171e12,#10150f); border:1px solid var(--green); border-radius:18px; box-shadow:0 0 28px rgba(182,255,42,.14); }
+.nowboard .kicker{ margin:0 0 8px; }
+.nowboard .title{ margin:0; font-size:clamp(1.45rem,5vw,2.55rem); font-weight:800; letter-spacing:.03em; line-height:1.15; color:#f6ffd8; word-break:break-word; }
+.nowboard.empty{ border-color:var(--line); box-shadow:none; background:var(--card); }
+.nowboard.empty .title{ color:var(--muted); font-size:1.05rem; font-weight:600; letter-spacing:.02em; }
 .mix{ display:flex; gap:6px; }
 .mix button{ border:1px solid var(--line); background:#0c100c; color:var(--ink); border-radius:999px; padding:7px 12px; font-weight:700; cursor:pointer; }
 .mix button.on{ background:var(--green); color:#111; border-color:var(--green); }
@@ -78,6 +83,10 @@ button.play.playing{ background:var(--blue); }
   <h1>FUBAR</h1>
   <p class="sub">Listen live to what FUBAR hears, or play back saved captures.</p>
   <div class="pill"><span id="dot" class="dot"></span><span id="live">Connecting…</span></div>
+  <section class="nowboard empty" id="nowBoard" aria-live="polite">
+    <p class="kicker">Now playing</p>
+    <p class="title" id="nowPlayingText">Waiting for the operator</p>
+  </section>
   <div class="livebox">
     <button id="liveBtn" type="button">Listen live</button>
     <div>
@@ -113,6 +122,7 @@ const count = document.getElementById('count');
 const now = document.getElementById('now');
 let items = [];
 let current = '';
+let nowPlayingTitle = '';
 
 function fmt(sec){
   sec = Math.max(0, Number(sec)||0);
@@ -262,9 +272,9 @@ function bindMediaSession(el, ac){
   if (!navigator.mediaSession) return;
   try {
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: 'FUBAR Live',
+      title: nowPlayingTitle || 'FUBAR Live',
       artist: 'FUBAR',
-      album: 'Listen live',
+      album: nowPlayingTitle ? 'Now playing' : 'Listen live',
       artwork: [{src:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAVUlEQVR4nO3SMQEAIAwDsZ3/p7N5gAQkmTt3S5K0/wMwM8/cPQGYmQEwMwNgZgbAzAyAmRkAMzMAZmYAzMwAmJkBMDMDYGYGwMwMgJkZADMzAGZmAMzMAJiZAfhpC+sDEp6nH5sAAAAASUVORK5CYII=', sizes:'64x64', type:'image/png'}]
     });
     navigator.mediaSession.playbackState = 'playing';
@@ -902,9 +912,10 @@ async function loadStations(){
       const freq = s.frequencyMhz ? Number(s.frequencyMhz).toFixed(3) + ' MHz' : '';
       const state = s.recording ? 'recording' : (s.live ? 'on air' : 'idle');
       const people = (s.listeners||0) + '/' + (s.listenerLimit||5);
+      const playing = s.nowPlaying ? `<div class="when">Now playing · ${esc(s.nowPlaying)}</div>` : '';
       return `<a class="station" href="${esc(url)}" target="_blank" rel="noopener">
         <div><div class="name">${esc(s.name||'FUBAR')}</div>
-        <div class="when">${esc(freq)} · ${esc(state)} · ${esc(people)} listening</div></div>
+        <div class="when">${esc(freq)} · ${esc(state)} · ${esc(people)} listening</div>${playing}</div>
         <span class="visit">Open</span></a>`;
     }).join('');
   } catch {
@@ -912,6 +923,21 @@ async function loadStations(){
     box.className = 'empty';
     box.textContent = 'Could not reach the public station list.';
   }
+}
+function showNowPlaying(text){
+  const board = document.getElementById('nowBoard');
+  const title = document.getElementById('nowPlayingText');
+  const value = String(text || '').trim();
+  nowPlayingTitle = value;
+  if (!value){
+    board.classList.add('empty');
+    title.textContent = 'Waiting for the operator';
+    document.title = 'FUBAR Captures';
+    return;
+  }
+  board.classList.remove('empty');
+  title.textContent = value;
+  document.title = value + ' · FUBAR';
 }
 async function refresh(){
   try {
@@ -924,6 +950,7 @@ async function refresh(){
     const air = status.recording ? 'LIVE · recording' : (status.live ? 'On air · live stream ready' : (status.status || 'On air'));
     live.textContent = air + ' · ' + queueLabel(status);
     dot.className = 'dot ' + (status.recording ? 'live' : 'on');
+    showNowPlaying(status.nowPlaying);
     render();
   } catch {
     live.textContent = 'Website unreachable';
@@ -1179,6 +1206,19 @@ void CaptureWebServer::setLiveStatus(const std::wstring& status, bool recording)
   LeaveCriticalSection(&lock_);
 }
 
+void CaptureWebServer::setNowPlaying(const std::string& text) {
+  EnterCriticalSection(&lock_);
+  nowPlaying_ = FubarNetDirectory::sanitizeNowPlaying(text);
+  LeaveCriticalSection(&lock_);
+}
+
+std::string CaptureWebServer::nowPlaying() const {
+  EnterCriticalSection(&lock_);
+  const std::string copy = nowPlaying_;
+  LeaveCriticalSection(&lock_);
+  return copy;
+}
+
 void CaptureWebServer::setMaxLiveListeners(int limit) { liveSlots_.setLimit(limit); }
 int CaptureWebServer::maxLiveListeners() const { return liveSlots_.limit(); }
 int CaptureWebServer::liveListeners() const { return liveSlots_.active(); }
@@ -1354,6 +1394,7 @@ std::string CaptureWebServer::statusJson() const {
   EnterCriticalSection(&lock_);
   const bool recording = recording_;
   const std::wstring live = liveStatus_;
+  const std::string playing = nowPlaying_;
   const std::uint16_t port = port_;
   LeaveCriticalSection(&lock_);
   std::ostringstream json;
@@ -1365,6 +1406,7 @@ std::string CaptureWebServer::statusJson() const {
        << ",\"listeners\":" << liveSlots_.active()
        << ",\"listenerLimit\":" << liveSlots_.limit()
        << ",\"queued\":" << liveSlots_.queued()
+       << ",\"nowPlaying\":\"" << jsonEscape(playing) << "\""
        << "}";
   return json.str();
 }

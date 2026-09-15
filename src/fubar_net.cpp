@@ -82,6 +82,24 @@ std::string FubarNetDirectory::sanitizeName(const std::string& name) {
   return out;
 }
 
+std::string FubarNetDirectory::sanitizeNowPlaying(const std::string& text) {
+  std::string out;
+  bool pendingSpace = false;
+  for (unsigned char ch : text) {
+    const bool word = std::isalnum(ch) != 0 || ch == '-' || ch == '_' || ch == '.' ||
+                      ch == ':' || ch == '/' || ch == '\'';
+    if (word) {
+      if (pendingSpace && !out.empty()) out += ' ';
+      pendingSpace = false;
+      out += static_cast<char>(ch);
+    } else if (ch == ' ' || ch == '\t') {
+      pendingSpace = true;
+    }
+    if (out.size() >= 80) break;
+  }
+  return out;
+}
+
 std::string FubarNetDirectory::sanitizeHost(const std::string& host) {
   std::string out;
   for (unsigned char ch : host) {
@@ -215,6 +233,7 @@ FubarNetStation FubarNetDirectory::fromAnnounceJson(const std::string& json) {
       static_cast<int>(std::clamp(jsonGetNumber(json, "listenerLimit", 5), 1.0, 64.0));
   station.version = sanitizeName(jsonGetString(json, "version"));
   if (station.version.empty()) station.version = "1.1.8";
+  station.nowPlaying = sanitizeNowPlaying(jsonGetString(json, "nowPlaying"));
   return station;
 }
 
@@ -260,6 +279,7 @@ bool FubarNetDirectory::upsert(FubarNetStation station, const std::string& obser
   if (station.listenerLimit < 1) station.listenerLimit = 5;
   station.host = host;
   station.path = sanitizePath(station.path);
+  station.nowPlaying = sanitizeNowPlaying(station.nowPlaying);
   if (isHubSideHost(host)) station.path = "/fubar/";
   station.url = publicUrl(host, station.port, station.path);
   station.lastSeen = GetTickCount64();
@@ -314,7 +334,8 @@ std::string FubarNetDirectory::listJson() const {
          << jsonEscape(s.url) << "\",\"frequencyMhz\":" << s.frequencyMhz
          << ",\"recording\":" << (s.recording ? "true" : "false")
          << ",\"live\":" << (s.live ? "true" : "false") << ",\"listeners\":" << s.listeners
-         << ",\"listenerLimit\":" << s.listenerLimit << ",\"version\":\"" << jsonEscape(s.version)
+         << ",\"listenerLimit\":" << s.listenerLimit << ",\"nowPlaying\":\""
+         << jsonEscape(s.nowPlaying) << "\",\"version\":\"" << jsonEscape(s.version)
          << "\",\"ageSeconds\":" << ((now - s.lastSeen) / 1000) << "}";
   }
   json << "]}";
@@ -470,7 +491,8 @@ bool FubarNetClient::sendAnnounce() {
        << "\",\"frequencyMhz\":" << station.frequencyMhz
        << ",\"recording\":" << (station.recording ? "true" : "false")
        << ",\"live\":" << (station.live ? "true" : "false") << ",\"listeners\":" << station.listeners
-       << ",\"listenerLimit\":" << station.listenerLimit << ",\"version\":\""
+       << ",\"listenerLimit\":" << station.listenerLimit << ",\"nowPlaying\":\""
+       << jsonEscape(station.nowPlaying) << "\",\"version\":\""
        << jsonEscape(station.version) << "\"";
   if (!station.host.empty() && FubarNetDirectory::looksLikeHostname(station.host)) {
     json << ",\"host\":\"" << jsonEscape(station.host) << "\"";

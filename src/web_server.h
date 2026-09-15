@@ -45,6 +45,8 @@ class CaptureWebServer {
   void setRoot(const std::filesystem::path& directory);
   void setLiveHub(LiveAudioHub* hub);
   void setLiveStatus(const std::wstring& status, bool recording);
+  void setNowPlaying(const std::string& text);
+  std::string nowPlaying() const;
   void setMaxLiveListeners(int limit);
   int maxLiveListeners() const;
   int liveListeners() const;
@@ -84,5 +86,6 @@ class CaptureWebServer {
   LiveSlotGate liveSlots_;
   FubarNetDirectory directory_;
   std::wstring liveStatus_ = L"Idle";
+  std::string nowPlaying_;
   std::wstring lastError_;
 };

@@ -73,7 +73,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.25 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.26 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -98,7 +98,8 @@ void printHelp() {
       << L"  --split-stereo        Write stereo as separate mono left/right WAV files\n"
       << L"  --live-listeners N    Max simultaneous live listeners (default 5, extras queue)\n"
       << L"  --public-server       List this station on https://gearsqueens.online/fubar-net\n"
-      << L"  --station-name NAME   Public station name used in the directory\n";
+      << L"  --station-name NAME   Public station name used in the directory\n"
+      << L"  --now-playing TEXT    Show this now-playing line on the public website\n";
 }
 
 ChannelMode parseMode(const std::wstring& text) {
@@ -111,6 +112,13 @@ ChannelMode parseMode(const std::wstring& text) {
 int runSelfTest() {
   if (!testAudioSampleDecoder()) {
     std::wcerr << L"Self-test failed: audio sample decoder error\n";
+    return 1;
+  }
+  if (FubarNetDirectory::sanitizeNowPlaying("VK2ABC News at 6!") != "VK2ABC News at 6" ||
+      FubarNetDirectory::sanitizeNowPlaying("  hello   world  ") != "hello world" ||
+      !FubarNetDirectory::sanitizeNowPlaying("@@@").empty() ||
+      FubarNetDirectory::sanitizeNowPlaying(std::string(200, 'A')).size() != 80) {
+    std::wcerr << L"Self-test failed: now-playing sanitizer error\n";
     return 1;
   }
 
@@ -195,6 +203,7 @@ int runSelfTest() {
   }
   CaptureWebServer server;
   server.setRoot(webDir);
+  server.setNowPlaying("Channel 7 News!");
   if (!server.start(18080)) {
     std::wcerr << L"Self-test failed: could not bind test web port 18080\n";
     return 1;
@@ -215,6 +224,21 @@ int runSelfTest() {
     while ((got = recv(sock, buf, sizeof(buf), 0)) > 0) response.append(buf, static_cast<std::size_t>(got));
   }
   if (sock != INVALID_SOCKET) closesocket(sock);
+  SOCKET statusSock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  std::string statusBody;
+  const bool statusConnected =
+      statusSock != INVALID_SOCKET &&
+      ::connect(statusSock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == 0;
+  if (statusConnected) {
+    const char statusRequest[] =
+        "GET /api/status HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    send(statusSock, statusRequest, sizeof(statusRequest) - 1, 0);
+    char buf[2048];
+    int got = 0;
+    while ((got = recv(statusSock, buf, sizeof(buf), 0)) > 0)
+      statusBody.append(buf, static_cast<std::size_t>(got));
+  }
+  if (statusSock != INVALID_SOCKET) closesocket(statusSock);
   server.stop();
   std::error_code cleanup;
   std::filesystem::remove(clip, cleanup);
@@ -222,6 +246,10 @@ int runSelfTest() {
   std::filesystem::remove(webDir, cleanup);
   if (!connected || response.find("FUBAR_20260101_120000_stereo.wav") == std::string::npos) {
     std::wcerr << L"Self-test failed: website did not list the capture\n";
+    return 1;
+  }
+  if (!statusConnected || statusBody.find("\"nowPlaying\":\"Channel 7 News\"") == std::string::npos) {
+    std::wcerr << L"Self-test failed: website did not publish now-playing status\n";
     return 1;
   }
 
@@ -513,6 +541,7 @@ int wmain(int argc, wchar_t** argv) {
   std::uint16_t webPort = 80;
   bool webPortSet = false;
   std::wstring stationName = L"FUBAR";
+  std::wstring nowPlaying;
   int liveMaxListeners = LiveSlotGate::kDefaultLimit;
   double durationSeconds = 0.0;
   int deviceIndex = -1;
@@ -578,6 +607,8 @@ int wmain(int argc, wchar_t** argv) {
         webEnabled = true;
       } else if (argument == L"--station-name") {
         stationName = next();
+      } else if (argument == L"--now-playing") {
+        nowPlaying = next();
       } else {
         std::wcerr << L"Unknown option: " << argument << L"\n";
         printHelp();
@@ -628,6 +659,8 @@ int wmain(int argc, wchar_t** argv) {
     website.setRoot(options.outputDirectory);
     website.setLiveHub(&engine.liveHub());
     website.setMaxLiveListeners(liveMaxListeners);
+    website.setNowPlaying(FubarNetDirectory::sanitizeNowPlaying(
+        std::string(nowPlaying.begin(), nowPlaying.end())));
     if (!website.start(webPort)) {
       std::wcerr << L"Website failed: " << website.lastError() << L"\n";
     } else {
@@ -641,6 +674,7 @@ int wmain(int argc, wchar_t** argv) {
     station.frequencyMhz = options.frequencyMhz;
     station.live = true;
     station.listenerLimit = liveMaxListeners;
+    station.nowPlaying = website.nowPlaying();
     website.publishStation(station);
     netClient.setPayload(station);
     netClient.start();

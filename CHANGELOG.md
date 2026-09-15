@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.26
+
+- Operators can type a **Now playing** line (letters, numbers, and spaces). The public website
+  shows it in a large status board so listeners know what is on the air.
+
 ## 1.1.25
 
 - Samsung Internet already treated live as a real radio stream; Chrome did not if
