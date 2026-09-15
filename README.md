@@ -30,6 +30,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 - Public Server directory at `https://gearsqueens.online/fubar-net` so listeners can find live stations.
 - Stereo live listen for WFM/SDR (no noisy left+right fold) and background playback when a phone locks.
 - Optional SDR Town control panel on the website. FUBAR loads `SdrTownControl.dll` beside `FUBAR.exe` and can tune a local SDR Town instance after an admin enables allowed controls in **Tools → Settings**.
+- SDR Town website control is session based: visitors click **Take control**, queued users wait their turn, the active session has a fixed timer, and only the active controller can extend it.
 - Full terminal operation for scripts, scheduled jobs, and automation.
 - Handles shared-mode 8/16/24/32-bit PCM and 32/64-bit floating-point input safely.
 

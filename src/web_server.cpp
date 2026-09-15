@@ -56,6 +56,14 @@ h1{ margin:.2rem 0; font-size:clamp(2.2rem,7vw,4.4rem); letter-spacing:.04em; }
 .sdrgrid label{ display:block; color:var(--muted); font-size:12px; margin-bottom:3px; }
 .sdrgrid input,.sdrgrid select{ width:100%; border:1px solid var(--line); border-radius:10px; background:#070807; color:var(--ink); padding:9px 10px; }
 .sdrgrid button{ border:0; border-radius:999px; padding:10px 14px; font-weight:800; cursor:pointer; background:var(--green); color:#111; }
+.sdrgrid input:disabled,.sdrgrid select:disabled{ opacity:.62; cursor:not-allowed; }
+.sdrgrid button:disabled,.sdrlease button:disabled{ opacity:.45; cursor:not-allowed; }
+.sdrlease{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.sdrlease button{ border:1px solid var(--line); border-radius:999px; padding:8px 12px; font-weight:800; cursor:pointer; background:#172214; color:var(--ink); }
+.sdrlease button.primary{ border-color:var(--green); background:var(--green); color:#111; }
+.sdrlease button.warn{ border-color:#ffd166; color:#ffd166; }
+.sdrstate{ color:var(--muted); font-size:13px; }
+.sdrstate.warn{ color:#ffd166; }
 .sdrmeta{ color:var(--muted); font-size:13px; margin-top:8px; min-height:18px; }
 .mix{ display:flex; gap:6px; }
 .mix button{ border:1px solid var(--line); background:#0c100c; color:var(--ink); border-radius:999px; padding:7px 12px; font-weight:700; cursor:pointer; }
@@ -105,6 +113,12 @@ button.play.playing{ background:var(--blue); }
       <button id="sdrTuneBtn" type="button">Tune</button>
       <button id="sdrP25Btn" type="button">P25 CC</button>
     </div>
+    <div class="sdrlease">
+      <button id="sdrTakeControlBtn" type="button" class="primary">Take control</button>
+      <button id="sdrExtendControlBtn" type="button">Extend</button>
+      <button id="sdrReleaseControlBtn" type="button">Release</button>
+      <span class="sdrstate" id="sdrControlState">No one has control yet.</span>
+    </div>
     <div class="sdrmeta" id="sdrTownStatus">Checking SDR Town bridge...</div>
   </section>
   <div class="livebox">
@@ -144,6 +158,29 @@ let items = [];
 let current = '';
 let nowPlayingTitle = '';
 let sdrTownConfig = {enabled:false};
+let sdrControlSession = {role:'idle', canControl:false, remainingMs:0};
+let sdrControlDeadlineMs = 0;
+let sdrControlSeededForLease = false;
+let sdrControlWasActive = false;
+const sdrControlClientId = (() => {
+  const key = 'fubar.sdrTown.clientId';
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() :
+      ('client-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2));
+    localStorage.setItem(key, id);
+  }
+  return id;
+})();
+const sdrControlName = (() => {
+  const key = 'fubar.sdrTown.clientName';
+  let name = localStorage.getItem(key);
+  if (!name) {
+    name = 'Operator ' + sdrControlClientId.slice(-4).toUpperCase();
+    localStorage.setItem(key, name);
+  }
+  return name;
+})();
 
 function fmt(sec){
   sec = Math.max(0, Number(sec)||0);
@@ -964,26 +1001,112 @@ function sdrTownMessage(text){
   const el = document.getElementById('sdrTownStatus');
   if (el) el.textContent = text || '';
 }
+function sdrControlMs(ms){
+  ms = Math.max(0, Number(ms)||0);
+  const total = Math.ceil(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = (total % 60).toString().padStart(2,'0');
+  return m + ':' + s;
+}
+function sdrSetControlsEnabled(){
+  const active = !!(sdrControlSession && sdrControlSession.canControl);
+  const enabled = !!sdrTownConfig.enabled;
+  document.getElementById('sdrFreq').disabled = !enabled || !active || !sdrTownConfig.allowTune;
+  document.getElementById('sdrMode').disabled = !enabled || !active || !sdrTownConfig.allowMode;
+  document.getElementById('sdrBw').disabled = !enabled || !active || !sdrTownConfig.allowTune;
+  document.getElementById('sdrGain').disabled = !enabled || !active || !sdrTownConfig.allowRfGain;
+  document.getElementById('sdrTuneBtn').disabled = !enabled || !active || !sdrTownConfig.allowTune;
+  document.getElementById('sdrP25Btn').disabled = !enabled || !active || !sdrTownConfig.allowP25Control;
+  document.getElementById('sdrTakeControlBtn').disabled =
+    !enabled || active || (sdrControlSession && sdrControlSession.role === 'queued');
+  document.getElementById('sdrExtendControlBtn').disabled =
+    !enabled || !active || Number(sdrControlSession.extensionsUsed || 0) >= Number(sdrControlSession.maxExtensions || 0);
+  document.getElementById('sdrReleaseControlBtn').disabled =
+    !enabled || !(active || (sdrControlSession && sdrControlSession.role === 'queued'));
+}
+function sdrRenderControlSession(){
+  const el = document.getElementById('sdrControlState');
+  if (!el) return;
+  const session = sdrControlSession || {};
+  const active = !!session.canControl;
+  const remaining = active && sdrControlDeadlineMs
+    ? Math.max(0, sdrControlDeadlineMs - Date.now())
+    : Number(session.remainingMs || 0);
+  const warningMs = Number(session.warningMs || sdrTownConfig.warningMs || 60000);
+  el.classList.toggle('warn', active && remaining > 0 && remaining <= warningMs);
+  if (!sdrTownConfig.enabled) {
+    el.textContent = 'SDR Town website control is disabled.';
+  } else if (active) {
+    const ext = Number(session.extensionsUsed || 0);
+    const max = Number(session.maxExtensions || sdrTownConfig.maxExtensions || 0);
+    el.textContent = (remaining <= warningMs && remaining > 0 ? 'Warning: ' : '') +
+      'You have control - ' + sdrControlMs(remaining) + ' left - extensions ' + ext + '/' + max;
+  } else if (session.role === 'queued') {
+    el.textContent = 'Queued #' + Number(session.queuePosition || 0) +
+      ' - current operator ' + (session.activeName || 'operator') +
+      ' has ' + sdrControlMs(session.remainingMs || 0) + ' left.';
+  } else if (session.active) {
+    el.textContent = (session.activeName || 'Another operator') +
+      ' has control for ' + sdrControlMs(session.remainingMs || 0) + '.';
+  } else {
+    el.textContent = 'No one has control. Click Take control to tune SDR Town.';
+  }
+  sdrSetControlsEnabled();
+}
+function sdrAdoptSession(session){
+  const wasActive = sdrControlWasActive;
+  sdrControlSession = session || {role:'idle', canControl:false, remainingMs:0};
+  sdrControlWasActive = !!sdrControlSession.canControl;
+  if (!sdrControlWasActive || !wasActive) sdrControlSeededForLease = false;
+  sdrControlDeadlineMs = sdrControlWasActive
+    ? Date.now() + Number(sdrControlSession.remainingMs || 0)
+    : 0;
+  sdrRenderControlSession();
+}
+async function sdrControlAction(action){
+  try {
+    const res = await fetch('api/sdr-town/control-session', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action, clientId:sdrControlClientId, name:sdrControlName})
+    });
+    const data = await res.json();
+    if (data.session) sdrAdoptSession(data.session);
+    if (!data.ok && data.error) sdrTownMessage(data.error);
+    return data;
+  } catch (error) {
+    sdrTownMessage('Control session failed - ' + (error && error.message ? error.message : 'network error'));
+    return {ok:false};
+  }
+}
+function sdrSeedFields(state){
+  const active = !!(sdrControlSession && sdrControlSession.canControl);
+  if (active && sdrControlSeededForLease) return;
+  const focused = document.activeElement && ['sdrFreq','sdrMode','sdrBw','sdrGain'].includes(document.activeElement.id);
+  if (active && focused) return;
+  const s = state || {};
+  if (s.frequencyMHz) document.getElementById('sdrFreq').value = Number(s.frequencyMHz).toFixed(5);
+  if (s.mode && sdrTownConfig.allowMode) document.getElementById('sdrMode').value = s.mode;
+  if (s.bandwidthHz) document.getElementById('sdrBw').value = Number(s.bandwidthHz / 1000).toFixed(1);
+  if (s.rfGainDb != null && sdrTownConfig.allowRfGain) document.getElementById('sdrGain').value = Number(s.rfGainDb).toFixed(1);
+  if (active) sdrControlSeededForLease = true;
+}
 async function loadSdrTownControl(){
   const panel = document.getElementById('sdrTownPanel');
   try {
     const res = await fetch('api/sdr-town/config', {cache:'no-store'});
     sdrTownConfig = await res.json();
     panel.classList.toggle('on', !!sdrTownConfig.enabled);
-    if (!sdrTownConfig.enabled) return;
-    document.getElementById('sdrMode').disabled = !sdrTownConfig.allowMode;
-    document.getElementById('sdrBw').disabled = !sdrTownConfig.allowTune;
-    document.getElementById('sdrGain').disabled = !sdrTownConfig.allowRfGain;
-    document.getElementById('sdrTuneBtn').disabled = !sdrTownConfig.allowTune;
-    document.getElementById('sdrP25Btn').disabled = !sdrTownConfig.allowP25Control;
+    if (!sdrTownConfig.enabled) {
+      sdrAdoptSession({role:'idle', canControl:false, remainingMs:0});
+      return;
+    }
+    await sdrControlAction('status');
     const statusRes = await fetch('api/sdr-town/status', {cache:'no-store'});
     const status = await statusRes.json();
     if (status.ok && status.state) {
       const s = status.state;
-      if (s.frequencyMHz) document.getElementById('sdrFreq').value = Number(s.frequencyMHz).toFixed(5);
-      if (s.mode && sdrTownConfig.allowMode) document.getElementById('sdrMode').value = s.mode;
-      if (s.bandwidthHz) document.getElementById('sdrBw').value = Number(s.bandwidthHz / 1000).toFixed(1);
-      if (s.rfGainDb != null && sdrTownConfig.allowRfGain) document.getElementById('sdrGain').value = Number(s.rfGainDb).toFixed(1);
+      sdrSeedFields(s);
       sdrTownMessage('SDR Town ready · ' + Number(s.frequencyMHz || 0).toFixed(5) + ' MHz · ' + (s.mode || '') + ' · BW ' + Number((s.bandwidthHz || 0) / 1000).toFixed(1) + ' kHz');
     } else {
       sdrTownMessage(status.error || 'SDR Town not reachable. Start SDR Town with --control-server.');
@@ -991,10 +1114,16 @@ async function loadSdrTownControl(){
   } catch {
     panel.classList.remove('on');
   }
+  sdrSetControlsEnabled();
 }
 async function postSdrTown(path, payload){
+  if (!sdrControlSession || !sdrControlSession.canControl) {
+    sdrTownMessage('Click Take control before sending SDR Town commands.');
+    return;
+  }
   sdrTownMessage('Sending command...');
   try {
+    payload = Object.assign({}, payload || {}, {clientId:sdrControlClientId});
     const res = await fetch(path, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -1008,14 +1137,26 @@ async function postSdrTown(path, payload){
       const s = data.state || {};
       const bw = s.bandwidthHz || (payload.bandwidthKHz ? payload.bandwidthKHz * 1000 : 0);
       sdrTownMessage('Applied · ' + Number(s.frequencyMHz || payload.frequencyMHz || 0).toFixed(5) + ' MHz · ' + (s.mode || payload.mode || '') + (bw ? (' · BW ' + Number(bw / 1000).toFixed(1) + ' kHz') : ''));
-      await loadSdrTownControl();
+      await sdrControlAction('status');
     } else {
+      if (data.session) sdrAdoptSession(data.session);
       sdrTownMessage(data.error || ('Command failed · HTTP ' + res.status));
     }
   } catch (error) {
     sdrTownMessage('Command failed · ' + (error && error.message ? error.message : 'network error'));
   }
 }
+document.getElementById('sdrTakeControlBtn').addEventListener('click', async () => {
+  await sdrControlAction('take');
+  await loadSdrTownControl();
+});
+document.getElementById('sdrExtendControlBtn').addEventListener('click', async () => {
+  await sdrControlAction('extend');
+});
+document.getElementById('sdrReleaseControlBtn').addEventListener('click', async () => {
+  await sdrControlAction('release');
+  await loadSdrTownControl();
+});
 document.getElementById('sdrTuneBtn').addEventListener('click', () => {
   const frequencyMHz = Number(document.getElementById('sdrFreq').value);
   const mode = document.getElementById('sdrMode').value;
@@ -1053,6 +1194,7 @@ loadSdrTownControl();
 loadStations();
 setInterval(refresh, 4000);
 setInterval(loadSdrTownControl, 10000);
+setInterval(sdrRenderControlSession, 1000);
 setInterval(loadStations, 15000);
 </script>
 </body>
@@ -1150,6 +1292,47 @@ constexpr const char* kCors =
     "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
     "Access-Control-Allow-Headers: Content-Type\r\n"
     "Access-Control-Max-Age: 600\r\n";
+
+constexpr std::uint64_t kSdrControlLeaseMs = 5ull * 60ull * 1000ull;
+constexpr std::uint64_t kSdrControlExtendMs = 3ull * 60ull * 1000ull;
+constexpr std::uint64_t kSdrControlWarningMs = 60ull * 1000ull;
+constexpr std::uint64_t kSdrControlQueueStaleMs = 90ull * 1000ull;
+constexpr int kSdrControlMaxExtensions = 2;
+
+std::string sanitizeSdrControlId(const std::string& value) {
+  std::string out;
+  out.reserve(std::min<std::size_t>(value.size(), 80));
+  for (unsigned char ch : value) {
+    if (std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.') {
+      out += static_cast<char>(ch);
+    }
+    if (out.size() >= 80) break;
+  }
+  return out;
+}
+
+std::string sanitizeSdrControlName(const std::string& value, const std::string& clientId) {
+  std::string out;
+  bool pendingSpace = false;
+  for (unsigned char ch : value) {
+    if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') {
+      pendingSpace = true;
+      continue;
+    }
+    if (ch >= 32 && ch < 127) {
+      if (pendingSpace && !out.empty()) out += ' ';
+      pendingSpace = false;
+      out += static_cast<char>(ch);
+    }
+    if (out.size() >= 48) break;
+  }
+  if (!out.empty()) return out;
+  const std::string suffix =
+      clientId.size() > 4 ? clientId.substr(clientId.size() - 4) : clientId;
+  return suffix.empty() ? "Operator" : std::string("Operator ") + suffix;
+}
+
+std::uint64_t tickNow64() { return static_cast<std::uint64_t>(GetTickCount64()); }
 
 std::string headerValue(const std::string& request, const char* name) {
   const std::string prefix = std::string("\r\n") + name + ":";
@@ -1362,6 +1545,196 @@ SdrTownBridgeConfig CaptureWebServer::sdrTownControlConfigLocked() const {
   return value;
 }
 
+void CaptureWebServer::sdrTownControlPromoteLocked(std::uint64_t nowTick) {
+  if (!sdrControlActiveClient_.empty() && nowTick < sdrControlLeaseUntilTick_) return;
+  if (!sdrControlActiveClient_.empty()) {
+    sdrControlActiveClient_.clear();
+    sdrControlActiveName_.clear();
+    sdrControlLeaseUntilTick_ = 0;
+    sdrControlExtensionsUsed_ = 0;
+    ++sdrControlRevision_;
+  }
+
+  while (sdrControlActiveClient_.empty() && !sdrControlQueue_.empty()) {
+    SdrControlQueueEntry next = sdrControlQueue_.front();
+    sdrControlQueue_.pop_front();
+    if (next.clientId.empty()) continue;
+    if (nowTick > next.lastSeenTick && nowTick - next.lastSeenTick > kSdrControlQueueStaleMs) {
+      continue;
+    }
+    sdrControlActiveClient_ = next.clientId;
+    sdrControlActiveName_ = next.name;
+    sdrControlLeaseUntilTick_ = nowTick + kSdrControlLeaseMs;
+    sdrControlExtensionsUsed_ = 0;
+    ++sdrControlRevision_;
+  }
+}
+
+std::string CaptureWebServer::sdrTownControlSessionStateJsonLocked(
+    const std::string& clientId, std::uint64_t nowTick) const {
+  int queuePosition = 0;
+  for (std::size_t i = 0; i < sdrControlQueue_.size(); ++i) {
+    if (sdrControlQueue_[i].clientId == clientId) {
+      queuePosition = static_cast<int>(i + 1);
+      break;
+    }
+  }
+  const bool active = !sdrControlActiveClient_.empty();
+  const bool canControl = active && !clientId.empty() && sdrControlActiveClient_ == clientId &&
+                          nowTick < sdrControlLeaseUntilTick_;
+  const std::uint64_t remaining =
+      active && sdrControlLeaseUntilTick_ > nowTick ? sdrControlLeaseUntilTick_ - nowTick : 0;
+  const char* role = canControl ? "active" : (queuePosition > 0 ? "queued" : (active ? "waiting" : "idle"));
+
+  std::ostringstream json;
+  json << "{\"role\":\"" << role << "\",\"canControl\":" << (canControl ? "true" : "false")
+       << ",\"active\":" << (active ? "true" : "false")
+       << ",\"activeName\":\"" << jsonEscape(sdrControlActiveName_) << "\""
+       << ",\"remainingMs\":" << remaining
+       << ",\"queuePosition\":" << queuePosition
+       << ",\"queueLength\":" << sdrControlQueue_.size()
+       << ",\"extensionsUsed\":" << sdrControlExtensionsUsed_
+       << ",\"maxExtensions\":" << kSdrControlMaxExtensions
+       << ",\"leaseMs\":" << kSdrControlLeaseMs
+       << ",\"extendMs\":" << kSdrControlExtendMs
+       << ",\"warningMs\":" << kSdrControlWarningMs
+       << ",\"revision\":" << sdrControlRevision_
+       << ",\"queue\":[";
+  for (std::size_t i = 0; i < sdrControlQueue_.size(); ++i) {
+    if (i) json << ",";
+    json << "{\"position\":" << (i + 1) << ",\"name\":\""
+         << jsonEscape(sdrControlQueue_[i].name) << "\"}";
+  }
+  json << "]}";
+  return json.str();
+}
+
+std::string CaptureWebServer::sdrTownControlSessionActionJson(const std::string& body) {
+  const std::uint64_t now = tickNow64();
+  std::string action = FubarNetDirectory::jsonGetString(body, "action");
+  if (action.empty()) action = "status";
+  std::transform(action.begin(), action.end(), action.begin(),
+                 [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+  const std::string clientId = sanitizeSdrControlId(FubarNetDirectory::jsonGetString(body, "clientId"));
+  const std::string name =
+      sanitizeSdrControlName(FubarNetDirectory::jsonGetString(body, "name"), clientId);
+
+  bool ok = true;
+  std::string error;
+  std::string state;
+  EnterCriticalSection(&lock_);
+  sdrTownControlPromoteLocked(now);
+  if (!sdrTownControl_.enabled) {
+    ok = false;
+    error = "SDR Town control is disabled in FUBAR.";
+  } else if (clientId.empty()) {
+    ok = false;
+    error = "Missing control client id.";
+  } else {
+    if (sdrControlActiveClient_ == clientId) sdrControlActiveName_ = name;
+    for (auto& queued : sdrControlQueue_) {
+      if (queued.clientId == clientId) {
+        queued.name = name;
+        queued.lastSeenTick = now;
+      }
+    }
+
+    if (action == "take") {
+      if (sdrControlActiveClient_.empty()) {
+        sdrControlActiveClient_ = clientId;
+        sdrControlActiveName_ = name;
+        sdrControlLeaseUntilTick_ = now + kSdrControlLeaseMs;
+        sdrControlExtensionsUsed_ = 0;
+        sdrControlQueue_.erase(
+            std::remove_if(sdrControlQueue_.begin(), sdrControlQueue_.end(),
+                           [&](const SdrControlQueueEntry& entry) {
+                             return entry.clientId == clientId;
+                           }),
+            sdrControlQueue_.end());
+        ++sdrControlRevision_;
+      } else if (sdrControlActiveClient_ != clientId) {
+        const auto found = std::find_if(
+            sdrControlQueue_.begin(), sdrControlQueue_.end(),
+            [&](const SdrControlQueueEntry& entry) { return entry.clientId == clientId; });
+        if (found == sdrControlQueue_.end()) {
+          sdrControlQueue_.push_back({clientId, name, now, now});
+          ++sdrControlRevision_;
+        }
+      }
+    } else if (action == "extend") {
+      if (sdrControlActiveClient_ != clientId) {
+        ok = false;
+        error = "Only the active controller can extend this SDR Town session.";
+      } else if (sdrControlExtensionsUsed_ >= kSdrControlMaxExtensions) {
+        ok = false;
+        error = "This control session has already used both extensions.";
+      } else {
+        const std::uint64_t base = std::max(now, sdrControlLeaseUntilTick_);
+        sdrControlLeaseUntilTick_ = base + kSdrControlExtendMs;
+        ++sdrControlExtensionsUsed_;
+        ++sdrControlRevision_;
+      }
+    } else if (action == "release") {
+      if (sdrControlActiveClient_ == clientId) {
+        sdrControlActiveClient_.clear();
+        sdrControlActiveName_.clear();
+        sdrControlLeaseUntilTick_ = 0;
+        sdrControlExtensionsUsed_ = 0;
+        ++sdrControlRevision_;
+        sdrTownControlPromoteLocked(now);
+      } else {
+        const auto oldSize = sdrControlQueue_.size();
+        sdrControlQueue_.erase(
+            std::remove_if(sdrControlQueue_.begin(), sdrControlQueue_.end(),
+                           [&](const SdrControlQueueEntry& entry) {
+                             return entry.clientId == clientId;
+                           }),
+            sdrControlQueue_.end());
+        if (sdrControlQueue_.size() != oldSize) ++sdrControlRevision_;
+      }
+    } else if (action != "status") {
+      ok = false;
+      error = "Unknown SDR Town control-session action.";
+    }
+  }
+  state = sdrTownControlSessionStateJsonLocked(clientId, now);
+  LeaveCriticalSection(&lock_);
+
+  std::ostringstream json;
+  json << "{\"ok\":" << (ok ? "true" : "false");
+  if (!error.empty()) json << ",\"error\":\"" << jsonEscape(error) << "\"";
+  json << ",\"session\":" << state << "}";
+  return json.str();
+}
+
+bool CaptureWebServer::sdrTownControlCommandAllowed(const std::string& body,
+                                                    std::string* response) {
+  const std::uint64_t now = tickNow64();
+  const std::string clientId = sanitizeSdrControlId(FubarNetDirectory::jsonGetString(body, "clientId"));
+  std::string state;
+  std::string error;
+  bool allowed = false;
+  EnterCriticalSection(&lock_);
+  sdrTownControlPromoteLocked(now);
+  if (!sdrTownControl_.enabled) {
+    error = "SDR Town control is disabled in FUBAR.";
+  } else if (clientId.empty()) {
+    error = "Take control before sending SDR Town commands.";
+  } else if (sdrControlActiveClient_ == clientId && now < sdrControlLeaseUntilTick_) {
+    allowed = true;
+  } else {
+    error = "SDR Town control is locked by another operator. Click Take control to join the queue.";
+  }
+  if (!allowed) state = sdrTownControlSessionStateJsonLocked(clientId, now);
+  LeaveCriticalSection(&lock_);
+
+  if (!allowed && response) {
+    *response = std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) +
+                "\",\"session\":" + state + "}";
+  }
+  return allowed;
+}
+
 bool CaptureWebServer::safeCaptureId(const std::string& id) {
   if (id.empty() || id.size() > 180) return false;
   if (id.find("..") != std::string::npos || id.find('/') != std::string::npos ||
@@ -1444,6 +1817,16 @@ bool CaptureWebServer::handlePathForTest(const std::string& method, const std::s
   }
   if (path == "/api/sdr-town/config" || path == "/api/sdr-town/status") {
     if (method == "GET" || method == "OPTIONS") {
+      *status = 200;
+      *contentType = "application/json";
+      return true;
+    }
+    *status = 405;
+    *contentType = "application/json";
+    return false;
+  }
+  if (path == "/api/sdr-town/control-session") {
+    if (method == "POST" || method == "OPTIONS") {
       *status = 200;
       *contentType = "application/json";
       return true;
@@ -1547,6 +1930,10 @@ std::string CaptureWebServer::sdrTownControlConfigJson() const {
        << ",\"allowMode\":" << (cfg.allowMode ? "true" : "false")
        << ",\"allowRfGain\":" << (cfg.allowRfGain ? "true" : "false")
        << ",\"allowP25Control\":" << (cfg.allowP25Control ? "true" : "false")
+       << ",\"leaseMs\":" << kSdrControlLeaseMs
+       << ",\"extendMs\":" << kSdrControlExtendMs
+       << ",\"warningMs\":" << kSdrControlWarningMs
+       << ",\"maxExtensions\":" << kSdrControlMaxExtensions
        << ",\"port\":" << cfg.port << "}";
   return json.str();
 }
@@ -1923,6 +2310,11 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     sendResponse(client, 200, "OK", "application/json", sdrTownControlConfigJson(), kCors);
     return;
   }
+  if (path == "/api/sdr-town/control-session") {
+    sendResponse(client, 200, "OK", "application/json", sdrTownControlSessionActionJson(body),
+                 kCors);
+    return;
+  }
   if (path == "/api/sdr-town/status") {
     SdrTownBridge bridge;
     const std::string response = bridge.status(sdrTownControlConfigLocked());
@@ -1930,6 +2322,11 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     return;
   }
   if (path == "/api/sdr-town/tune") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
     const auto cfg = sdrTownControlConfigLocked();
     const double mhz = FubarNetDirectory::jsonGetNumber(body, "frequencyMHz", 0.0);
     double hz = FubarNetDirectory::jsonGetNumber(body, "frequencyHz", 0.0);
@@ -1946,6 +2343,11 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     return;
   }
   if (path == "/api/sdr-town/rf-gain") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
     const auto cfg = sdrTownControlConfigLocked();
     const double rfGain = FubarNetDirectory::jsonGetNumber(body, "rfGainDb", NAN);
     std::string error;
@@ -1956,6 +2358,11 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     return;
   }
   if (path == "/api/sdr-town/p25-control") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
     const auto cfg = sdrTownControlConfigLocked();
     const double mhz = FubarNetDirectory::jsonGetNumber(body, "frequencyMHz", 0.0);
     double hz = FubarNetDirectory::jsonGetNumber(body, "frequencyHz", 0.0);

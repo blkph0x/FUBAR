@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.28
+
+- Added session-based SDR Town website control with Take control, queueing, release, and a server-enforced timer.
+- Active controllers get a countdown warning, can extend only twice, and queued users cannot bypass the lease through direct API calls.
+- SDR tuning fields now seed from SDR Town once for the active controller and are not overwritten by status polling while they have control.
+
 ## 1.1.27
 
 - Added optional SDR Town website controls through `SdrTownControl.dll`.

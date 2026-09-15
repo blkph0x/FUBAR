@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -74,6 +75,19 @@ class CaptureWebServer {
   std::string capturesJson() const;
   std::string sdrTownControlConfigJson() const;
   SdrTownBridgeConfig sdrTownControlConfigLocked() const;
+  std::string sdrTownControlSessionActionJson(const std::string& body);
+  bool sdrTownControlCommandAllowed(const std::string& body, std::string* response);
+
+  struct SdrControlQueueEntry {
+    std::string clientId;
+    std::string name;
+    std::uint64_t requestedTick = 0;
+    std::uint64_t lastSeenTick = 0;
+  };
+
+  void sdrTownControlPromoteLocked(std::uint64_t nowTick);
+  std::string sdrTownControlSessionStateJsonLocked(const std::string& clientId,
+                                                   std::uint64_t nowTick) const;
 
   static DWORD WINAPI acceptThreadEntry(LPVOID context);
   static DWORD WINAPI clientThreadEntry(LPVOID context);
@@ -90,6 +104,12 @@ class CaptureWebServer {
   LiveSlotGate liveSlots_;
   FubarNetDirectory directory_;
   SdrTownBridgeConfig sdrTownControl_;
+  std::string sdrControlActiveClient_;
+  std::string sdrControlActiveName_;
+  std::uint64_t sdrControlLeaseUntilTick_ = 0;
+  std::uint64_t sdrControlRevision_ = 0;
+  int sdrControlExtensionsUsed_ = 0;
+  std::deque<SdrControlQueueEntry> sdrControlQueue_;
   std::wstring liveStatus_ = L"Idle";
   std::string nowPlaying_;
   std::wstring lastError_;

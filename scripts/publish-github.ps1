@@ -1,6 +1,6 @@
 param(
   [string]$RepositoryName = "FUBAR",
-  [string]$Tag = "v1.1.27"
+  [string]$Tag = "v1.1.28"
 )
 
 $ErrorActionPreference = "Stop"
