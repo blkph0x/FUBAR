@@ -52,12 +52,14 @@ h1{ margin:.2rem 0; font-size:clamp(2.2rem,7vw,4.4rem); letter-spacing:.04em; }
 .nowboard.empty .title{ color:var(--muted); font-size:1.05rem; font-weight:600; letter-spacing:.02em; }
 .sdrtown{ display:none; margin:16px 0 8px; padding:14px; background:#0c100c; border:1px solid var(--line); border-radius:16px; }
 .sdrtown.on{ display:block; }
-.sdrgrid{ display:grid; grid-template-columns:1.2fr .8fr .8fr auto auto; gap:8px; align-items:end; }
+.sdrgrid{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; align-items:end; }
 .sdrgrid label{ display:block; color:var(--muted); font-size:12px; margin-bottom:3px; }
 .sdrgrid input,.sdrgrid select{ width:100%; border:1px solid var(--line); border-radius:10px; background:#070807; color:var(--ink); padding:9px 10px; }
+.sdrgrid input[type=checkbox]{ width:auto; margin-right:6px; vertical-align:middle; }
 .sdrgrid button{ border:0; border-radius:999px; padding:10px 14px; font-weight:800; cursor:pointer; background:var(--green); color:#111; }
 .sdrgrid input:disabled,.sdrgrid select:disabled{ opacity:.62; cursor:not-allowed; }
 .sdrgrid button:disabled,.sdrlease button:disabled{ opacity:.45; cursor:not-allowed; }
+.sdrrow{ grid-column:1 / -1; display:grid; grid-template-columns:1.25fr 1fr auto; gap:8px; align-items:end; }
 .sdrlease{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
 .sdrlease button{ border:1px solid var(--line); border-radius:999px; padding:8px 12px; font-weight:800; cursor:pointer; background:#172214; color:var(--ink); }
 .sdrlease button.primary{ border-color:var(--green); background:var(--green); color:#111; }
@@ -90,7 +92,8 @@ button.play.playing{ background:var(--blue); }
 .station:hover{ border-color:var(--green); }
 .visit{ border:0; border-radius:999px; padding:8px 14px; font-weight:700; background:#1a2618; color:var(--green); }
 @media (max-width:700px){ .card{ grid-template-columns:auto 1fr; } .stats{ grid-column:1 / -1; } }
-@media (max-width:820px){ .sdrgrid{ grid-template-columns:1fr 1fr; } }
+@media (max-width:820px){ .sdrgrid,.sdrrow{ grid-template-columns:1fr 1fr; } .sdrrow{ grid-column:1 / -1; } }
+@media (max-width:560px){ .sdrgrid,.sdrrow{ grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -109,9 +112,15 @@ button.play.playing{ background:var(--blue); }
       <div><label for="sdrFreq">Frequency MHz</label><input id="sdrFreq" inputmode="decimal" value="420.35000"></div>
       <div><label for="sdrMode">Mode</label><select id="sdrMode"><option>AUTO</option><option>NFM</option><option>WFM</option><option>AM</option><option>USB</option><option>LSB</option><option>CW</option><option>P25</option></select></div>
       <div><label for="sdrBw">Bandwidth kHz</label><input id="sdrBw" inputmode="decimal" placeholder="auto"></div>
+      <div><label for="sdrLpf"><input id="sdrLpfEnabled" type="checkbox" checked>LPF kHz</label><input id="sdrLpf" inputmode="decimal" placeholder="leave"></div>
       <div><label for="sdrGain">RF gain dB</label><input id="sdrGain" inputmode="decimal" placeholder="leave"></div>
+      <div><label for="sdrVolume">Volume %</label><input id="sdrVolume" inputmode="decimal" placeholder="85"></div>
       <button id="sdrTuneBtn" type="button">Tune</button>
-      <button id="sdrP25Btn" type="button">P25 CC</button>
+      <div class="sdrrow">
+        <div><label for="sdrP25Known">Known P25 control channel</label><select id="sdrP25Known"><option value="">Manual / detected list empty</option></select></div>
+        <div><label for="sdrP25Freq">P25 CC MHz</label><input id="sdrP25Freq" inputmode="decimal" placeholder="420.35000"></div>
+        <button id="sdrP25Btn" type="button">Monitor CC</button>
+      </div>
     </div>
     <div class="sdrlease">
       <button id="sdrTakeControlBtn" type="button" class="primary">Take control</button>
@@ -1014,8 +1023,14 @@ function sdrSetControlsEnabled(){
   document.getElementById('sdrFreq').disabled = !enabled || !active || !sdrTownConfig.allowTune;
   document.getElementById('sdrMode').disabled = !enabled || !active || !sdrTownConfig.allowMode;
   document.getElementById('sdrBw').disabled = !enabled || !active || !sdrTownConfig.allowTune;
+  document.getElementById('sdrLpfEnabled').disabled = !enabled || !active || !sdrTownConfig.allowTune;
+  document.getElementById('sdrLpf').disabled = !enabled || !active || !sdrTownConfig.allowTune ||
+    !document.getElementById('sdrLpfEnabled').checked;
   document.getElementById('sdrGain').disabled = !enabled || !active || !sdrTownConfig.allowRfGain;
+  document.getElementById('sdrVolume').disabled = !enabled || !active || !sdrTownConfig.allowTune;
   document.getElementById('sdrTuneBtn').disabled = !enabled || !active || !sdrTownConfig.allowTune;
+  document.getElementById('sdrP25Known').disabled = !enabled || !active || !sdrTownConfig.allowP25Control;
+  document.getElementById('sdrP25Freq').disabled = !enabled || !active || !sdrTownConfig.allowP25Control;
   document.getElementById('sdrP25Btn').disabled = !enabled || !active || !sdrTownConfig.allowP25Control;
   document.getElementById('sdrTakeControlBtn').disabled =
     !enabled || active || (sdrControlSession && sdrControlSession.role === 'queued');
@@ -1063,6 +1078,18 @@ function sdrAdoptSession(session){
     : 0;
   sdrRenderControlSession();
 }
+function sdrPopulateP25ControlChannels(channels){
+  const select = document.getElementById('sdrP25Known');
+  if (!select) return;
+  const current = select.value;
+  const rows = (channels || []).filter(ch => Number(ch.frequencyMHz || ch.frequencyHz || 0) > 0);
+  select.innerHTML = '<option value="">Manual / choose known CC</option>' + rows.map(ch => {
+    const mhz = Number(ch.frequencyMHz || (Number(ch.frequencyHz || 0) / 1000000));
+    const label = (ch.label ? String(ch.label) + ' - ' : '') + mhz.toFixed(5) + ' MHz';
+    return '<option value="' + mhz.toFixed(5) + '">' + label.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) + '</option>';
+  }).join('');
+  if (current && Array.from(select.options).some(o => o.value === current)) select.value = current;
+}
 async function sdrControlAction(action){
   try {
     const res = await fetch('api/sdr-town/control-session', {
@@ -1082,14 +1109,20 @@ async function sdrControlAction(action){
 function sdrSeedFields(state){
   const active = !!(sdrControlSession && sdrControlSession.canControl);
   if (active && sdrControlSeededForLease) return;
-  const focused = document.activeElement && ['sdrFreq','sdrMode','sdrBw','sdrGain'].includes(document.activeElement.id);
+  const focused = document.activeElement && ['sdrFreq','sdrMode','sdrBw','sdrLpf','sdrGain','sdrVolume','sdrP25Freq','sdrP25Known'].includes(document.activeElement.id);
   if (active && focused) return;
   const s = state || {};
   if (s.frequencyMHz) document.getElementById('sdrFreq').value = Number(s.frequencyMHz).toFixed(5);
   if (s.mode && sdrTownConfig.allowMode) document.getElementById('sdrMode').value = s.mode;
   if (s.bandwidthHz) document.getElementById('sdrBw').value = Number(s.bandwidthHz / 1000).toFixed(1);
+  if (s.lpfHz) document.getElementById('sdrLpf').value = Number(s.lpfHz / 1000).toFixed(1);
+  if (s.audioLpfEnabled != null) document.getElementById('sdrLpfEnabled').checked = !!s.audioLpfEnabled;
   if (s.rfGainDb != null && sdrTownConfig.allowRfGain) document.getElementById('sdrGain').value = Number(s.rfGainDb).toFixed(1);
+  if (s.volume != null) document.getElementById('sdrVolume').value = Number(s.volume * 100).toFixed(0);
+  if (s.p25 && s.p25.controlFrequencyHz) document.getElementById('sdrP25Freq').value = Number(s.p25.controlFrequencyHz / 1000000).toFixed(5);
+  sdrPopulateP25ControlChannels(s.knownControlChannels || []);
   if (active) sdrControlSeededForLease = true;
+  sdrSetControlsEnabled();
 }
 async function loadSdrTownControl(){
   const panel = document.getElementById('sdrTownPanel');
@@ -1107,7 +1140,10 @@ async function loadSdrTownControl(){
     if (status.ok && status.state) {
       const s = status.state;
       sdrSeedFields(s);
-      sdrTownMessage('SDR Town ready · ' + Number(s.frequencyMHz || 0).toFixed(5) + ' MHz · ' + (s.mode || '') + ' · BW ' + Number((s.bandwidthHz || 0) / 1000).toFixed(1) + ' kHz');
+      const p25Note = s.p25 && s.p25.monitorDisabledReason ? (' · P25 monitor disabled: ' + s.p25.monitorDisabledReason) : '';
+      const lpfNote = s.audioLpfEnabled ? (' · LPF ' + Number((s.lpfHz || 0) / 1000).toFixed(1) + ' kHz') : ' · LPF off';
+      const volNote = s.volume != null ? (' · Vol ' + Number(s.volume * 100).toFixed(0) + '%') : '';
+      sdrTownMessage('SDR Town ready · ' + Number(s.frequencyMHz || 0).toFixed(5) + ' MHz · ' + (s.mode || '') + ' · BW ' + Number((s.bandwidthHz || 0) / 1000).toFixed(1) + ' kHz' + lpfNote + volNote + p25Note);
     } else {
       sdrTownMessage(status.error || 'SDR Town not reachable. Start SDR Town with --control-server.');
     }
@@ -1157,18 +1193,31 @@ document.getElementById('sdrReleaseControlBtn').addEventListener('click', async 
   await sdrControlAction('release');
   await loadSdrTownControl();
 });
+document.getElementById('sdrLpfEnabled').addEventListener('change', () => {
+  sdrSetControlsEnabled();
+});
+document.getElementById('sdrP25Known').addEventListener('change', () => {
+  const value = document.getElementById('sdrP25Known').value;
+  if (value) document.getElementById('sdrP25Freq').value = value;
+});
 document.getElementById('sdrTuneBtn').addEventListener('click', () => {
   const frequencyMHz = Number(document.getElementById('sdrFreq').value);
   const mode = document.getElementById('sdrMode').value;
   const bwText = document.getElementById('sdrBw').value.trim();
+  const lpfText = document.getElementById('sdrLpf').value.trim();
   const gainText = document.getElementById('sdrGain').value.trim();
+  const volumeText = document.getElementById('sdrVolume').value.trim();
   const payload = {frequencyMHz, mode};
   if (bwText) payload.bandwidthKHz = Number(bwText);
+  payload.audioLpfEnabled = document.getElementById('sdrLpfEnabled').checked;
+  if (lpfText) payload.lpfKHz = Number(lpfText);
   if (gainText) payload.rfGainDb = Number(gainText);
+  if (volumeText) payload.volume = Math.max(0, Math.min(1, Number(volumeText) / 100));
   postSdrTown('api/sdr-town/tune', payload);
 });
 document.getElementById('sdrP25Btn').addEventListener('click', () => {
-  const frequencyMHz = Number(document.getElementById('sdrFreq').value);
+  const p25Text = document.getElementById('sdrP25Freq').value.trim() || document.getElementById('sdrP25Known').value || document.getElementById('sdrFreq').value;
+  const frequencyMHz = Number(p25Text);
   postSdrTown('api/sdr-town/p25-control', {frequencyMHz, autoFollow:true});
 });
 async function refresh(){
@@ -1836,6 +1885,7 @@ bool CaptureWebServer::handlePathForTest(const std::string& method, const std::s
     return false;
   }
   if (path == "/api/sdr-town/tune" || path == "/api/sdr-town/rf-gain" ||
+      path == "/api/sdr-town/volume" ||
       path == "/api/sdr-town/p25-control") {
     if (method == "POST" || method == "OPTIONS") {
       *status = 200;
@@ -2333,11 +2383,18 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     if (hz <= 0.0 && mhz > 0.0) hz = mhz * 1000000.0;
     const std::string mode = FubarNetDirectory::jsonGetString(body, "mode");
     const double bwK = FubarNetDirectory::jsonGetNumber(body, "bandwidthKHz", 0.0);
+    const double lpfK = FubarNetDirectory::jsonGetNumber(body, "lpfKHz", 0.0);
+    const bool hasAudioLpf = body.find("\"audioLpfEnabled\"") != std::string::npos;
+    const int audioLpfEnabled = hasAudioLpf
+        ? (FubarNetDirectory::jsonGetBool(body, "audioLpfEnabled", true) ? 1 : 0)
+        : -1;
     const double rfGain = FubarNetDirectory::jsonGetNumber(body, "rfGainDb", NAN);
+    const double volume = FubarNetDirectory::jsonGetNumber(body, "volume", NAN);
     std::string error;
     SdrTownBridge bridge;
     const std::string response = bridge.tune(cfg, hz, mode, bwK > 0.0 ? bwK * 1000.0 : 0.0,
-                                             rfGain, &error);
+                                             lpfK > 0.0 ? lpfK * 1000.0 : 0.0,
+                                             audioLpfEnabled, rfGain, volume, &error);
     sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json", response, kCors);
     return;
@@ -2353,6 +2410,21 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     std::string error;
     SdrTownBridge bridge;
     const std::string response = bridge.setRfGain(cfg, rfGain, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json", response, kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/volume") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
+    const auto cfg = sdrTownControlConfigLocked();
+    const double volume = FubarNetDirectory::jsonGetNumber(body, "volume", NAN);
+    std::string error;
+    SdrTownBridge bridge;
+    const std::string response = bridge.setVolume(cfg, volume, &error);
     sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json", response, kCors);
     return;

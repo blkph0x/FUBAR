@@ -37,6 +37,7 @@ using HealthFn = int (*)(const SdrTownControlConfig*, char*, size_t);
 using StatusFn = int (*)(const SdrTownControlConfig*, char*, size_t);
 using TuneFn = int (*)(const SdrTownControlConfig*, const SdrTownTuneRequest*, char*, size_t);
 using SetRfGainFn = int (*)(const SdrTownControlConfig*, double, char*, size_t);
+using SetVolumeFn = int (*)(const SdrTownControlConfig*, double, char*, size_t);
 using StartP25Fn = int (*)(const SdrTownControlConfig*, double, int, char*, size_t);
 
 std::string wideToUtf8(const std::wstring& value) {
@@ -140,6 +141,7 @@ bool SdrTownBridge::load(std::string* error) {
     fnStatus_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_Status"));
     fnTune_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_Tune"));
     fnSetRfGain_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_SetRfGain"));
+    fnSetVolume_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_SetVolume"));
     fnStartP25Control_ =
         reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_StartP25Control"));
     if (fnHealth_ && fnStatus_ && fnTune_ && fnSetRfGain_ && fnStartP25Control_) {
@@ -167,27 +169,63 @@ std::string SdrTownBridge::tune(const SdrTownBridgeConfig& config,
                                 double frequencyHz,
                                 const std::string& mode,
                                 double bandwidthHz,
+                                double lpfHz,
+                                int audioLpfEnabled,
                                 double rfGainDb,
+                                double volume,
                                 std::string* error) {
   if (!config.enabled || !config.allowTune) {
     if (error) *error = "Frequency control is disabled";
     return disabledJson("frequency control is disabled");
   }
   if (!load(error)) return disabledJson(error && !error->empty() ? error->c_str() : "DLL missing");
+
+  // DEC-0063/0064: refuse analog Tune while SDR Town is on a live P25 grant
+  // follow or warm-standby hold (RF still on voice after return).
+  {
+    const std::string st = status(config);
+    const bool followLive =
+        st.find("\"followEnabled\":true") != std::string::npos ||
+        st.find("\"trafficActive\":true") != std::string::npos ||
+        st.find("\"trafficRetunedPrimary\":true") != std::string::npos ||
+        st.find("\"warmStandbyActive\":true") != std::string::npos;
+    if (followLive) {
+      if (error) *error = "P25 follow/warm-standby is active; refuse Tune until return to control";
+      return std::string(
+          "{\"ok\":false,\"status\":409,\"error\":\"P25 follow/warm-standby is active; refuse Tune "
+          "until return to control\"}");
+    }
+  }
+
   char response[32768]{};
   auto cfg = controlConfig(config);
   SdrTownTuneRequest req{};
   req.frequencyHz = frequencyHz;
   req.mode = (config.allowMode && !mode.empty()) ? mode.c_str() : nullptr;
   req.bandwidthHz = bandwidthHz;
-  req.lpfHz = 0.0;
-  req.audioLpfEnabled = -1;
+  req.lpfHz = lpfHz;
+  req.audioLpfEnabled = audioLpfEnabled;
   req.rfGainDb = config.allowRfGain ? rfGainDb : NAN;
   req.squelchDb = NAN;
   req.startDevice = 1;
   req.p25AutoFollow = 0;
   const int result = reinterpret_cast<TuneFn>(fnTune_)(&cfg, &req, response, sizeof(response));
   if (!okResult(result) && error) *error = response[0] ? response : "SDR Town tune failed";
+  if (okResult(result) && std::isfinite(volume)) {
+    char volumeResponse[32768]{};
+    const int volumeResult =
+        fnSetVolume_
+            ? reinterpret_cast<SetVolumeFn>(fnSetVolume_)(&cfg, volume, volumeResponse,
+                                                          sizeof(volumeResponse))
+            : -4;
+    if (!okResult(volumeResult)) {
+      if (error) {
+        *error = volumeResponse[0] ? volumeResponse : "SDR Town volume control is unavailable";
+      }
+      return volumeResponse[0] ? volumeResponse : disabledJson("SDR Town volume control is unavailable");
+    }
+    if (volumeResponse[0]) return volumeResponse;
+  }
   return response;
 }
 
@@ -204,6 +242,30 @@ std::string SdrTownBridge::setRfGain(const SdrTownBridgeConfig& config,
   const int result =
       reinterpret_cast<SetRfGainFn>(fnSetRfGain_)(&cfg, rfGainDb, response, sizeof(response));
   if (!okResult(result) && error) *error = response[0] ? response : "SDR Town RF gain failed";
+  return response;
+}
+
+std::string SdrTownBridge::setVolume(const SdrTownBridgeConfig& config,
+                                     double volume,
+                                     std::string* error) {
+  if (!config.enabled || !config.allowTune) {
+    if (error) *error = "Volume control is disabled";
+    return disabledJson("Volume control is disabled");
+  }
+  if (!std::isfinite(volume) || volume < 0.0 || volume > 1.0) {
+    if (error) *error = "Volume is out of range";
+    return disabledJson("Volume is out of range");
+  }
+  if (!load(error)) return disabledJson(error && !error->empty() ? error->c_str() : "DLL missing");
+  if (!fnSetVolume_) {
+    if (error) *error = "SdrTownControl.dll does not expose volume control";
+    return disabledJson("SdrTownControl.dll does not expose volume control");
+  }
+  char response[32768]{};
+  auto cfg = controlConfig(config);
+  const int result =
+      reinterpret_cast<SetVolumeFn>(fnSetVolume_)(&cfg, volume, response, sizeof(response));
+  if (!okResult(result) && error) *error = response[0] ? response : "SDR Town volume failed";
   return response;
 }
 

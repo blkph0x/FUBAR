@@ -1,6 +1,7 @@
 param(
   [string]$RepositoryName = "FUBAR",
-  [string]$Tag = "v1.1.28"
+  [string]$Tag = "v1.1.29",
+  [string]$SdrTownControlDll = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,7 +17,11 @@ if ($LASTEXITCODE -ne 0) {
   throw "GitHub CLI is not authenticated. Run: gh auth login"
 }
 
-& (Join-Path $PSScriptRoot "package.ps1") -Configuration Release
+if ([string]::IsNullOrWhiteSpace($SdrTownControlDll)) {
+  & (Join-Path $PSScriptRoot "package.ps1") -Configuration Release
+} else {
+  & (Join-Path $PSScriptRoot "package.ps1") -Configuration Release -SdrTownControlDll $SdrTownControlDll
+}
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $asset)) {
   throw "Release package build failed"
 }

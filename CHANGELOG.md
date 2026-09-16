@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.29
+
+- SDR Town website control now exposes audio LPF on/off, LPF cutoff, volume, and known P25 control-channel selection.
+- P25 Monitor CC can use a known control-channel dropdown or a manual frequency without disturbing the main tune field.
+- SDR Town now auto-disarms Monitor CC when the selected frequency fails validation for too long, so a bad or stale control-channel lock does not keep auto-follow armed indefinitely.
+
 ## 1.1.28
 
 - Added session-based SDR Town website control with Take control, queueing, release, and a server-enforced timer.

@@ -27,9 +27,13 @@ class SdrTownBridge {
                    double frequencyHz,
                    const std::string& mode,
                    double bandwidthHz,
+                   double lpfHz,
+                   int audioLpfEnabled,
                    double rfGainDb,
+                   double volume,
                    std::string* error);
   std::string setRfGain(const SdrTownBridgeConfig& config, double rfGainDb, std::string* error);
+  std::string setVolume(const SdrTownBridgeConfig& config, double volume, std::string* error);
   std::string startP25Control(const SdrTownBridgeConfig& config,
                               double frequencyHz,
                               bool autoFollow,
@@ -43,5 +47,6 @@ class SdrTownBridge {
   void* fnStatus_ = nullptr;
   void* fnTune_ = nullptr;
   void* fnSetRfGain_ = nullptr;
+  void* fnSetVolume_ = nullptr;
   void* fnStartP25Control_ = nullptr;
 };
