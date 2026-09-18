@@ -13,6 +13,10 @@ struct SdrTownBridgeConfig {
   std::string token;
 };
 
+// Live website subtitle from SDR Town status.
+// Voice follow: "TG 30003 118 ILLAW A". Control channel: "Listening to NSWGRN Control".
+std::string sdrTownP25LiveStatus(const std::string& statusJson);
+
 class SdrTownBridge {
  public:
   SdrTownBridge();

@@ -5,12 +5,18 @@
 
 #include "sdr_town_bridge.h"
 
+#include "fubar_net.h"
+
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace {
 
@@ -284,4 +290,125 @@ std::string SdrTownBridge::startP25Control(const SdrTownBridgeConfig& config,
       &cfg, frequencyHz, autoFollow ? 1 : 0, response, sizeof(response));
   if (!okResult(result) && error) *error = response[0] ? response : "SDR Town P25 control failed";
   return response;
+}
+
+namespace {
+
+std::wstring sdrTownAppDataFile(const wchar_t* leaf) {
+  wchar_t appData[MAX_PATH]{};
+  const DWORD len = GetEnvironmentVariableW(L"APPDATA", appData, MAX_PATH);
+  if (len == 0 || len >= MAX_PATH) return {};
+  return std::wstring(appData) + L"\\SDR_Town\\SDR Town\\" + leaf;
+}
+
+std::string readFileUtf8Limited(const std::wstring& path, std::size_t maxBytes) {
+  if (path.empty()) return {};
+  std::ifstream in(std::filesystem::path(path), std::ios::binary);
+  if (!in) return {};
+  std::string out;
+  out.resize(maxBytes);
+  in.read(out.data(), static_cast<std::streamsize>(maxBytes));
+  out.resize(static_cast<std::size_t>(std::max<std::streamsize>(0, in.gcount())));
+  return out;
+}
+
+std::string jsonStringAfterKeyNear(const std::string& json, std::size_t from, const char* key,
+                                   std::size_t window) {
+  const std::string pat = std::string("\"") + key + "\"";
+  const std::size_t end = std::min(json.size(), from + window);
+  auto pos = json.find(pat, from);
+  if (pos == std::string::npos || pos >= end) return {};
+  pos = json.find(':', pos + pat.size());
+  if (pos == std::string::npos || pos >= end) return {};
+  ++pos;
+  while (pos < end && std::isspace(static_cast<unsigned char>(json[pos]))) ++pos;
+  if (pos >= end || json[pos] != '"') return {};
+  ++pos;
+  std::string out;
+  while (pos < json.size() && json[pos] != '"') {
+    if (json[pos] == '\\' && pos + 1 < json.size()) {
+      ++pos;
+      out += json[pos++];
+    } else {
+      out += json[pos++];
+    }
+    if (out.size() > 80) break;
+  }
+  return out;
+}
+
+std::string lookupP25TalkgroupAlias(unsigned talkgroupId) {
+  if (talkgroupId == 0) return {};
+  const std::string talkgroups =
+      readFileUtf8Limited(sdrTownAppDataFile(L"p25_talkgroups.json"), 4 * 1024 * 1024);
+  char idPat[48];
+  std::snprintf(idPat, sizeof(idPat), "\"talkgroupId\": %u", talkgroupId);
+  auto tgPos = talkgroups.find(idPat);
+  if (tgPos == std::string::npos) {
+    std::snprintf(idPat, sizeof(idPat), "\"talkgroupId\":%u", talkgroupId);
+    tgPos = talkgroups.find(idPat);
+  }
+  if (tgPos != std::string::npos) {
+    // Prefer the object that contains this talkgroupId (scan backward for '{').
+    std::size_t objectStart = talkgroups.rfind('{', tgPos);
+    if (objectStart == std::string::npos) objectStart = tgPos > 400 ? tgPos - 400 : 0;
+    const std::string manual = jsonStringAfterKeyNear(talkgroups, objectStart, "alphaTag", 500);
+    if (!manual.empty()) return manual;
+  }
+
+  const std::string aliases =
+      readFileUtf8Limited(sdrTownAppDataFile(L"p25_aliases.json"), 4 * 1024 * 1024);
+  if (aliases.empty()) return {};
+  char aliasIdPat[40];
+  std::snprintf(aliasIdPat, sizeof(aliasIdPat), "\"id\": %u", talkgroupId);
+  std::size_t search = 0;
+  while (search < aliases.size()) {
+    auto pos = aliases.find(aliasIdPat, search);
+    if (pos == std::string::npos) {
+      std::snprintf(aliasIdPat, sizeof(aliasIdPat), "\"id\":%u", talkgroupId);
+      pos = aliases.find(aliasIdPat, search);
+      if (pos == std::string::npos) break;
+    }
+    const std::string name = jsonStringAfterKeyNear(aliases, pos, "name", 180);
+    if (!name.empty()) return name;
+    search = pos + 4;
+  }
+  return {};
+}
+
+}  // namespace
+
+std::string sdrTownP25LiveStatus(const std::string& statusJson) {
+  if (statusJson.find("\"ok\":true") == std::string::npos &&
+      statusJson.find("\"ok\": true") == std::string::npos) {
+    return {};
+  }
+
+  std::string label = FubarNetDirectory::jsonGetString(statusJson, "talkgroupStatusLabel");
+  const int talkgroupId =
+      static_cast<int>(FubarNetDirectory::jsonGetNumber(statusJson, "followTalkgroupId", 0.0));
+  const bool voiceActive = talkgroupId > 0 &&
+                           (FubarNetDirectory::jsonGetBool(statusJson, "followEnabled", false) ||
+                            FubarNetDirectory::jsonGetBool(statusJson, "trafficActive", false) ||
+                            FubarNetDirectory::jsonGetBool(statusJson, "warmStandbyActive", false));
+
+  if (voiceActive) {
+    if (label.empty()) {
+      const std::string alias = lookupP25TalkgroupAlias(static_cast<unsigned>(talkgroupId));
+      label = alias.empty() ? ("TG " + std::to_string(talkgroupId))
+                            : ("TG " + std::to_string(talkgroupId) + " " + alias);
+    }
+    return FubarNetDirectory::sanitizeNowPlaying(label);
+  }
+
+  const double controlHz =
+      FubarNetDirectory::jsonGetNumber(statusJson, "controlFrequencyHz", 0.0);
+  const bool onControl =
+      controlHz > 0.0 &&
+      (FubarNetDirectory::jsonGetBool(statusJson, "autoFollow", false) ||
+       FubarNetDirectory::jsonGetNumber(statusJson, "monitorArmedMs", 0.0) > 0.0);
+  if (onControl) {
+    return FubarNetDirectory::sanitizeNowPlaying("Listening to NSWGRN Control");
+  }
+  return {};
 }

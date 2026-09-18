@@ -16,6 +16,7 @@
 #include "live_mp3.h"
 #include "fubar_net.h"
 #include "app_paths.h"
+#include "sdr_town_bridge.h"
 
 #include <atomic>
 #include <chrono>
@@ -73,7 +74,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.29 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.30 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -120,6 +121,30 @@ int runSelfTest() {
       FubarNetDirectory::sanitizeNowPlaying(std::string(200, 'A')).size() != 80) {
     std::wcerr << L"Self-test failed: now-playing sanitizer error\n";
     return 1;
+  }
+  {
+    const std::string labeled =
+        "{\"ok\":true,\"state\":{\"p25\":{\"talkgroupStatusLabel\":\"TG 30003 118 ILLAW A\","
+        "\"followTalkgroupId\":30003,\"followEnabled\":true,\"trafficActive\":true}}}";
+    if (sdrTownP25LiveStatus(labeled) != "TG 30003 118 ILLAW A") {
+      std::wcerr << L"Self-test failed: P25 live status voice label error\n";
+      return 1;
+    }
+    const std::string onCc =
+        "{\"ok\":true,\"state\":{\"p25\":{\"followTalkgroupId\":0,\"followEnabled\":false,"
+        "\"trafficActive\":false,\"autoFollow\":true,\"controlFrequencyHz\":420350000,"
+        "\"monitorArmedMs\":1}}}";
+    if (sdrTownP25LiveStatus(onCc) != "Listening to NSWGRN Control") {
+      std::wcerr << L"Self-test failed: P25 live status control-channel label error\n";
+      return 1;
+    }
+    if (!sdrTownP25LiveStatus("{\"ok\":false}").empty() ||
+        !sdrTownP25LiveStatus(
+             "{\"ok\":true,\"state\":{\"p25\":{\"followTalkgroupId\":0,\"followEnabled\":false}}}")
+             .empty()) {
+      std::wcerr << L"Self-test failed: P25 live status idle label error\n";
+      return 1;
+    }
   }
 
   if (!isVirtualCableMonitorLoop(L"CABLE Output (VB-Audio Virtual Cable)",

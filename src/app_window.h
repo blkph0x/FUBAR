@@ -50,6 +50,7 @@ class AppWindow {
   FubarNetStation currentStation() const;
   void applyPublicListing();
   void applyNowPlaying(bool persist);
+  void syncP25Status();
 
   AudioOptions options_;
   AudioEngine engine_;
@@ -66,6 +67,7 @@ class AppWindow {
   std::string stationId_;
   std::wstring stationName_;
   std::wstring nowPlaying_;
+  std::string lastP25Status_;
   std::string publicHost_;
   HINSTANCE instance_ = nullptr;
   HWND window_ = nullptr;

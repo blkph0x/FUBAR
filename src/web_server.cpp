@@ -48,8 +48,11 @@ h1{ margin:.2rem 0; font-size:clamp(2.2rem,7vw,4.4rem); letter-spacing:.04em; }
 .nowboard{ margin:16px 0 8px; padding:18px 20px; background:linear-gradient(180deg,#171e12,#10150f); border:1px solid var(--green); border-radius:18px; box-shadow:0 0 28px rgba(182,255,42,.14); }
 .nowboard .kicker{ margin:0 0 8px; }
 .nowboard .title{ margin:0; font-size:clamp(1.45rem,5vw,2.55rem); font-weight:800; letter-spacing:.03em; line-height:1.15; color:#f6ffd8; word-break:break-word; }
+.nowboard .p25status{ margin:10px 0 0; font-size:clamp(0.92rem,2.6vw,1.12rem); font-weight:650; letter-spacing:.02em; color:var(--green); line-height:1.3; word-break:break-word; }
+.nowboard .p25status[hidden]{ display:none !important; }
 .nowboard.empty{ border-color:var(--line); box-shadow:none; background:var(--card); }
 .nowboard.empty .title{ color:var(--muted); font-size:1.05rem; font-weight:600; letter-spacing:.02em; }
+.nowboard.empty .p25status{ color:#9bb87a; }
 .sdrtown{ display:none; margin:16px 0 8px; padding:14px; background:#0c100c; border:1px solid var(--line); border-radius:16px; }
 .sdrtown.on{ display:block; }
 .sdrgrid{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; align-items:end; }
@@ -105,6 +108,7 @@ button.play.playing{ background:var(--blue); }
   <section class="nowboard empty" id="nowBoard" aria-live="polite">
     <p class="kicker">Now playing</p>
     <p class="title" id="nowPlayingText">Waiting for the operator</p>
+    <p class="p25status" id="p25StatusText" hidden></p>
   </section>
   <section class="sdrtown" id="sdrTownPanel">
     <p class="kicker">SDR Town control</p>
@@ -166,6 +170,7 @@ const now = document.getElementById('now');
 let items = [];
 let current = '';
 let nowPlayingTitle = '';
+let p25StatusLine = '';
 let sdrTownConfig = {enabled:false};
 let sdrControlSession = {role:'idle', canControl:false, remainingMs:0};
 let sdrControlDeadlineMs = 0;
@@ -340,7 +345,7 @@ function bindMediaSession(el, ac){
   try {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: nowPlayingTitle || 'FUBAR Live',
-      artist: 'FUBAR',
+      artist: p25StatusLine || 'FUBAR',
       album: nowPlayingTitle ? 'Now playing' : 'Listen live',
       artwork: [{src:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAVUlEQVR4nO3SMQEAIAwDsZ3/p7N5gAQkmTt3S5K0/wMwM8/cPQGYmQEwMwNgZgbAzAyAmRkAMzMAZmYAzMwAmJkBMDMDYGYGwMwMgJkZADMzAGZmAMzMAJiZAfhpC+sDEp6nH5sAAAAASUVORK5CYII=', sizes:'64x64', type:'image/png'}]
     });
@@ -997,14 +1002,31 @@ function showNowPlaying(text){
   const value = String(text || '').trim();
   nowPlayingTitle = value;
   if (!value){
-    board.classList.add('empty');
     title.textContent = 'Waiting for the operator';
-    document.title = 'FUBAR Captures';
-    return;
+    document.title = p25StatusLine ? (p25StatusLine + ' · FUBAR') : 'FUBAR Captures';
+  } else {
+    title.textContent = value;
+    document.title = value + ' · FUBAR';
   }
-  board.classList.remove('empty');
-  title.textContent = value;
-  document.title = value + ' · FUBAR';
+  board.classList.toggle('empty', !value && !p25StatusLine);
+}
+function showP25Status(text){
+  const board = document.getElementById('nowBoard');
+  const el = document.getElementById('p25StatusText');
+  const value = String(text || '').trim();
+  p25StatusLine = value;
+  if (!el) return;
+  if (!value){
+    el.hidden = true;
+    el.textContent = '';
+  } else {
+    el.hidden = false;
+    el.textContent = value;
+  }
+  board.classList.toggle('empty', !nowPlayingTitle && !value);
+  if (!nowPlayingTitle) {
+    document.title = value ? (value + ' · FUBAR') : 'FUBAR Captures';
+  }
 }
 function sdrTownMessage(text){
   const el = document.getElementById('sdrTownStatus');
@@ -1140,10 +1162,12 @@ async function loadSdrTownControl(){
     if (status.ok && status.state) {
       const s = status.state;
       sdrSeedFields(s);
+      const p25Label = (s.p25 && s.p25.talkgroupStatusLabel) ? String(s.p25.talkgroupStatusLabel).trim() : '';
       const p25Note = s.p25 && s.p25.monitorDisabledReason ? (' · P25 monitor disabled: ' + s.p25.monitorDisabledReason) : '';
+      const p25Live = p25Label ? (' · ' + p25Label) : (s.p25 && s.p25.followTalkgroupId ? (' · TG ' + s.p25.followTalkgroupId) : '');
       const lpfNote = s.audioLpfEnabled ? (' · LPF ' + Number((s.lpfHz || 0) / 1000).toFixed(1) + ' kHz') : ' · LPF off';
       const volNote = s.volume != null ? (' · Vol ' + Number(s.volume * 100).toFixed(0) + '%') : '';
-      sdrTownMessage('SDR Town ready · ' + Number(s.frequencyMHz || 0).toFixed(5) + ' MHz · ' + (s.mode || '') + ' · BW ' + Number((s.bandwidthHz || 0) / 1000).toFixed(1) + ' kHz' + lpfNote + volNote + p25Note);
+      sdrTownMessage('SDR Town ready · ' + Number(s.frequencyMHz || 0).toFixed(5) + ' MHz · ' + (s.mode || '') + ' · BW ' + Number((s.bandwidthHz || 0) / 1000).toFixed(1) + ' kHz' + lpfNote + volNote + p25Live + p25Note);
     } else {
       sdrTownMessage(status.error || 'SDR Town not reachable. Start SDR Town with --control-server.');
     }
@@ -1232,6 +1256,7 @@ async function refresh(){
     live.textContent = air + ' · ' + queueLabel(status);
     dot.className = 'dot ' + (status.recording ? 'live' : 'on');
     showNowPlaying(status.nowPlaying);
+    showP25Status(status.p25Status);
     render();
   } catch {
     live.textContent = 'Website unreachable';
@@ -1241,8 +1266,8 @@ async function refresh(){
 refresh();
 loadSdrTownControl();
 loadStations();
-setInterval(refresh, 4000);
-setInterval(loadSdrTownControl, 10000);
+setInterval(refresh, 2000);
+setInterval(loadSdrTownControl, 2000);
 setInterval(sdrRenderControlSession, 1000);
 setInterval(loadStations, 15000);
 </script>
@@ -1540,6 +1565,19 @@ void CaptureWebServer::setNowPlaying(const std::string& text) {
 std::string CaptureWebServer::nowPlaying() const {
   EnterCriticalSection(&lock_);
   const std::string copy = nowPlaying_;
+  LeaveCriticalSection(&lock_);
+  return copy;
+}
+
+void CaptureWebServer::setP25Status(const std::string& text) {
+  EnterCriticalSection(&lock_);
+  p25Status_ = FubarNetDirectory::sanitizeNowPlaying(text);
+  LeaveCriticalSection(&lock_);
+}
+
+std::string CaptureWebServer::p25Status() const {
+  EnterCriticalSection(&lock_);
+  const std::string copy = p25Status_;
   LeaveCriticalSection(&lock_);
   return copy;
 }
@@ -1954,6 +1992,7 @@ std::string CaptureWebServer::statusJson() const {
   const bool recording = recording_;
   const std::wstring live = liveStatus_;
   const std::string playing = nowPlaying_;
+  const std::string p25 = p25Status_;
   const std::uint16_t port = port_;
   const SdrTownBridgeConfig sdrTown = sdrTownControl_;
   LeaveCriticalSection(&lock_);
@@ -1967,6 +2006,7 @@ std::string CaptureWebServer::statusJson() const {
        << ",\"listenerLimit\":" << liveSlots_.limit()
        << ",\"queued\":" << liveSlots_.queued()
        << ",\"nowPlaying\":\"" << jsonEscape(playing) << "\""
+       << ",\"p25Status\":\"" << jsonEscape(p25) << "\""
        << ",\"sdrTownControl\":" << (sdrTown.enabled ? "true" : "false")
        << "}";
   return json.str();

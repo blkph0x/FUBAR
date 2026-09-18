@@ -49,6 +49,8 @@ class CaptureWebServer {
   void setLiveStatus(const std::wstring& status, bool recording);
   void setNowPlaying(const std::string& text);
   std::string nowPlaying() const;
+  void setP25Status(const std::string& text);
+  std::string p25Status() const;
   void setMaxLiveListeners(int limit);
   void setSdrTownControlConfig(const SdrTownBridgeConfig& config);
   int maxLiveListeners() const;
@@ -112,5 +114,6 @@ class CaptureWebServer {
   std::deque<SdrControlQueueEntry> sdrControlQueue_;
   std::wstring liveStatus_ = L"Idle";
   std::string nowPlaying_;
+  std::string p25Status_;
   std::wstring lastError_;
 };

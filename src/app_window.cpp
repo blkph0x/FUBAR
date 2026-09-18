@@ -230,7 +230,7 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   RegisterClassExW(&brandClass);
 
   HMENU menu = LoadMenuW(instance_, MAKEINTRESOURCEW(IDR_MAINMENU));
-  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.29", WS_OVERLAPPEDWINDOW,
+  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.30", WS_OVERLAPPEDWINDOW,
                             CW_USEDEFAULT, CW_USEDEFAULT, 780, 880, nullptr, menu, instance_,
                             this);
   if (!window_) return 1;
@@ -665,11 +665,18 @@ void AppWindow::updateMeters() {
     if (++webTicks >= 12) {
       webTicks = 0;
       refreshWebStatus();
+      syncP25Status();
       if (publicServer_) {
         const auto station = currentStation();
         web_.publishStation(station);
         netClient_.setPayload(station);
       }
+    }
+  } else if (sdrTownControl_.enabled) {
+    static int p25Ticks = 0;
+    if (++p25Ticks >= 12) {
+      p25Ticks = 0;
+      syncP25Status();
     }
   }
   if (autoSelectInput_ && engine_.running()) {
@@ -1079,7 +1086,7 @@ FubarNetStation AppWindow::currentStation() const {
   station.listenerLimit = web_.maxLiveListeners();
   station.nowPlaying = FubarNetDirectory::sanitizeNowPlaying(
       wideToUtf8(nowPlayingEdit_ ? windowText(nowPlayingEdit_) : nowPlaying_));
-  station.version = "1.1.29";
+  station.version = "1.1.30";
   return station;
 }
 
@@ -1101,6 +1108,23 @@ void AppWindow::applyNowPlaying(bool persist) {
     applyPublicListing();
     saveSettings();
   }
+}
+
+void AppWindow::syncP25Status() {
+  if (!sdrTownControl_.enabled) {
+    if (!lastP25Status_.empty()) {
+      lastP25Status_.clear();
+      web_.setP25Status({});
+    }
+    return;
+  }
+
+  SdrTownBridge bridge;
+  const std::string status = bridge.status(sdrTownControl_);
+  const std::string label = sdrTownP25LiveStatus(status);
+  if (label == lastP25Status_) return;
+  lastP25Status_ = label;
+  web_.setP25Status(label);
 }
 
 void AppWindow::applyPublicListing() {

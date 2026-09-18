@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.30
+
+- Website keeps the operator **Now playing** text as the main title.
+- Adds a smaller live P25 status under it: talkgroup + alpha tag while following voice, or `Listening to NSWGRN Control` while parked on the control channel.
+- Polls SDR Town about once a second so the public board stays current without overwriting the operator's now-playing field.
+
 ## 1.1.29
 
 - SDR Town website control now exposes audio LPF on/off, LPF cutoff, volume, and known P25 control-channel selection.
