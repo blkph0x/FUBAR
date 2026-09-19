@@ -37,6 +37,7 @@ struct SdrTownTuneRequest {
   double squelchDb;
   int startDevice;
   int p25AutoFollow;
+  int force;  // leave live P25 follow on intentional website tune
 };
 
 using HealthFn = int (*)(const SdrTownControlConfig*, char*, size_t);
