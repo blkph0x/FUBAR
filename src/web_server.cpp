@@ -70,6 +70,36 @@ h1{ margin:.2rem 0; font-size:clamp(2.2rem,7vw,4.4rem); letter-spacing:.04em; }
 .sdrstate{ color:var(--muted); font-size:13px; }
 .sdrstate.warn{ color:#ffd166; }
 .sdrmeta{ color:var(--muted); font-size:13px; margin-top:8px; min-height:18px; }
+.modemenu{ margin:12px 0 4px; padding:12px; background:#0c100c; border:1px solid var(--line); border-radius:14px; }
+.modemenu .lab{ color:var(--muted); font-size:12px; margin:0 0 8px; }
+.modemenu .lab b{ color:var(--ink); }
+.modebtns{ display:flex; flex-wrap:wrap; gap:6px; }
+.modebtns button{ border:1px solid var(--line); background:#172214; color:var(--ink); border-radius:999px; padding:8px 12px; font-weight:800; cursor:pointer; }
+.modebtns button.on{ background:var(--green); color:#111; border-color:var(--green); }
+.modebtns button:disabled{ opacity:.45; cursor:not-allowed; }
+.modebtns button.digital{ border-color:var(--blue); color:var(--blue); }
+.modebtns button.digital.on{ background:var(--blue); color:#041018; border-color:var(--blue); }
+.modehint{ color:var(--muted); font-size:12px; margin:8px 0 0; line-height:1.4; }
+.quickmode{ margin:12px 0 0; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.quickmode button{ border:1px solid var(--line); background:#172214; color:var(--ink); border-radius:999px; padding:8px 14px; font-weight:800; cursor:pointer; }
+.quickmode button:disabled{ opacity:.45; cursor:not-allowed; }
+.quickmode .hint{ color:var(--muted); font-size:12px; }
+.tabs{ display:flex; flex-wrap:wrap; gap:8px; margin:16px 0 10px; }
+.tabs button{ border:1px solid var(--line); background:#0c100c; color:var(--ink); border-radius:999px; padding:9px 14px; font-weight:700; cursor:pointer; }
+.tabs button.on{ background:var(--green); color:#111; border-color:var(--green); }
+.tabpanel{ display:none; margin:0 0 12px; }
+.tabpanel.on{ display:block; }
+.infocard{ padding:16px 18px; background:var(--card); border:1px solid var(--line); border-radius:16px; }
+.infocard h3{ margin:0 0 8px; font-size:1.15rem; }
+.infocard .howto{ color:var(--muted); font-size:14px; line-height:1.45; margin:0 0 14px; }
+.infocard .howto ol{ margin:8px 0 0; padding-left:1.2rem; }
+.infocard .big{ font-size:clamp(1.2rem,3.5vw,1.8rem); font-weight:800; color:#f6ffd8; margin:0 0 8px; word-break:break-word; }
+.infocard .meta{ color:var(--muted); font-size:13px; line-height:1.5; }
+.infocard .meta b{ color:var(--ink); font-weight:700; }
+.sstvgrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; margin-top:12px; }
+.sstvgrid a{ display:block; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#0c100c; color:inherit; text-decoration:none; }
+.sstvgrid img{ display:block; width:100%; aspect-ratio:4/3; object-fit:contain; background:#000; }
+.sstvgrid .cap{ padding:8px 10px; font-size:12px; color:var(--muted); white-space:pre-wrap; }
 .mix{ display:flex; gap:6px; }
 .mix button{ border:1px solid var(--line); background:#0c100c; color:var(--ink); border-radius:999px; padding:7px 12px; font-weight:700; cursor:pointer; }
 .mix button.on{ background:var(--green); color:#111; border-color:var(--green); }
@@ -110,30 +140,14 @@ button.play.playing{ background:var(--blue); }
     <p class="title" id="nowPlayingText">Waiting for the operator</p>
     <p class="p25status" id="p25StatusText" hidden></p>
   </section>
-  <section class="sdrtown" id="sdrTownPanel">
-    <p class="kicker">SDR Town control</p>
-    <div class="sdrgrid">
-      <div><label for="sdrFreq">Frequency MHz</label><input id="sdrFreq" inputmode="decimal" value="420.35000"></div>
-      <div><label for="sdrMode">Mode</label><select id="sdrMode"><option>AUTO</option><option>NFM</option><option>WFM</option><option>AM</option><option>USB</option><option>LSB</option><option>CW</option><option>P25</option></select></div>
-      <div><label for="sdrBw">Bandwidth kHz</label><input id="sdrBw" inputmode="decimal" placeholder="auto"></div>
-      <div><label for="sdrLpf"><input id="sdrLpfEnabled" type="checkbox" checked>LPF kHz</label><input id="sdrLpf" inputmode="decimal" placeholder="leave"></div>
-      <div><label for="sdrGain">RF gain dB</label><input id="sdrGain" inputmode="decimal" placeholder="leave"></div>
-      <div><label for="sdrVolume">Volume %</label><input id="sdrVolume" inputmode="decimal" placeholder="85"></div>
-      <button id="sdrTuneBtn" type="button">Tune</button>
-      <div class="sdrrow">
-        <div><label for="sdrP25Known">Known P25 control channel</label><select id="sdrP25Known"><option value="">Manual / detected list empty</option></select></div>
-        <div><label for="sdrP25Freq">P25 CC MHz</label><input id="sdrP25Freq" inputmode="decimal" placeholder="420.35000"></div>
-        <button id="sdrP25Btn" type="button">Monitor CC</button>
-      </div>
-    </div>
-    <div class="sdrlease">
-      <button id="sdrTakeControlBtn" type="button" class="primary">Take control</button>
-      <button id="sdrExtendControlBtn" type="button">Extend</button>
-      <button id="sdrReleaseControlBtn" type="button">Release</button>
-      <span class="sdrstate" id="sdrControlState">No one has control yet.</span>
-    </div>
-    <div class="sdrmeta" id="sdrTownStatus">Checking SDR Town bridge...</div>
-  </section>
+  <nav class="tabs" id="siteTabs" aria-label="Station sections">
+    <button type="button" class="on" data-tab="listen">Listen</button>
+    <button type="button" data-tab="fm">FM station</button>
+    <button type="button" data-tab="tones">UHF tones</button>
+    <button type="button" data-tab="sstv">SSTV pictures</button>
+    <button type="button" data-tab="control">Radio control</button>
+  </nav>
+  <section class="tabpanel on" id="tab-listen">
   <div class="livebox">
     <button id="liveBtn" type="button">Listen live</button>
     <div>
@@ -147,6 +161,117 @@ button.play.playing{ background:var(--blue); }
     </div>
     <div class="level" title="Live level"><span id="liveLevel"></span></div>
   </div>
+  </section>
+  <section class="tabpanel" id="tab-fm">
+    <div class="infocard">
+      <h3>FM station (RDS)</h3>
+      <div class="howto">
+        Easy steps:
+        <ol>
+          <li>Open <b>Radio control</b>, click <b>Take control</b>.</li>
+          <li>Tap <b>Switch to WFM</b> below (or pick WFM on Radio control).</li>
+          <li>Tune an FM broadcast station (around 88–108 MHz).</li>
+          <li>Wait a few seconds — the station name and text appear here automatically.</li>
+        </ol>
+        Mode changes only run while you hold control. FUBAR does not touch the SDR Town DSP thread beyond the normal control API.
+      </div>
+      <p class="big" id="rdsSummary">Waiting for FM station data</p>
+      <div class="meta" id="rdsMeta">Enable SDR Town control in FUBAR settings so this page can read live RDS.</div>
+      <div class="quickmode">
+        <button type="button" data-set-mode="WFM" class="sdrModeAction">Switch to WFM</button>
+        <span class="hint">Wide FM for broadcast radio / RDS</span>
+      </div>
+    </div>
+  </section>
+  <section class="tabpanel" id="tab-tones">
+    <div class="infocard">
+      <h3>UHF / VHF tones (CTCSS &amp; DCS)</h3>
+      <div class="howto">
+        Easy steps:
+        <ol>
+          <li>Open <b>Radio control</b>, click <b>Take control</b>.</li>
+          <li>Tap <b>Switch to NFM</b> below.</li>
+          <li>Tune the channel you want to identify.</li>
+          <li>When a tone is found it shows below — display only, audio is never muted by this.</li>
+        </ol>
+      </div>
+      <p class="big" id="tonesSummary">Waiting for CTCSS / DCS</p>
+      <div class="meta" id="tonesMeta">Enable SDR Town control in FUBAR settings so this page can read live tones.</div>
+      <div class="quickmode">
+        <button type="button" data-set-mode="NFM" class="sdrModeAction">Switch to NFM</button>
+        <span class="hint">Narrow FM for UHF/VHF voice channels</span>
+      </div>
+    </div>
+  </section>
+  <section class="tabpanel" id="tab-sstv">
+    <div class="infocard">
+      <h3>SSTV pictures</h3>
+      <div class="howto">
+        Easy steps:
+        <ol>
+          <li>Take control, then tap <b>Switch to NFM</b> and tune the SSTV frequency.</li>
+          <li>In SDR Town open <b>Tools → SSTV Images</b>.</li>
+          <li>Choose <b>Live NFM - main receiver</b>, pick a <b>new empty output folder</b>, then <b>Receive</b>.</li>
+          <li>When the picture looks done, click <b>Finish and save</b>. Images show up here.</li>
+        </ol>
+        FUBAR never starts or stops the SSTV decoder — it only shows saved pictures and status.
+      </div>
+      <p class="big" id="sstvSummary">Open Tools → SSTV Images in SDR Town</p>
+      <div class="meta" id="sstvMeta">Enable SDR Town control in FUBAR settings to refresh this panel.</div>
+      <div class="quickmode">
+        <button type="button" data-set-mode="NFM" class="sdrModeAction">Switch to NFM</button>
+        <span class="hint">SSTV listens to the main NFM audio</span>
+      </div>
+      <div class="sstvgrid" id="sstvImages"></div>
+    </div>
+  </section>
+  <section class="tabpanel" id="tab-control">
+  <section class="sdrtown" id="sdrTownPanel">
+    <p class="kicker">SDR Town control</p>
+    <div class="sdrlease">
+      <button id="sdrTakeControlBtn" type="button" class="primary">Take control</button>
+      <button id="sdrExtendControlBtn" type="button">Extend</button>
+      <button id="sdrReleaseControlBtn" type="button">Release</button>
+      <span class="sdrstate" id="sdrControlState">No one has control yet.</span>
+    </div>
+    <div class="modemenu">
+      <p class="lab"><b>Demod / mode</b> — take control, then tap a mode. Keeps the current frequency.</p>
+      <div class="modebtns" id="sdrModeBtns">
+        <button type="button" data-set-mode="AUTO" class="sdrModeAction" title="Automatic mode pick">AUTO</button>
+        <button type="button" data-set-mode="NFM" class="sdrModeAction" title="Narrow FM — UHF/VHF, tones, SSTV">NFM</button>
+        <button type="button" data-set-mode="WFM" class="sdrModeAction" title="Wide FM — broadcast radio / RDS">WFM</button>
+        <button type="button" data-set-mode="AM" class="sdrModeAction">AM</button>
+        <button type="button" data-set-mode="USB" class="sdrModeAction">USB</button>
+        <button type="button" data-set-mode="LSB" class="sdrModeAction">LSB</button>
+        <button type="button" data-set-mode="CW" class="sdrModeAction">CW</button>
+        <button type="button" data-set-mode="P25" class="sdrModeAction digital" title="Digital P25 trunking — uses Monitor CC at the frequency below">P25</button>
+      </div>
+      <p class="modehint" id="sdrModeHint">Analog demods change instantly. P25 starts control-channel monitoring at the frequency in the form below.</p>
+    </div>
+    <div class="sdrgrid">
+      <div><label for="sdrFreq">Frequency MHz</label><input id="sdrFreq" inputmode="decimal" value="420.35000" placeholder="e.g. 7.10000 or 95.70000" title="0.1–6000 MHz. Take control, type the frequency, then Tune."></div>
+      <div><label for="sdrMode">Mode (with Tune)</label><select id="sdrMode"><option>AUTO</option><option>NFM</option><option>WFM</option><option>AM</option><option>USB</option><option>LSB</option><option>CW</option><option>P25</option></select></div>
+      <div><label for="sdrBw">Bandwidth kHz</label><input id="sdrBw" inputmode="decimal" placeholder="auto"></div>
+      <div><label for="sdrLpf"><input id="sdrLpfEnabled" type="checkbox" checked>LPF kHz</label><input id="sdrLpf" inputmode="decimal" placeholder="leave"></div>
+      <div><label for="sdrGain">RF gain dB</label><input id="sdrGain" inputmode="decimal" placeholder="leave"></div>
+      <div><label for="sdrVolume">Volume %</label><input id="sdrVolume" inputmode="decimal" placeholder="85"></div>
+      <div><label for="sdrDirectSamp">RTL direct sampling (HF)</label>
+        <select id="sdrDirectSamp" title="Enable Q-ADC or I-ADC to receive ~500 kHz–28 MHz on RTL-SDR">
+          <option value="0">Off (normal tuner)</option>
+          <option value="2">Q-ADC (HF ~500 kHz+)</option>
+          <option value="1">I-ADC (HF)</option>
+        </select>
+      </div>
+      <button id="sdrTuneBtn" type="button">Tune</button>
+      <div class="sdrrow">
+        <div><label for="sdrP25Known">Known P25 control channel</label><select id="sdrP25Known"><option value="">Manual / detected list empty</option></select></div>
+        <div><label for="sdrP25Freq">P25 CC MHz</label><input id="sdrP25Freq" inputmode="decimal" placeholder="420.35000"></div>
+        <button id="sdrP25Btn" type="button">Monitor CC</button>
+      </div>
+    </div>
+    <div class="sdrmeta" id="sdrTownStatus">Checking SDR Town bridge...</div>
+  </section>
+  </section>
 </header>
 <main>
   <div class="row"><h2>Public servers</h2><div class="meta" id="netCount"></div></div>
@@ -172,6 +297,7 @@ let current = '';
 let nowPlayingTitle = '';
 let p25StatusLine = '';
 let sdrTownConfig = {enabled:false};
+let sdrTownLiveState = null;
 let sdrControlSession = {role:'idle', canControl:false, remainingMs:0};
 let sdrControlDeadlineMs = 0;
 let sdrControlSeededForLease = false;
@@ -1028,6 +1154,80 @@ function showP25Status(text){
     document.title = value ? (value + ' · FUBAR') : 'FUBAR Captures';
   }
 }
+function switchTab(name){
+  document.querySelectorAll('#siteTabs button').forEach(btn => {
+    btn.classList.toggle('on', btn.getAttribute('data-tab') === name);
+  });
+  document.querySelectorAll('.tabpanel').forEach(panel => {
+    panel.classList.toggle('on', panel.id === ('tab-' + name));
+  });
+}
+document.querySelectorAll('#siteTabs button').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
+});
+function renderDecodePanels(state){
+  const s = state || {};
+  const rds = s.rds || {};
+  const tones = s.tones || {};
+  const sstv = s.sstv || {};
+  const rdsSummary = document.getElementById('rdsSummary');
+  const rdsMeta = document.getElementById('rdsMeta');
+  const tonesSummary = document.getElementById('tonesSummary');
+  const tonesMeta = document.getElementById('tonesMeta');
+  const sstvSummary = document.getElementById('sstvSummary');
+  const sstvMeta = document.getElementById('sstvMeta');
+  const sstvImages = document.getElementById('sstvImages');
+  if (rdsSummary) rdsSummary.textContent = rds.summary || 'Waiting for FM station data';
+  if (rdsMeta) {
+    if (!sdrTownConfig.enabled) {
+      rdsMeta.textContent = 'Turn on SDR Town control in FUBAR Tools → Settings, keep SDR Town running, then tune WFM.';
+    } else {
+      const bits = [];
+      if (rds.programmeService) bits.push('<b>Name</b> ' + esc(rds.programmeService));
+      if (rds.pi) bits.push('<b>PI</b> ' + esc(rds.pi));
+      if (rds.pty != null) bits.push('<b>PTY</b> ' + esc(rds.pty));
+      if (rds.trafficAnnouncement) bits.push('<b>Traffic announcement</b>');
+      if (rds.radioText) bits.push('<b>Text</b> ' + esc(rds.radioText));
+      if (rds.modeHint) bits.push(esc(rds.modeHint));
+      rdsMeta.innerHTML = bits.join('<br>') || 'Listening…';
+    }
+  }
+  if (tonesSummary) tonesSummary.textContent = tones.summary || 'Waiting for CTCSS / DCS';
+  if (tonesMeta) {
+    if (!sdrTownConfig.enabled) {
+      tonesMeta.textContent = 'Turn on SDR Town control in FUBAR Tools → Settings, keep SDR Town running, then tune NFM.';
+    } else {
+      const bits = [];
+      if (tones.ctcssFresh && Number(tones.ctcssHz) > 0) bits.push('<b>CTCSS</b> ' + Number(tones.ctcssHz).toFixed(1) + ' Hz');
+      const aliases = Array.isArray(tones.dcsAliases) ? tones.dcsAliases : [];
+      if (aliases.length) bits.push('<b>DCS</b> ' + aliases.map(esc).join(' / ') + ' (equivalent codes)');
+      if (tones.modeHint) bits.push(esc(tones.modeHint));
+      tonesMeta.innerHTML = bits.join('<br>') || 'Searching…';
+    }
+  }
+  if (sstvSummary) sstvSummary.textContent = sstv.summary || 'Open Tools → SSTV Images in SDR Town';
+  if (sstvMeta) {
+    if (!sdrTownConfig.enabled) {
+      sstvMeta.textContent = 'Turn on SDR Town control in FUBAR Tools → Settings to show live SSTV status and pictures.';
+    } else {
+      const bits = [];
+      if (sstv.status) bits.push('<b>Status</b> ' + esc(sstv.status));
+      if (sstv.outputDirectory) bits.push('<b>Folder</b> ' + esc(sstv.outputDirectory));
+      if (sstv.modeHint) bits.push(esc(sstv.modeHint));
+      sstvMeta.innerHTML = bits.join('<br>');
+    }
+  }
+  if (sstvImages) {
+    const images = Array.isArray(sstv.images) ? sstv.images : [];
+    sstvImages.innerHTML = images.map((img, index) => {
+      const path = encodeURIComponent(String(img.path || ''));
+      const label = esc(img.label || img.name || ('Picture ' + (index + 1)));
+      return '<a href="api/sdr-town/sstv-file?path=' + path + '" target="_blank" rel="noopener">' +
+        '<img src="api/sdr-town/sstv-file?path=' + path + '" alt="' + label + '">' +
+        '<div class="cap">' + label + '</div></a>';
+    }).join('');
+  }
+}
 function sdrTownMessage(text){
   const el = document.getElementById('sdrTownStatus');
   if (el) el.textContent = text || '';
@@ -1039,27 +1239,53 @@ function sdrControlMs(ms){
   const s = (total % 60).toString().padStart(2,'0');
   return m + ':' + s;
 }
+function sdrHighlightMode(mode){
+  const current = String(mode || '').toUpperCase();
+  document.querySelectorAll('.sdrModeAction').forEach(btn => {
+    const value = String(btn.getAttribute('data-set-mode') || '').toUpperCase();
+    btn.classList.toggle('on', !!current && value === current);
+  });
+  const select = document.getElementById('sdrMode');
+  if (select && current) {
+    const opt = Array.from(select.options).find(o => String(o.value).toUpperCase() === current);
+    if (opt) select.value = opt.value;
+  }
+}
 function sdrSetControlsEnabled(){
   const active = !!(sdrControlSession && sdrControlSession.canControl);
   const enabled = !!sdrTownConfig.enabled;
+  const canMode = enabled && active && !!sdrTownConfig.allowMode;
+  const canP25 = enabled && active && !!sdrTownConfig.allowP25Control;
   document.getElementById('sdrFreq').disabled = !enabled || !active || !sdrTownConfig.allowTune;
-  document.getElementById('sdrMode').disabled = !enabled || !active || !sdrTownConfig.allowMode;
+  document.getElementById('sdrMode').disabled = !canMode;
   document.getElementById('sdrBw').disabled = !enabled || !active || !sdrTownConfig.allowTune;
   document.getElementById('sdrLpfEnabled').disabled = !enabled || !active || !sdrTownConfig.allowTune;
   document.getElementById('sdrLpf').disabled = !enabled || !active || !sdrTownConfig.allowTune ||
     !document.getElementById('sdrLpfEnabled').checked;
   document.getElementById('sdrGain').disabled = !enabled || !active || !sdrTownConfig.allowRfGain;
   document.getElementById('sdrVolume').disabled = !enabled || !active || !sdrTownConfig.allowTune;
+  document.getElementById('sdrDirectSamp').disabled = !enabled || !active || !sdrTownConfig.allowTune;
   document.getElementById('sdrTuneBtn').disabled = !enabled || !active || !sdrTownConfig.allowTune;
-  document.getElementById('sdrP25Known').disabled = !enabled || !active || !sdrTownConfig.allowP25Control;
-  document.getElementById('sdrP25Freq').disabled = !enabled || !active || !sdrTownConfig.allowP25Control;
-  document.getElementById('sdrP25Btn').disabled = !enabled || !active || !sdrTownConfig.allowP25Control;
+  document.getElementById('sdrP25Known').disabled = !canP25;
+  document.getElementById('sdrP25Freq').disabled = !canP25;
+  document.getElementById('sdrP25Btn').disabled = !canP25;
   document.getElementById('sdrTakeControlBtn').disabled =
     !enabled || active || (sdrControlSession && sdrControlSession.role === 'queued');
   document.getElementById('sdrExtendControlBtn').disabled =
     !enabled || !active || Number(sdrControlSession.extensionsUsed || 0) >= Number(sdrControlSession.maxExtensions || 0);
   document.getElementById('sdrReleaseControlBtn').disabled =
     !enabled || !(active || (sdrControlSession && sdrControlSession.role === 'queued'));
+  document.querySelectorAll('.sdrModeAction').forEach(btn => {
+    const mode = String(btn.getAttribute('data-set-mode') || '').toUpperCase();
+    btn.disabled = mode === 'P25' ? !canP25 : !canMode;
+  });
+  const hint = document.getElementById('sdrModeHint');
+  if (hint) {
+    if (!enabled) hint.textContent = 'Enable SDR Town control in FUBAR settings to switch modes from the website.';
+    else if (!active) hint.textContent = 'Click Take control first, then tap a demod/mode. P25 uses Monitor CC at the frequency below.';
+    else if (!sdrTownConfig.allowMode && !sdrTownConfig.allowP25Control) hint.textContent = 'Mode switching is disabled by the FUBAR admin.';
+    else hint.textContent = 'Analog demods change instantly at the current frequency. P25 starts control-channel monitoring.';
+  }
 }
 function sdrRenderControlSession(){
   const el = document.getElementById('sdrControlState');
@@ -1131,8 +1357,10 @@ async function sdrControlAction(action){
 function sdrSeedFields(state){
   const active = !!(sdrControlSession && sdrControlSession.canControl);
   if (active && sdrControlSeededForLease) return;
-  const focused = document.activeElement && ['sdrFreq','sdrMode','sdrBw','sdrLpf','sdrGain','sdrVolume','sdrP25Freq','sdrP25Known'].includes(document.activeElement.id);
-  if (active && focused) return;
+  const focused = document.activeElement && ['sdrFreq','sdrMode','sdrBw','sdrLpf','sdrGain','sdrVolume','sdrDirectSamp','sdrP25Freq','sdrP25Known'].includes(document.activeElement.id);
+  // Never overwrite while the operator is typing — otherwise HF entries like 7 MHz
+  // snap back to the live status frequency (often 100 MHz) every poll.
+  if (focused) return;
   const s = state || {};
   if (s.frequencyMHz) document.getElementById('sdrFreq').value = Number(s.frequencyMHz).toFixed(5);
   if (s.mode && sdrTownConfig.allowMode) document.getElementById('sdrMode').value = s.mode;
@@ -1141,8 +1369,10 @@ function sdrSeedFields(state){
   if (s.audioLpfEnabled != null) document.getElementById('sdrLpfEnabled').checked = !!s.audioLpfEnabled;
   if (s.rfGainDb != null && sdrTownConfig.allowRfGain) document.getElementById('sdrGain').value = Number(s.rfGainDb).toFixed(1);
   if (s.volume != null) document.getElementById('sdrVolume').value = Number(s.volume * 100).toFixed(0);
+  if (s.directSampling != null) document.getElementById('sdrDirectSamp').value = String(s.directSampling);
   if (s.p25 && s.p25.controlFrequencyHz) document.getElementById('sdrP25Freq').value = Number(s.p25.controlFrequencyHz / 1000000).toFixed(5);
   sdrPopulateP25ControlChannels(s.knownControlChannels || []);
+  sdrHighlightMode(s.mode || document.getElementById('sdrMode').value);
   if (active) sdrControlSeededForLease = true;
   sdrSetControlsEnabled();
 }
@@ -1154,6 +1384,7 @@ async function loadSdrTownControl(){
     panel.classList.toggle('on', !!sdrTownConfig.enabled);
     if (!sdrTownConfig.enabled) {
       sdrAdoptSession({role:'idle', canControl:false, remainingMs:0});
+      renderDecodePanels({});
       return;
     }
     await sdrControlAction('status');
@@ -1161,7 +1392,10 @@ async function loadSdrTownControl(){
     const status = await statusRes.json();
     if (status.ok && status.state) {
       const s = status.state;
+      sdrTownLiveState = s;
       sdrSeedFields(s);
+      sdrHighlightMode(s.mode || '');
+      renderDecodePanels(s);
       const p25Label = (s.p25 && s.p25.talkgroupStatusLabel) ? String(s.p25.talkgroupStatusLabel).trim() : '';
       const p25Note = s.p25 && s.p25.monitorDisabledReason ? (' · P25 monitor disabled: ' + s.p25.monitorDisabledReason) : '';
       const p25Live = p25Label ? (' · ' + p25Label) : (s.p25 && s.p25.followTalkgroupId ? (' · TG ' + s.p25.followTalkgroupId) : '');
@@ -1169,10 +1403,12 @@ async function loadSdrTownControl(){
       const volNote = s.volume != null ? (' · Vol ' + Number(s.volume * 100).toFixed(0) + '%') : '';
       sdrTownMessage('SDR Town ready · ' + Number(s.frequencyMHz || 0).toFixed(5) + ' MHz · ' + (s.mode || '') + ' · BW ' + Number((s.bandwidthHz || 0) / 1000).toFixed(1) + ' kHz' + lpfNote + volNote + p25Live + p25Note);
     } else {
+      renderDecodePanels({});
       sdrTownMessage(status.error || 'SDR Town not reachable. Start SDR Town with --control-server.');
     }
   } catch {
     panel.classList.remove('on');
+    renderDecodePanels({});
   }
   sdrSetControlsEnabled();
 }
@@ -1197,6 +1433,11 @@ async function postSdrTown(path, payload){
       const s = data.state || {};
       const bw = s.bandwidthHz || (payload.bandwidthKHz ? payload.bandwidthKHz * 1000 : 0);
       sdrTownMessage('Applied · ' + Number(s.frequencyMHz || payload.frequencyMHz || 0).toFixed(5) + ' MHz · ' + (s.mode || payload.mode || '') + (bw ? (' · BW ' + Number(bw / 1000).toFixed(1) + ' kHz') : ''));
+      sdrHighlightMode(s.mode || payload.mode || '');
+      if (s && Object.keys(s).length) {
+        sdrTownLiveState = s;
+        renderDecodePanels(s);
+      }
       await sdrControlAction('status');
     } else {
       if (data.session) sdrAdoptSession(data.session);
@@ -1219,6 +1460,10 @@ document.getElementById('sdrReleaseControlBtn').addEventListener('click', async 
 });
 document.getElementById('sdrLpfEnabled').addEventListener('change', () => {
   sdrSetControlsEnabled();
+});
+document.getElementById('sdrDirectSamp').addEventListener('change', () => {
+  const mode = Number(document.getElementById('sdrDirectSamp').value);
+  postSdrTown('api/sdr-town/direct-sampling', {directSampling: mode});
 });
 document.getElementById('sdrP25Known').addEventListener('change', () => {
   const value = document.getElementById('sdrP25Known').value;
@@ -1243,6 +1488,50 @@ document.getElementById('sdrP25Btn').addEventListener('click', () => {
   const p25Text = document.getElementById('sdrP25Freq').value.trim() || document.getElementById('sdrP25Known').value || document.getElementById('sdrFreq').value;
   const frequencyMHz = Number(p25Text);
   postSdrTown('api/sdr-town/p25-control', {frequencyMHz, autoFollow:true});
+});
+async function sdrApplyMode(mode){
+  mode = String(mode || '').toUpperCase();
+  if (!mode) return;
+  if (!sdrTownConfig.enabled) {
+    sdrTownMessage('Enable SDR Town control in FUBAR Tools → Settings first.');
+    return;
+  }
+  if (!sdrControlSession || !sdrControlSession.canControl) {
+    switchTab('control');
+    sdrTownMessage('Click Take control first, then tap a demod/mode.');
+    return;
+  }
+  const select = document.getElementById('sdrMode');
+  if (select) {
+    const opt = Array.from(select.options).find(o => String(o.value).toUpperCase() === mode);
+    if (opt) select.value = opt.value;
+  }
+  sdrHighlightMode(mode);
+  if (mode === 'P25') {
+    if (!sdrTownConfig.allowP25Control) {
+      sdrTownMessage('P25 control is disabled by the FUBAR admin.');
+      return;
+    }
+    const p25Text = document.getElementById('sdrP25Freq').value.trim() ||
+      document.getElementById('sdrP25Known').value ||
+      document.getElementById('sdrFreq').value;
+    const frequencyMHz = Number(p25Text);
+    if (!(frequencyMHz > 0)) {
+      switchTab('control');
+      sdrTownMessage('Enter a P25 control-channel frequency first, then tap P25.');
+      return;
+    }
+    await postSdrTown('api/sdr-town/p25-control', {frequencyMHz, autoFollow:true});
+    return;
+  }
+  if (!sdrTownConfig.allowMode) {
+    sdrTownMessage('Mode switching is disabled by the FUBAR admin.');
+    return;
+  }
+  await postSdrTown('api/sdr-town/mode', {mode});
+}
+document.querySelectorAll('.sdrModeAction').forEach(btn => {
+  btn.addEventListener('click', () => sdrApplyMode(btn.getAttribute('data-set-mode')));
 });
 async function refresh(){
   try {
@@ -1902,10 +2191,11 @@ bool CaptureWebServer::handlePathForTest(const std::string& method, const std::s
     *contentType = "text/plain";
     return false;
   }
-  if (path == "/api/sdr-town/config" || path == "/api/sdr-town/status") {
+  if (path == "/api/sdr-town/config" || path == "/api/sdr-town/status" ||
+      path == "/api/sdr-town/sstv-file") {
     if (method == "GET" || method == "OPTIONS") {
       *status = 200;
-      *contentType = "application/json";
+      *contentType = path == "/api/sdr-town/sstv-file" ? "image/png" : "application/json";
       return true;
     }
     *status = 405;
@@ -1922,8 +2212,10 @@ bool CaptureWebServer::handlePathForTest(const std::string& method, const std::s
     *contentType = "application/json";
     return false;
   }
-  if (path == "/api/sdr-town/tune" || path == "/api/sdr-town/rf-gain" ||
+  if (path == "/api/sdr-town/tune" || path == "/api/sdr-town/mode" ||
+      path == "/api/sdr-town/rf-gain" ||
       path == "/api/sdr-town/volume" ||
+      path == "/api/sdr-town/direct-sampling" ||
       path == "/api/sdr-town/p25-control") {
     if (method == "POST" || method == "OPTIONS") {
       *status = 200;
@@ -2352,8 +2644,12 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
   std::istringstream line(request.substr(0, lineEnd));
   std::string method, path, version;
   line >> method >> path >> version;
+  std::string queryString;
   auto query = path.find('?');
-  if (query != std::string::npos) path.resize(query);
+  if (query != std::string::npos) {
+    queryString = path.substr(query + 1);
+    path.resize(query);
+  }
   path = urlDecode(path);
 
   std::string range;
@@ -2400,6 +2696,65 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     sendResponse(client, 200, "OK", "application/json", sdrTownControlConfigJson(), kCors);
     return;
   }
+  if (path == "/api/sdr-town/sstv-file") {
+    std::string fileParam;
+    auto pos = queryString.find("path=");
+    if (pos != std::string::npos) {
+      fileParam = queryString.substr(pos + 5);
+      const auto amp = fileParam.find('&');
+      if (amp != std::string::npos) fileParam.resize(amp);
+      fileParam = urlDecode(fileParam);
+    }
+    auto isSafeImagePath = [](const std::filesystem::path& candidate) -> bool {
+      if (candidate.empty()) return false;
+      std::error_code ec;
+      auto canonical = std::filesystem::weakly_canonical(candidate, ec);
+      if (ec || !std::filesystem::is_regular_file(canonical, ec)) return false;
+      const auto ext = canonical.extension().wstring();
+      std::wstring lower = ext;
+      for (auto& ch : lower) ch = static_cast<wchar_t>(towlower(ch));
+      if (lower != L".png" && lower != L".jpg" && lower != L".jpeg" && lower != L".webp") {
+        return false;
+      }
+      auto underRoot = [&](const wchar_t* envName, const wchar_t* child) -> bool {
+        wchar_t rootBuf[MAX_PATH]{};
+        if (GetEnvironmentVariableW(envName, rootBuf, MAX_PATH) == 0) return false;
+        std::filesystem::path rootPath = rootBuf;
+        if (child && *child) rootPath /= child;
+        const auto allowedRoot = std::filesystem::weakly_canonical(rootPath, ec);
+        if (ec) return false;
+        const auto fileText = canonical.wstring();
+        const auto rootText = allowedRoot.wstring();
+        if (fileText.size() < rootText.size()) return false;
+        if (_wcsnicmp(fileText.c_str(), rootText.c_str(), rootText.size()) != 0) return false;
+        if (fileText.size() > rootText.size() && fileText[rootText.size()] != L'\\' &&
+            fileText[rootText.size()] != L'/') {
+          return false;
+        }
+        return true;
+      };
+      return underRoot(L"APPDATA", L"SDR_Town") || underRoot(L"LOCALAPPDATA", L"SDR_Town") ||
+             underRoot(L"USERPROFILE", nullptr);
+    };
+    const std::filesystem::path imagePath = utf8ToWide(fileParam);
+    if (!isSafeImagePath(imagePath)) {
+      sendResponse(client, 404, "Not Found", "text/plain", "missing", kCors);
+      return;
+    }
+    std::ifstream file(imagePath, std::ios::binary);
+    if (!file) {
+      sendResponse(client, 404, "Not Found", "text/plain", "missing", kCors);
+      return;
+    }
+    std::ostringstream bytes;
+    bytes << file.rdbuf();
+    const auto ext = imagePath.extension().string();
+    const char* type = "image/png";
+    if (ext == ".jpg" || ext == ".jpeg" || ext == ".JPG" || ext == ".JPEG") type = "image/jpeg";
+    else if (ext == ".webp" || ext == ".WEBP") type = "image/webp";
+    sendResponse(client, 200, "OK", type, bytes.str(), kCors);
+    return;
+  }
   if (path == "/api/sdr-town/control-session") {
     sendResponse(client, 200, "OK", "application/json", sdrTownControlSessionActionJson(body),
                  kCors);
@@ -2439,6 +2794,21 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
                  "application/json", response, kCors);
     return;
   }
+  if (path == "/api/sdr-town/mode") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
+    const auto cfg = sdrTownControlConfigLocked();
+    const std::string mode = FubarNetDirectory::jsonGetString(body, "mode");
+    std::string error;
+    SdrTownBridge bridge;
+    const std::string response = bridge.setMode(cfg, mode, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json", response, kCors);
+    return;
+  }
   if (path == "/api/sdr-town/rf-gain") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError)) {
@@ -2465,6 +2835,21 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     std::string error;
     SdrTownBridge bridge;
     const std::string response = bridge.setVolume(cfg, volume, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json", response, kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/direct-sampling") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
+    const auto cfg = sdrTownControlConfigLocked();
+    const int mode = static_cast<int>(FubarNetDirectory::jsonGetNumber(body, "directSampling", -1.0));
+    std::string error;
+    SdrTownBridge bridge;
+    const std::string response = bridge.setDirectSampling(cfg, mode, &error);
     sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json", response, kCors);
     return;

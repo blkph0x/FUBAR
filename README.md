@@ -6,7 +6,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 
 | | |
 |---|---|
-| **Current version** | **1.1.30** |
+| **Current version** | **1.1.31** |
 | **Releases** | https://github.com/blkph0x/FUBAR/releases |
 | **Repo** | https://github.com/blkph0x/FUBAR |
 | **Pairs with** | [SDR Town](https://github.com/Blkph0x/SDR_Town) (receiver / P25 / local control API) |

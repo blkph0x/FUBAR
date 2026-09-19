@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.31
+
+- Website tabs for FM RDS, UHF CTCSS/DCS, and SSTV pictures (read-only status from SDR Town).
+- While an operator has **Take control**, they can switch demods/modes and enable RTL **direct sampling** for HF (~500 kHz+).
+- Mode buttons work from the Radio control tab and from the FM / UHF / SSTV quick actions.
+- Frequency field no longer snaps back while typing; HF entries such as 7 MHz stay until Tune.
+
 ## 1.1.30
 
 - Website keeps the operator **Now playing** text as the main title.

@@ -42,8 +42,10 @@ struct SdrTownTuneRequest {
 using HealthFn = int (*)(const SdrTownControlConfig*, char*, size_t);
 using StatusFn = int (*)(const SdrTownControlConfig*, char*, size_t);
 using TuneFn = int (*)(const SdrTownControlConfig*, const SdrTownTuneRequest*, char*, size_t);
+using SetModeFn = int (*)(const SdrTownControlConfig*, const char*, char*, size_t);
 using SetRfGainFn = int (*)(const SdrTownControlConfig*, double, char*, size_t);
 using SetVolumeFn = int (*)(const SdrTownControlConfig*, double, char*, size_t);
+using SetDirectSamplingFn = int (*)(const SdrTownControlConfig*, int, char*, size_t);
 using StartP25Fn = int (*)(const SdrTownControlConfig*, double, int, char*, size_t);
 
 std::string wideToUtf8(const std::wstring& value) {
@@ -146,8 +148,11 @@ bool SdrTownBridge::load(std::string* error) {
     fnHealth_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_Health"));
     fnStatus_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_Status"));
     fnTune_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_Tune"));
+    fnSetMode_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_SetMode"));
     fnSetRfGain_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_SetRfGain"));
     fnSetVolume_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_SetVolume"));
+    fnSetDirectSampling_ =
+        reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_SetDirectSampling"));
     fnStartP25Control_ =
         reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_StartP25Control"));
     if (fnHealth_ && fnStatus_ && fnTune_ && fnSetRfGain_ && fnStartP25Control_) {
@@ -235,6 +240,47 @@ std::string SdrTownBridge::tune(const SdrTownBridgeConfig& config,
   return response;
 }
 
+std::string SdrTownBridge::setMode(const SdrTownBridgeConfig& config,
+                                   const std::string& mode,
+                                   std::string* error) {
+  if (!config.enabled || !config.allowMode) {
+    if (error) *error = "Mode control is disabled";
+    return disabledJson("mode control is disabled");
+  }
+  if (mode.empty()) {
+    if (error) *error = "Mode is required";
+    return disabledJson("mode is required");
+  }
+  if (!load(error)) return disabledJson(error && !error->empty() ? error->c_str() : "DLL missing");
+  if (!fnSetMode_) {
+    if (error) *error = "SdrTownControl.dll does not expose mode switching";
+    return disabledJson("SdrTownControl.dll does not expose mode switching");
+  }
+
+  // Same follow guard as Tune: do not yank demod while a P25 voice grant is live.
+  {
+    const std::string st = status(config);
+    const bool followLive =
+        st.find("\"followEnabled\":true") != std::string::npos ||
+        st.find("\"trafficActive\":true") != std::string::npos ||
+        st.find("\"trafficRetunedPrimary\":true") != std::string::npos ||
+        st.find("\"warmStandbyActive\":true") != std::string::npos;
+    if (followLive) {
+      if (error) *error = "P25 follow/warm-standby is active; refuse mode change until return to control";
+      return std::string(
+          "{\"ok\":false,\"status\":409,\"error\":\"P25 follow/warm-standby is active; refuse mode "
+          "change until return to control\"}");
+    }
+  }
+
+  char response[32768]{};
+  auto cfg = controlConfig(config);
+  const int result =
+      reinterpret_cast<SetModeFn>(fnSetMode_)(&cfg, mode.c_str(), response, sizeof(response));
+  if (!okResult(result) && error) *error = response[0] ? response : "SDR Town mode change failed";
+  return response;
+}
+
 std::string SdrTownBridge::setRfGain(const SdrTownBridgeConfig& config,
                                      double rfGainDb,
                                      std::string* error) {
@@ -272,6 +318,33 @@ std::string SdrTownBridge::setVolume(const SdrTownBridgeConfig& config,
   const int result =
       reinterpret_cast<SetVolumeFn>(fnSetVolume_)(&cfg, volume, response, sizeof(response));
   if (!okResult(result) && error) *error = response[0] ? response : "SDR Town volume failed";
+  return response;
+}
+
+std::string SdrTownBridge::setDirectSampling(const SdrTownBridgeConfig& config,
+                                             int mode,
+                                             std::string* error) {
+  if (!config.enabled || !config.allowTune) {
+    if (error) *error = "Direct sampling control is disabled";
+    return disabledJson("direct sampling control is disabled");
+  }
+  if (mode < 0 || mode > 2) {
+    if (error) *error = "directSampling must be 0, 1, or 2";
+    return disabledJson("directSampling must be 0, 1, or 2");
+  }
+  if (!load(error)) return disabledJson(error && !error->empty() ? error->c_str() : "DLL missing");
+  if (!fnSetDirectSampling_) {
+    if (error) *error = "SdrTownControl.dll does not expose direct sampling control";
+    return disabledJson("SdrTownControl.dll does not expose direct sampling control");
+  }
+  char response[32768]{};
+  auto cfg = controlConfig(config);
+  const int result =
+      reinterpret_cast<SetDirectSamplingFn>(fnSetDirectSampling_)(&cfg, mode, response,
+                                                                  sizeof(response));
+  if (!okResult(result) && error) {
+    *error = response[0] ? response : "SDR Town direct sampling failed";
+  }
   return response;
 }
 

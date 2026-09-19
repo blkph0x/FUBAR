@@ -1,6 +1,6 @@
 param(
   [string]$RepositoryName = "FUBAR",
-  [string]$Tag = "v1.1.30",
+  [string]$Tag = "v1.1.31",
   [string]$SdrTownControlDll = ""
 )
 
