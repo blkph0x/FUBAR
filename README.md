@@ -6,7 +6,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 
 | | |
 |---|---|
-| **Current version** | **1.1.31** |
+| **Current version** | **1.1.32** |
 | **Releases** | https://github.com/blkph0x/FUBAR/releases |
 | **Repo** | https://github.com/blkph0x/FUBAR |
 | **Pairs with** | [SDR Town](https://github.com/Blkph0x/SDR_Town) (receiver / P25 / local control API) |
@@ -56,6 +56,7 @@ They talk over a **local-only** control link (`127.0.0.1`, default port **8765**
   - on a voice follow → talkgroup + alpha tag (for example `TG 30003 118 ILLAW A`)  
   - parked on a monitored control channel → `Listening to NSWGRN Control`  
   - no P25 activity → line hidden
+- **UHF tones tab** (with SDR Town **0.2.65+**): live CTCSS/DCS, DTMF when Repeater Control Monitor is on, plus a readable heard list
 
 ### Downloads
 

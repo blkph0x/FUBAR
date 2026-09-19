@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.32
+
+- Aligns with **SDR Town 0.2.65**: website UHF tones tab shows preferred DCS (one radio-style code), live DTMF, and the repeater **heard list**.
+- Ships matching `SdrTownControl.dll` from SDR Town 0.2.65.
+- Fixes leftover 1.1.30 version strings in the window title / about / station status.
+
 ## 1.1.31
 
 - Website tabs for FM RDS, UHF CTCSS/DCS, and SSTV pictures (read-only status from SDR Town).

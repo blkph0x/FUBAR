@@ -96,6 +96,8 @@ h1{ margin:.2rem 0; font-size:clamp(2.2rem,7vw,4.4rem); letter-spacing:.04em; }
 .infocard .big{ font-size:clamp(1.2rem,3.5vw,1.8rem); font-weight:800; color:#f6ffd8; margin:0 0 8px; word-break:break-word; }
 .infocard .meta{ color:var(--muted); font-size:13px; line-height:1.5; }
 .infocard .meta b{ color:var(--ink); font-weight:700; }
+.heardlist{ margin-top:12px; padding:10px 12px; background:#070807; border:1px solid var(--line); border-radius:12px; max-height:180px; overflow:auto; font-family:ui-monospace,Consolas,monospace; font-size:13px; line-height:1.45; color:#d7ecc0; white-space:pre-wrap; }
+.heardlist:empty::before{ content:'Heard list appears when SDR Town Repeater Control Monitor is enabled.'; color:var(--muted); font-family:inherit; }
 .sstvgrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; margin-top:12px; }
 .sstvgrid a{ display:block; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#0c100c; color:inherit; text-decoration:none; }
 .sstvgrid img{ display:block; width:100%; aspect-ratio:4/3; object-fit:contain; background:#000; }
@@ -185,18 +187,19 @@ button.play.playing{ background:var(--blue); }
   </section>
   <section class="tabpanel" id="tab-tones">
     <div class="infocard">
-      <h3>UHF / VHF tones (CTCSS &amp; DCS)</h3>
+      <h3>UHF / VHF tones (CTCSS, DCS &amp; DTMF)</h3>
       <div class="howto">
         Easy steps:
         <ol>
           <li>Open <b>Radio control</b>, click <b>Take control</b>.</li>
           <li>Tap <b>Switch to NFM</b> below.</li>
           <li>Tune the channel you want to identify.</li>
-          <li>When a tone is found it shows below — display only, audio is never muted by this.</li>
+          <li>Live CTCSS/DCS show below. For DTMF / a heard list, enable <b>Repeater Control Monitor</b> in SDR Town (receive-only).</li>
         </ol>
       </div>
       <p class="big" id="tonesSummary">Waiting for CTCSS / DCS</p>
       <div class="meta" id="tonesMeta">Enable SDR Town control in FUBAR settings so this page can read live tones.</div>
+      <div class="heardlist" id="tonesHeard"></div>
       <div class="quickmode">
         <button type="button" data-set-mode="NFM" class="sdrModeAction">Switch to NFM</button>
         <span class="hint">Narrow FM for UHF/VHF voice channels</span>
@@ -1165,15 +1168,32 @@ function switchTab(name){
 document.querySelectorAll('#siteTabs button').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
 });
+function formatHeardEvent(ev){
+  const where = ev.channel === 'output' ? 'output' : (ev.channel === 'input' ? 'input' : 'tuned');
+  const detail = String(ev.detail || '');
+  switch (String(ev.kind || '')) {
+    case 'dtmf_sequence': return 'DTMF  ' + detail + '  (' + where + ')';
+    case 'dtmf_digit': return '';
+    case 'ctcss':
+      return detail === 'clear' ? ('CTCSS  clear  (' + where + ')') : ('CTCSS  ' + detail + '  (' + where + ')');
+    case 'dcs':
+      return detail === 'clear' ? ('DCS  clear  (' + where + ')') : ('DCS  ' + detail + '  (' + where + ')');
+    case 'carrier_open': return 'Carrier open  (' + where + ')';
+    case 'carrier_close': return 'Carrier closed  (' + where + ')';
+    default: return '';
+  }
+}
 function renderDecodePanels(state){
   const s = state || {};
   const rds = s.rds || {};
   const tones = s.tones || {};
+  const repeater = s.repeater || {};
   const sstv = s.sstv || {};
   const rdsSummary = document.getElementById('rdsSummary');
   const rdsMeta = document.getElementById('rdsMeta');
   const tonesSummary = document.getElementById('tonesSummary');
   const tonesMeta = document.getElementById('tonesMeta');
+  const tonesHeard = document.getElementById('tonesHeard');
   const sstvSummary = document.getElementById('sstvSummary');
   const sstvMeta = document.getElementById('sstvMeta');
   const sstvImages = document.getElementById('sstvImages');
@@ -1200,10 +1220,30 @@ function renderDecodePanels(state){
       const bits = [];
       if (tones.ctcssFresh && Number(tones.ctcssHz) > 0) bits.push('<b>CTCSS</b> ' + Number(tones.ctcssHz).toFixed(1) + ' Hz');
       const aliases = Array.isArray(tones.dcsAliases) ? tones.dcsAliases : [];
-      if (aliases.length) bits.push('<b>DCS</b> ' + aliases.map(esc).join(' / ') + ' (equivalent codes)');
+      if (aliases.length) bits.push('<b>DCS</b> ' + aliases.map(esc).join(' / '));
+      const dtmf = tones.dtmf || {};
+      if (dtmf.enabled) {
+        if (dtmf.toneActive && dtmf.digit) bits.push('<b>DTMF</b> ' + esc(dtmf.digit) + ' (active)');
+        else if (dtmf.sequence) bits.push('<b>DTMF</b> ' + esc(dtmf.sequence) + ' …');
+        else if (dtmf.lastSequence) bits.push('<b>Last DTMF</b> ' + esc(dtmf.lastSequence));
+        else bits.push('<b>DTMF</b> listening');
+      } else {
+        bits.push('Enable <b>Repeater Control Monitor</b> in SDR Town for DTMF + heard list');
+      }
+      if (repeater.enabled) {
+        const outMHz = Number(repeater.outputHz || 0) / 1e6;
+        const inMHz = Number(repeater.inputHz || 0) / 1e6;
+        bits.push('<b>Repeater monitor</b> out ' + outMHz.toFixed(5) + ' / in ' + inMHz.toFixed(5) +
+          (repeater.dualWatchActive ? ' · dual-watch on' : ''));
+      }
       if (tones.modeHint) bits.push(esc(tones.modeHint));
       tonesMeta.innerHTML = bits.join('<br>') || 'Searching…';
     }
+  }
+  if (tonesHeard) {
+    const events = Array.isArray(repeater.events) ? repeater.events : [];
+    const lines = events.map(formatHeardEvent).filter(Boolean);
+    tonesHeard.textContent = lines.slice(-40).join('\n');
   }
   if (sstvSummary) sstvSummary.textContent = sstv.summary || 'Open Tools → SSTV Images in SDR Town';
   if (sstvMeta) {
