@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.33
+
+- Website mode and frequency controls leave P25 Monitor CC / auto-follow so changes stick (no flip-back to P25).
+- Mode highlight tracks live P25 monitoring; status polls no longer overwrite a command in flight.
+- Ships matching `SdrTownControl.dll` from SDR Town **0.2.66**.
+
 ## 1.1.32
 
 - Aligns with **SDR Town 0.2.65**: website UHF tones tab shows preferred DCS (one radio-style code), live DTMF, and the repeater **heard list**.

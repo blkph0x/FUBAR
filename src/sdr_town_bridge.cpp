@@ -191,23 +191,7 @@ std::string SdrTownBridge::tune(const SdrTownBridgeConfig& config,
   }
   if (!load(error)) return disabledJson(error && !error->empty() ? error->c_str() : "DLL missing");
 
-  // DEC-0063/0064: refuse analog Tune while SDR Town is on a live P25 grant
-  // follow or warm-standby hold (RF still on voice after return).
-  {
-    const std::string st = status(config);
-    const bool followLive =
-        st.find("\"followEnabled\":true") != std::string::npos ||
-        st.find("\"trafficActive\":true") != std::string::npos ||
-        st.find("\"trafficRetunedPrimary\":true") != std::string::npos ||
-        st.find("\"warmStandbyActive\":true") != std::string::npos;
-    if (followLive) {
-      if (error) *error = "P25 follow/warm-standby is active; refuse Tune until return to control";
-      return std::string(
-          "{\"ok\":false,\"status\":409,\"error\":\"P25 follow/warm-standby is active; refuse Tune "
-          "until return to control\"}");
-    }
-  }
-
+  // Website Take-control operators intentionally leave P25 — force analog retune/mode.
   char response[32768]{};
   auto cfg = controlConfig(config);
   SdrTownTuneRequest req{};
@@ -220,6 +204,7 @@ std::string SdrTownBridge::tune(const SdrTownBridgeConfig& config,
   req.squelchDb = NAN;
   req.startDevice = 1;
   req.p25AutoFollow = 0;
+  req.force = 1;
   const int result = reinterpret_cast<TuneFn>(fnTune_)(&cfg, &req, response, sizeof(response));
   if (!okResult(result) && error) *error = response[0] ? response : "SDR Town tune failed";
   if (okResult(result) && std::isfinite(volume)) {
@@ -255,22 +240,6 @@ std::string SdrTownBridge::setMode(const SdrTownBridgeConfig& config,
   if (!fnSetMode_) {
     if (error) *error = "SdrTownControl.dll does not expose mode switching";
     return disabledJson("SdrTownControl.dll does not expose mode switching");
-  }
-
-  // Same follow guard as Tune: do not yank demod while a P25 voice grant is live.
-  {
-    const std::string st = status(config);
-    const bool followLive =
-        st.find("\"followEnabled\":true") != std::string::npos ||
-        st.find("\"trafficActive\":true") != std::string::npos ||
-        st.find("\"trafficRetunedPrimary\":true") != std::string::npos ||
-        st.find("\"warmStandbyActive\":true") != std::string::npos;
-    if (followLive) {
-      if (error) *error = "P25 follow/warm-standby is active; refuse mode change until return to control";
-      return std::string(
-          "{\"ok\":false,\"status\":409,\"error\":\"P25 follow/warm-standby is active; refuse mode "
-          "change until return to control\"}");
-    }
   }
 
   char response[32768]{};

@@ -74,7 +74,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.32 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.33 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"

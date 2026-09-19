@@ -305,6 +305,8 @@ let sdrControlSession = {role:'idle', canControl:false, remainingMs:0};
 let sdrControlDeadlineMs = 0;
 let sdrControlSeededForLease = false;
 let sdrControlWasActive = false;
+let sdrCommandInFlight = false;
+let sdrDesiredMode = '';
 const sdrControlClientId = (() => {
   const key = 'fubar.sdrTown.clientId';
   let id = localStorage.getItem(key);
@@ -1279,6 +1281,12 @@ function sdrControlMs(ms){
   const s = (total % 60).toString().padStart(2,'0');
   return m + ':' + s;
 }
+function sdrEffectiveMode(state){
+  const s = state || sdrTownLiveState || {};
+  const p25 = s.p25 || {};
+  if (Number(p25.controlFrequencyHz || 0) > 0 && !p25.monitorDisabledReason) return 'P25';
+  return String(s.mode || '').toUpperCase();
+}
 function sdrHighlightMode(mode){
   const current = String(mode || '').toUpperCase();
   document.querySelectorAll('.sdrModeAction').forEach(btn => {
@@ -1286,7 +1294,7 @@ function sdrHighlightMode(mode){
     btn.classList.toggle('on', !!current && value === current);
   });
   const select = document.getElementById('sdrMode');
-  if (select && current) {
+  if (select && current && current !== 'P25') {
     const opt = Array.from(select.options).find(o => String(o.value).toUpperCase() === current);
     if (opt) select.value = opt.value;
   }
@@ -1324,7 +1332,7 @@ function sdrSetControlsEnabled(){
     if (!enabled) hint.textContent = 'Enable SDR Town control in FUBAR settings to switch modes from the website.';
     else if (!active) hint.textContent = 'Click Take control first, then tap a demod/mode. P25 uses Monitor CC at the frequency below.';
     else if (!sdrTownConfig.allowMode && !sdrTownConfig.allowP25Control) hint.textContent = 'Mode switching is disabled by the FUBAR admin.';
-    else hint.textContent = 'Analog demods change instantly at the current frequency. P25 starts control-channel monitoring.';
+    else hint.textContent = 'Analog demods leave P25 Monitor CC and stick. P25 starts control-channel monitoring at the frequency below.';
   }
 }
 function sdrRenderControlSession(){
@@ -1412,7 +1420,7 @@ function sdrSeedFields(state){
   if (s.directSampling != null) document.getElementById('sdrDirectSamp').value = String(s.directSampling);
   if (s.p25 && s.p25.controlFrequencyHz) document.getElementById('sdrP25Freq').value = Number(s.p25.controlFrequencyHz / 1000000).toFixed(5);
   sdrPopulateP25ControlChannels(s.knownControlChannels || []);
-  sdrHighlightMode(s.mode || document.getElementById('sdrMode').value);
+  if (!sdrCommandInFlight) sdrHighlightMode(sdrEffectiveMode(s));
   if (active) sdrControlSeededForLease = true;
   sdrSetControlsEnabled();
 }
@@ -1434,14 +1442,15 @@ async function loadSdrTownControl(){
       const s = status.state;
       sdrTownLiveState = s;
       sdrSeedFields(s);
-      sdrHighlightMode(s.mode || '');
+      if (!sdrCommandInFlight) sdrHighlightMode(sdrDesiredMode || sdrEffectiveMode(s));
       renderDecodePanels(s);
       const p25Label = (s.p25 && s.p25.talkgroupStatusLabel) ? String(s.p25.talkgroupStatusLabel).trim() : '';
       const p25Note = s.p25 && s.p25.monitorDisabledReason ? (' · P25 monitor disabled: ' + s.p25.monitorDisabledReason) : '';
       const p25Live = p25Label ? (' · ' + p25Label) : (s.p25 && s.p25.followTalkgroupId ? (' · TG ' + s.p25.followTalkgroupId) : '');
       const lpfNote = s.audioLpfEnabled ? (' · LPF ' + Number((s.lpfHz || 0) / 1000).toFixed(1) + ' kHz') : ' · LPF off';
       const volNote = s.volume != null ? (' · Vol ' + Number(s.volume * 100).toFixed(0) + '%') : '';
-      sdrTownMessage('SDR Town ready · ' + Number(s.frequencyMHz || 0).toFixed(5) + ' MHz · ' + (s.mode || '') + ' · BW ' + Number((s.bandwidthHz || 0) / 1000).toFixed(1) + ' kHz' + lpfNote + volNote + p25Live + p25Note);
+      const modeShown = sdrEffectiveMode(s) || (s.mode || '');
+      sdrTownMessage('SDR Town ready · ' + Number(s.frequencyMHz || 0).toFixed(5) + ' MHz · ' + modeShown + ' · BW ' + Number((s.bandwidthHz || 0) / 1000).toFixed(1) + ' kHz' + lpfNote + volNote + p25Live + p25Note);
     } else {
       renderDecodePanels({});
       sdrTownMessage(status.error || 'SDR Town not reachable. Start SDR Town with --control-server.');
@@ -1458,8 +1467,9 @@ async function postSdrTown(path, payload){
     return;
   }
   sdrTownMessage('Sending command...');
+  sdrCommandInFlight = true;
   try {
-    payload = Object.assign({}, payload || {}, {clientId:sdrControlClientId});
+    payload = Object.assign({}, payload || {}, {clientId:sdrControlClientId, force:true});
     const res = await fetch(path, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -1471,20 +1481,32 @@ async function postSdrTown(path, payload){
     catch { data = {ok:false, error:text || ('HTTP ' + res.status)}; }
     if (data.ok) {
       const s = data.state || {};
-      const bw = s.bandwidthHz || (payload.bandwidthKHz ? payload.bandwidthKHz * 1000 : 0);
-      sdrTownMessage('Applied · ' + Number(s.frequencyMHz || payload.frequencyMHz || 0).toFixed(5) + ' MHz · ' + (s.mode || payload.mode || '') + (bw ? (' · BW ' + Number(bw / 1000).toFixed(1) + ' kHz') : ''));
-      sdrHighlightMode(s.mode || payload.mode || '');
-      if (s && Object.keys(s).length) {
-        sdrTownLiveState = s;
-        renderDecodePanels(s);
+      sdrTownLiveState = s;
+      const appliedMhz = Number(s.frequencyMHz || payload.frequencyMHz || 0);
+      const requestedMhz = Number(payload.frequencyMHz || 0);
+      if (requestedMhz > 0 && Math.abs(appliedMhz - requestedMhz) > 0.00005) {
+        sdrTownMessage('Tune reported OK but RF stayed on ' + appliedMhz.toFixed(5) + ' MHz (wanted ' + requestedMhz.toFixed(5) + ').');
+      } else {
+        const bw = s.bandwidthHz || (payload.bandwidthKHz ? payload.bandwidthKHz * 1000 : 0);
+        const modeShown = sdrDesiredMode || sdrEffectiveMode(s) || (s.mode || payload.mode || '');
+        sdrTownMessage('Applied · ' + appliedMhz.toFixed(5) + ' MHz · ' + modeShown + (bw ? (' · BW ' + Number(bw / 1000).toFixed(1) + ' kHz') : ''));
       }
+      sdrDesiredMode = '';
+      sdrHighlightMode(sdrEffectiveMode(s));
+      if (s && Object.keys(s).length) renderDecodePanels(s);
       await sdrControlAction('status');
     } else {
       if (data.session) sdrAdoptSession(data.session);
+      sdrDesiredMode = '';
+      sdrHighlightMode(sdrEffectiveMode(sdrTownLiveState));
       sdrTownMessage(data.error || ('Command failed · HTTP ' + res.status));
     }
   } catch (error) {
+    sdrDesiredMode = '';
+    sdrHighlightMode(sdrEffectiveMode(sdrTownLiveState));
     sdrTownMessage('Command failed · ' + (error && error.message ? error.message : 'network error'));
+  } finally {
+    sdrCommandInFlight = false;
   }
 }
 document.getElementById('sdrTakeControlBtn').addEventListener('click', async () => {
@@ -1546,9 +1568,11 @@ async function sdrApplyMode(mode){
     const opt = Array.from(select.options).find(o => String(o.value).toUpperCase() === mode);
     if (opt) select.value = opt.value;
   }
+  sdrDesiredMode = mode;
   sdrHighlightMode(mode);
   if (mode === 'P25') {
     if (!sdrTownConfig.allowP25Control) {
+      sdrDesiredMode = '';
       sdrTownMessage('P25 control is disabled by the FUBAR admin.');
       return;
     }
@@ -1557,6 +1581,7 @@ async function sdrApplyMode(mode){
       document.getElementById('sdrFreq').value;
     const frequencyMHz = Number(p25Text);
     if (!(frequencyMHz > 0)) {
+      sdrDesiredMode = '';
       switchTab('control');
       sdrTownMessage('Enter a P25 control-channel frequency first, then tap P25.');
       return;
@@ -1565,6 +1590,7 @@ async function sdrApplyMode(mode){
     return;
   }
   if (!sdrTownConfig.allowMode) {
+    sdrDesiredMode = '';
     sdrTownMessage('Mode switching is disabled by the FUBAR admin.');
     return;
   }
