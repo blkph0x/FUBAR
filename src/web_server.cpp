@@ -70,6 +70,19 @@ h1{ margin:.2rem 0; font-size:clamp(2.2rem,7vw,4.4rem); letter-spacing:.04em; }
 .sdrstate{ color:var(--muted); font-size:13px; }
 .sdrstate.warn{ color:#ffd166; }
 .sdrmeta{ color:var(--muted); font-size:13px; margin-top:8px; min-height:18px; }
+.sdrplaybox{ display:none; margin:12px 0 4px; padding:12px; background:#0a120a; border:1px solid #2a4a22; border-radius:14px; }
+.sdrplaybox.on{ display:block; }
+.sdrplaybox .lab{ color:var(--muted); font-size:12px; margin:0 0 8px; }
+.sdrplaybox .lab b{ color:var(--ink); }
+.sdrplaygrid{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; align-items:end; }
+.sdrplaygrid label{ display:block; color:var(--muted); font-size:12px; margin-bottom:3px; }
+.sdrplaygrid input,.sdrplaygrid select{ width:100%; border:1px solid var(--line); border-radius:10px; background:#070807; color:var(--ink); padding:9px 10px; }
+.sdrplaygrid input[type=checkbox]{ width:auto; margin-right:6px; vertical-align:middle; }
+.sdrplaygrid button{ border:0; border-radius:999px; padding:10px 14px; font-weight:800; cursor:pointer; background:var(--green); color:#111; }
+.sdrplaygrid input:disabled,.sdrplaygrid select:disabled,.sdrplaygrid button:disabled{ opacity:.45; cursor:not-allowed; }
+.sdrplayhint{ color:var(--muted); font-size:12px; margin:8px 0 0; line-height:1.4; }
+@media (max-width:820px){ .sdrplaygrid{ grid-template-columns:1fr 1fr; } }
+@media (max-width:560px){ .sdrplaygrid{ grid-template-columns:1fr; } }
 .modemenu{ margin:12px 0 4px; padding:12px; background:#0c100c; border:1px solid var(--line); border-radius:14px; }
 .modemenu .lab{ color:var(--muted); font-size:12px; margin:0 0 8px; }
 .modemenu .lab b{ color:var(--ink); }
@@ -102,6 +115,22 @@ h1{ margin:.2rem 0; font-size:clamp(2.2rem,7vw,4.4rem); letter-spacing:.04em; }
 .sstvgrid a{ display:block; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#0c100c; color:inherit; text-decoration:none; }
 .sstvgrid img{ display:block; width:100%; aspect-ratio:4/3; object-fit:contain; background:#000; }
 .sstvgrid .cap{ padding:8px 10px; font-size:12px; color:var(--muted); white-space:pre-wrap; }
+.satcomneon{ margin:0; padding:14px; background:#000; border:1px solid #39FF14; border-radius:16px; color:#39FF14; font-family:ui-monospace,Consolas,monospace; }
+.satcomneon .kicker{ color:#39FF14; letter-spacing:.28em; }
+.satgrid{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:10px 0; }
+.satbox{ border:1px solid #39FF14; border-radius:10px; padding:8px; background:#050805; }
+.satbox label{ display:block; font-size:11px; margin-bottom:4px; color:#39FF14; }
+.satbox input,.satbox select{ width:100%; background:#0a0f0a; color:#39FF14; border:1px solid #1f3d1f; border-radius:6px; padding:8px; font-weight:800; }
+#satSpectrum,#satWaterfall{ width:100%; max-width:100%; border:1px solid #1f3d1f; border-radius:8px; background:#000; margin:6px 0; display:block; }
+.satbtns{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
+.satbtns button{ border:2px solid #39FF14; background:#0c160c; color:#39FF14; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer; }
+.satbtns button.primary{ background:#39FF14; color:#000; }
+.satbtns button:disabled{ opacity:.4; cursor:not-allowed; }
+.satstatus{ font-size:13px; margin:6px 0; min-height:18px; }
+.satlog{ margin:0; max-height:160px; overflow:auto; background:#050805; border:1px solid #1f3d1f; border-radius:8px; padding:8px; color:#9dff9d; font-size:12px; white-space:pre-wrap; }
+@media (max-width:820px){ .satgrid{ grid-template-columns:1fr 1fr; } }
+@media (max-width:560px){ .satgrid{ grid-template-columns:1fr; } }
+#acMap{ z-index:0; }
 .mix{ display:flex; gap:6px; }
 .mix button{ border:1px solid var(--line); background:#0c100c; color:var(--ink); border-radius:999px; padding:7px 12px; font-weight:700; cursor:pointer; }
 .mix button.on{ background:var(--green); color:#111; border-color:var(--green); }
@@ -130,6 +159,8 @@ button.play.playing{ background:var(--blue); }
 @media (max-width:820px){ .sdrgrid,.sdrrow{ grid-template-columns:1fr 1fr; } .sdrrow{ grid-column:1 / -1; } }
 @media (max-width:560px){ .sdrgrid,.sdrrow{ grid-template-columns:1fr; } }
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 <header>
@@ -147,6 +178,9 @@ button.play.playing{ background:var(--blue); }
     <button type="button" data-tab="fm">FM station</button>
     <button type="button" data-tab="tones">UHF tones</button>
     <button type="button" data-tab="sstv">SSTV pictures</button>
+    <button type="button" data-tab="satcom">Satcom</button>
+    <button type="button" data-tab="inmarsat">Inmarsat</button>
+    <button type="button" data-tab="aircraft">Aircraft</button>
     <button type="button" data-tab="control">Radio control</button>
   </nav>
   <section class="tabpanel on" id="tab-listen">
@@ -228,6 +262,85 @@ button.play.playing{ background:var(--blue); }
       <div class="sstvgrid" id="sstvImages"></div>
     </div>
   </section>
+  <section class="tabpanel" id="tab-satcom">
+    <div class="satcomneon" id="satcomPanel">
+      <p class="kicker">SATCOM SCANNER</p>
+      <div class="satgrid">
+        <div class="satbox"><label>LOW FREQUENCY</label><input id="satLow" inputmode="decimal" value="420.000"></div>
+        <div class="satbox"><label>HIGH FREQUENCY</label><input id="satHigh" inputmode="decimal" value="430.000"></div>
+        <div class="satbox"><label>BANDWIDTH kHz</label><input id="satBw" inputmode="decimal" value="250"></div>
+        <div class="satbox"><label>MODE</label>
+          <select id="satMode"><option>NFM</option><option>WFM</option><option>AM</option><option>USB</option><option>APT</option><option>APRS</option></select>
+        </div>
+      </div>
+      <div class="satgrid">
+        <div class="satbox"><label>HOME LAT (+N/-S)</label><input id="satLat" value="-33.87"></div>
+        <div class="satbox"><label>HOME LON (+E/-W)</label><input id="satLon" value="151.21"></div>
+        <div class="satbox"><label>ALT m</label><input id="satAlt" inputmode="decimal" value="50"></div>
+        <div class="satbox"><label>MIN EL °</label><input id="satMinEl" inputmode="decimal" value="10"></div>
+      </div>
+      <div class="satbtns">
+        <button type="button" id="satApplyObsBtn">Apply location</button>
+        <button type="button" id="satRefreshTleBtn">Refresh TLE</button>
+        <button type="button" id="satArmSstvBtn">Arm ISS SSTV</button>
+        <button type="button" id="satDisarmBtn">Disarm</button>
+        <label><input type="checkbox" id="satAutoTrack" checked> Auto-track Doppler</label>
+        <span id="satTleAge" style="opacity:.8">TLE: —</span>
+      </div>
+      <div class="satbox" style="margin:8px 0">
+        <label>SELECTED SATS</label>
+        <div id="satCatChecks" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px"></div>
+        <button type="button" id="satSaveCatBtn" style="margin-top:8px">Save satellite selection</button>
+      </div>
+      <pre class="satlog" id="satPassList" style="max-height:140px">Passes appear after location + TLE refresh.</pre>
+      <div class="satstatus" id="satPassArmed">No pass armed</div>
+      <canvas id="satSpectrum" width="900" height="140"></canvas>
+      <canvas id="satWaterfall" width="900" height="160"></canvas>
+      <div class="satbtns">
+        <button type="button" id="satStartBtn" class="primary">START SCAN</button>
+        <button type="button" id="satSkipBtn">FREQUENCY SKIP</button>
+        <button type="button" id="satRecordBtn">RECORD</button>
+        <button type="button" id="satStopBtn">STOP</button>
+        <label>SQUELCH <input id="satSquelch" inputmode="decimal" value="-90" style="width:72px"></label>
+      </div>
+      <div class="satstatus" id="satStatusLine">Satcom idle — enable SDR Town control and Take control to operate.</div>
+      <pre class="satlog" id="satDecodeLog"></pre>
+    </div>
+  </section>
+  <section class="tabpanel" id="tab-inmarsat">
+    <div class="satcomneon" id="inmarsatPanel">
+      <p class="kicker">INMARSAT AERO / EGC</p>
+      <p class="satstatus">Experimental prototype via SDR Town 0.2.71+ (band plans + ACARS/ADS-C parse). No unique-word/FEC/Aero AMBE claim. ADS-C positions appear on the Aircraft map (orange).</p>
+      <div class="satgrid">
+        <div class="satbox"><label>BAND PLAN</label><select id="inmPlan"></select></div>
+        <div class="satbox"><label>CHANNEL</label><select id="inmChannel"></select></div>
+        <div class="satbox"><label><input type="checkbox" id="inmVoiceFollow" checked> Voice follow</label></div>
+        <div class="satbox"><label><input type="checkbox" id="inmRecord"> Record voice</label></div>
+      </div>
+      <div class="satbtns">
+        <button type="button" id="inmStartBtn" class="primary">START</button>
+        <button type="button" id="inmStopBtn">STOP</button>
+        <button type="button" id="inmRefreshPlansBtn">Reload plans</button>
+      </div>
+      <div class="satstatus" id="inmStatus">Inmarsat idle — enable SDR Town control.</div>
+      <pre class="satlog" id="inmMsgLog" style="max-height:280px"></pre>
+    </div>
+  </section>
+  <section class="tabpanel" id="tab-aircraft">
+    <div class="satcomneon" id="aircraftPanel">
+      <p class="kicker">AIRCRAFT MAP</p>
+      <p class="satstatus" id="acStatus">ADS-B / OpenSky / Inmarsat ADS-C tracks from SDR Town. Green=local 1090, blue=OpenSky, orange=ADS-C.</p>
+      <div id="acMap" style="height:420px;width:100%;border:1px solid #1f3d1f;border-radius:8px;background:#0a1014"></div>
+      <div class="satbtns" style="margin-top:8px">
+        <button type="button" id="acRefreshBtn">Refresh network</button>
+        <button type="button" id="acTuneBtn">Tune 1090 (needs control)</button>
+      </div>
+      <div class="satbox" id="acPopout" style="display:none;margin-top:8px">
+        <div id="acPopText"></div>
+        <img id="acPopImg" alt="" style="max-width:100%;max-height:160px;margin-top:8px;display:none">
+      </div>
+    </div>
+  </section>
   <section class="tabpanel" id="tab-control">
   <section class="sdrtown" id="sdrTownPanel">
     <p class="kicker">SDR Town control</p>
@@ -256,9 +369,9 @@ button.play.playing{ background:var(--blue); }
       <div><label for="sdrMode">Mode (with Tune)</label><select id="sdrMode"><option>AUTO</option><option>NFM</option><option>WFM</option><option>AM</option><option>USB</option><option>LSB</option><option>CW</option><option>P25</option></select></div>
       <div><label for="sdrBw">Bandwidth kHz</label><input id="sdrBw" inputmode="decimal" placeholder="auto"></div>
       <div><label for="sdrLpf"><input id="sdrLpfEnabled" type="checkbox" checked>LPF kHz</label><input id="sdrLpf" inputmode="decimal" placeholder="leave"></div>
-      <div><label for="sdrGain">RF gain dB</label><input id="sdrGain" inputmode="decimal" placeholder="leave"></div>
+      <div><label for="sdrGain" id="sdrGainLabel">RF gain dB</label><input id="sdrGain" inputmode="decimal" placeholder="leave"></div>
       <div><label for="sdrVolume">Volume %</label><input id="sdrVolume" inputmode="decimal" placeholder="85"></div>
-      <div><label for="sdrDirectSamp">RTL direct sampling (HF)</label>
+      <div id="sdrRtlBox"><label for="sdrDirectSamp">RTL direct sampling (HF)</label>
         <select id="sdrDirectSamp" title="Enable Q-ADC or I-ADC to receive ~500 kHz–28 MHz on RTL-SDR">
           <option value="0">Off (normal tuner)</option>
           <option value="2">Q-ADC (HF ~500 kHz+)</option>
@@ -271,6 +384,33 @@ button.play.playing{ background:var(--blue); }
         <div><label for="sdrP25Freq">P25 CC MHz</label><input id="sdrP25Freq" inputmode="decimal" placeholder="420.35000"></div>
         <button id="sdrP25Btn" type="button">Monitor CC</button>
       </div>
+    </div>
+    <div class="sdrplaybox" id="sdrplayBox">
+      <p class="lab"><b>SDRplay</b> — <span id="sdrplayModel">device</span>. Shown only while an SDRplay receiver is active.</p>
+      <div class="sdrplaygrid">
+        <div id="sdrplayAntWrap"><label for="sdrplayAntenna">Antenna</label><select id="sdrplayAntenna"></select></div>
+        <div id="sdrplayAgcWrap"><label for="sdrplayAgc"><input id="sdrplayAgc" type="checkbox">AGC</label></div>
+        <div id="sdrplayIfgrWrap"><label for="sdrplayIfgr">IFGR dB</label><input id="sdrplayIfgr" inputmode="decimal"></div>
+        <div id="sdrplayRfgrWrap"><label for="sdrplayRfgr">RFGR dB</label><input id="sdrplayRfgr" inputmode="decimal"></div>
+        <div id="sdrplayBwWrap"><label for="sdrplayBw">IF bandwidth</label><select id="sdrplayBw"><option value="0">Driver default</option></select></div>
+        <div id="sdrplayBiasWrap"><label for="sdrplayBiasT"><input id="sdrplayBiasT" type="checkbox">Bias-T</label></div>
+        <div id="sdrplayRfNotchWrap"><label for="sdrplayRfNotch"><input id="sdrplayRfNotch" type="checkbox">MW/FM notch</label></div>
+        <div id="sdrplayDabWrap"><label for="sdrplayDabNotch"><input id="sdrplayDabNotch" type="checkbox">DAB notch</label></div>
+        <div id="sdrplayExtRefWrap"><label for="sdrplayExtRef"><input id="sdrplayExtRef" type="checkbox">Clock OUT</label></div>
+        <div id="sdrplayHdrWrap"><label for="sdrplayHdr"><input id="sdrplayHdr" type="checkbox">HDR</label></div>
+        <div id="sdrplayIqWrap"><label for="sdrplayIqCorr"><input id="sdrplayIqCorr" type="checkbox" checked>IQ correction</label></div>
+        <div id="sdrplayDivWrap"><label for="sdrplayDivMode">Diversity</label>
+          <select id="sdrplayDivMode">
+            <option value="off">Off</option>
+            <option value="sum">Equal-gain sum</option>
+            <option value="null">Null-steer</option>
+          </select>
+        </div>
+        <div id="sdrplayPhaseWrap"><label for="sdrplayDivPhase">B phase °</label><input id="sdrplayDivPhase" inputmode="decimal" value="0"></div>
+        <div id="sdrplayAmpWrap"><label for="sdrplayDivAmp">B amplitude</label><input id="sdrplayDivAmp" inputmode="decimal" value="1"></div>
+        <button id="sdrplayApplyBtn" type="button">Apply SDRplay</button>
+      </div>
+      <p class="sdrplayhint" id="sdrplayHint">Port and feature set follow the active RSP model.</p>
     </div>
     <div class="sdrmeta" id="sdrTownStatus">Checking SDR Town bridge...</div>
   </section>
@@ -1304,6 +1444,7 @@ function sdrSetControlsEnabled(){
   const enabled = !!sdrTownConfig.enabled;
   const canMode = enabled && active && !!sdrTownConfig.allowMode;
   const canP25 = enabled && active && !!sdrTownConfig.allowP25Control;
+  const canSdrplay = enabled && active && (!!sdrTownConfig.allowTune || !!sdrTownConfig.allowRfGain);
   document.getElementById('sdrFreq').disabled = !enabled || !active || !sdrTownConfig.allowTune;
   document.getElementById('sdrMode').disabled = !canMode;
   document.getElementById('sdrBw').disabled = !enabled || !active || !sdrTownConfig.allowTune;
@@ -1334,6 +1475,98 @@ function sdrSetControlsEnabled(){
     else if (!sdrTownConfig.allowMode && !sdrTownConfig.allowP25Control) hint.textContent = 'Mode switching is disabled by the FUBAR admin.';
     else hint.textContent = 'Analog demods leave P25 Monitor CC and stick. P25 starts control-channel monitoring at the frequency below.';
   }
+  [
+    'sdrplayAntenna','sdrplayAgc','sdrplayIfgr','sdrplayRfgr','sdrplayBw','sdrplayBiasT','sdrplayRfNotch',
+    'sdrplayDabNotch','sdrplayExtRef','sdrplayHdr','sdrplayIqCorr','sdrplayDivMode','sdrplayDivPhase',
+    'sdrplayDivAmp','sdrplayApplyBtn'
+  ].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !canSdrplay;
+  });
+}
+function sdrSettingBool(settings, key, fallback){
+  if (!settings || settings[key] == null) return !!fallback;
+  const v = String(settings[key]).toLowerCase();
+  return v === 'true' || v === '1' || v === 'on';
+}
+function sdrRenderDevicePanels(state){
+  const s = state || {};
+  const rtlBox = document.getElementById('sdrRtlBox');
+  if (rtlBox) rtlBox.style.display = (s.rtlDirectSamplingAvailable === false) ? 'none' : '';
+  const gainLabel = document.getElementById('sdrGainLabel');
+  const sp = s.sdrplay;
+  if (gainLabel) gainLabel.textContent = (sp && sp.active) ? 'RFGR dB' : 'RF gain dB';
+  const box = document.getElementById('sdrplayBox');
+  if (!box) return;
+  if (!sp || !sp.active) {
+    box.classList.remove('on');
+    return;
+  }
+  box.classList.add('on');
+  const model = document.getElementById('sdrplayModel');
+  if (model) {
+    model.textContent = (sp.model || 'SDRplay') +
+      (sp.duoModeLabel ? (' · ' + sp.duoModeLabel) : '') +
+      (sp.rxChannel != null ? (' · ch' + sp.rxChannel) : '');
+  }
+  const features = sp.features || {};
+  const show = (wrapId, on) => {
+    const el = document.getElementById(wrapId);
+    if (el) el.style.display = on ? '' : 'none';
+  };
+  show('sdrplayAntWrap', features.antenna !== false);
+  show('sdrplayAgcWrap', features.agc !== false);
+  show('sdrplayIfgrWrap', features.ifgr !== false);
+  show('sdrplayRfgrWrap', features.rfgr !== false);
+  show('sdrplayBwWrap', features.bandwidth !== false);
+  show('sdrplayBiasWrap', !!features.biasT);
+  show('sdrplayRfNotchWrap', !!features.rfNotch);
+  show('sdrplayDabWrap', !!features.dabNotch);
+  show('sdrplayExtRefWrap', !!features.extRef);
+  show('sdrplayHdrWrap', !!features.hdr);
+  show('sdrplayIqWrap', !!features.iqCorr);
+  show('sdrplayDivWrap', !!features.diversity);
+  show('sdrplayPhaseWrap', !!features.diversity);
+  show('sdrplayAmpWrap', !!features.diversity);
+
+  const ant = document.getElementById('sdrplayAntenna');
+  if (ant && document.activeElement !== ant) {
+    const ants = sp.antennas || [];
+    ant.innerHTML = ants.map(a => '<option value="' + String(a).replace(/"/g,'&quot;') + '">' + a + '</option>').join('');
+    if (sp.antenna) ant.value = sp.antenna;
+  }
+  const focusedSdrplay = document.activeElement && String(document.activeElement.id || '').indexOf('sdrplay') === 0;
+  if (!focusedSdrplay) {
+    const setChk = (id, on) => { const el = document.getElementById(id); if (el) el.checked = !!on; };
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
+    setChk('sdrplayAgc', sp.agcEnabled);
+    setVal('sdrplayIfgr', sp.ifgrDb != null ? Number(sp.ifgrDb).toFixed(0) : '');
+    setVal('sdrplayRfgr', sp.rfgrDb != null ? Number(sp.rfgrDb).toFixed(0) : '');
+    const bw = document.getElementById('sdrplayBw');
+    if (bw) {
+      const list = sp.bandwidthsHz || [];
+      bw.innerHTML = '<option value="0">Driver default</option>' +
+        list.map(hz => '<option value="' + hz + '">' + (hz >= 1e6 ? (hz/1e6).toFixed(3) + ' MHz' : (hz/1e3).toFixed(0) + ' kHz') + '</option>').join('');
+      bw.value = String(sp.bandwidthHz || 0);
+    }
+    const settings = sp.settings || {};
+    setChk('sdrplayBiasT', sdrSettingBool(settings, 'biasT_ctrl', false));
+    setChk('sdrplayRfNotch', sdrSettingBool(settings, 'rfnotch_ctrl', false));
+    setChk('sdrplayDabNotch', sdrSettingBool(settings, 'dabnotch_ctrl', false));
+    setChk('sdrplayExtRef', sdrSettingBool(settings, 'extref_ctrl', false));
+    setChk('sdrplayHdr', sdrSettingBool(settings, 'hdr_ctrl', false));
+    setChk('sdrplayIqCorr', sdrSettingBool(settings, 'iqcorr_ctrl', true));
+    const div = sp.diversity || {};
+    setVal('sdrplayDivMode', div.mode || 'off');
+    setVal('sdrplayDivPhase', div.phaseDeg != null ? Number(div.phaseDeg).toFixed(1) : '0');
+    setVal('sdrplayDivAmp', div.amplitudeB != null ? Number(div.amplitudeB).toFixed(2) : '1');
+  }
+  const hintEl = document.getElementById('sdrplayHint');
+  if (hintEl) {
+    hintEl.textContent = (sp.antennaDescription || 'SDRplay controls for the active device.') +
+      (features.diversity ? ' Dual Tuner diversity/null-steer is host DSP.' : '');
+  }
+  sdrSetControlsEnabled();
 }
 function sdrRenderControlSession(){
   const el = document.getElementById('sdrControlState');
@@ -1433,6 +1666,7 @@ async function loadSdrTownControl(){
     if (!sdrTownConfig.enabled) {
       sdrAdoptSession({role:'idle', canControl:false, remainingMs:0});
       renderDecodePanels({});
+      sdrRenderDevicePanels({});
       return;
     }
     await sdrControlAction('status');
@@ -1444,6 +1678,7 @@ async function loadSdrTownControl(){
       sdrSeedFields(s);
       if (!sdrCommandInFlight) sdrHighlightMode(sdrDesiredMode || sdrEffectiveMode(s));
       renderDecodePanels(s);
+      sdrRenderDevicePanels(s);
       const p25Label = (s.p25 && s.p25.talkgroupStatusLabel) ? String(s.p25.talkgroupStatusLabel).trim() : '';
       const p25Note = s.p25 && s.p25.monitorDisabledReason ? (' · P25 monitor disabled: ' + s.p25.monitorDisabledReason) : '';
       const p25Live = p25Label ? (' · ' + p25Label) : (s.p25 && s.p25.followTalkgroupId ? (' · TG ' + s.p25.followTalkgroupId) : '');
@@ -1453,11 +1688,13 @@ async function loadSdrTownControl(){
       sdrTownMessage('SDR Town ready · ' + Number(s.frequencyMHz || 0).toFixed(5) + ' MHz · ' + modeShown + ' · BW ' + Number((s.bandwidthHz || 0) / 1000).toFixed(1) + ' kHz' + lpfNote + volNote + p25Live + p25Note);
     } else {
       renderDecodePanels({});
+      sdrRenderDevicePanels({});
       sdrTownMessage(status.error || 'SDR Town not reachable. Start SDR Town with --control-server.');
     }
   } catch {
     panel.classList.remove('on');
     renderDecodePanels({});
+    sdrRenderDevicePanels({});
   }
   sdrSetControlsEnabled();
 }
@@ -1493,7 +1730,10 @@ async function postSdrTown(path, payload){
       }
       sdrDesiredMode = '';
       sdrHighlightMode(sdrEffectiveMode(s));
-      if (s && Object.keys(s).length) renderDecodePanels(s);
+      if (s && Object.keys(s).length) {
+        renderDecodePanels(s);
+        sdrRenderDevicePanels(s);
+      }
       await sdrControlAction('status');
     } else {
       if (data.session) sdrAdoptSession(data.session);
@@ -1526,6 +1766,27 @@ document.getElementById('sdrLpfEnabled').addEventListener('change', () => {
 document.getElementById('sdrDirectSamp').addEventListener('change', () => {
   const mode = Number(document.getElementById('sdrDirectSamp').value);
   postSdrTown('api/sdr-town/direct-sampling', {directSampling: mode});
+});
+document.getElementById('sdrplayApplyBtn').addEventListener('click', () => {
+  const payload = {
+    antenna: document.getElementById('sdrplayAntenna').value,
+    agc: document.getElementById('sdrplayAgc').checked,
+    ifgrDb: Number(document.getElementById('sdrplayIfgr').value),
+    rfgrDb: Number(document.getElementById('sdrplayRfgr').value),
+    bandwidthHz: Number(document.getElementById('sdrplayBw').value || 0),
+    biasT: document.getElementById('sdrplayBiasT').checked,
+    rfNotch: document.getElementById('sdrplayRfNotch').checked,
+    dabNotch: document.getElementById('sdrplayDabNotch').checked,
+    extRef: document.getElementById('sdrplayExtRef').checked,
+    hdr: document.getElementById('sdrplayHdr').checked,
+    iqCorr: document.getElementById('sdrplayIqCorr').checked,
+    diversity: {
+      mode: document.getElementById('sdrplayDivMode').value,
+      phaseDeg: Number(document.getElementById('sdrplayDivPhase').value || 0),
+      amplitudeB: Number(document.getElementById('sdrplayDivAmp').value || 1)
+    }
+  };
+  postSdrTown('api/sdr-town/sdrplay', payload);
 });
 document.getElementById('sdrP25Known').addEventListener('change', () => {
   const value = document.getElementById('sdrP25Known').value;
@@ -1599,6 +1860,387 @@ async function sdrApplyMode(mode){
 document.querySelectorAll('.sdrModeAction').forEach(btn => {
   btn.addEventListener('click', () => sdrApplyMode(btn.getAttribute('data-set-mode')));
 });
+
+let satWaterfallRows = [];
+function satDrawSpectrum(bins){
+  const canvas = document.getElementById('satSpectrum');
+  if (!canvas || !bins || !bins.length) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle = '#39FF14';
+  ctx.beginPath();
+  for (let i = 0; i < bins.length; ++i) {
+    const x = i / (bins.length - 1) * (w - 1);
+    const db = Number(bins[i]);
+    const n = Math.max(0, Math.min(1, (db + 120) / 100));
+    const y = h - 1 - n * (h - 2);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  satWaterfallRows.unshift(bins.slice());
+  if (satWaterfallRows.length > 80) satWaterfallRows.length = 80;
+  const wf = document.getElementById('satWaterfall');
+  if (!wf) return;
+  const wctx = wf.getContext('2d');
+  const img = wctx.createImageData(wf.width, wf.height);
+  for (let row = 0; row < satWaterfallRows.length && row < wf.height; ++row) {
+    const line = satWaterfallRows[row];
+    for (let x = 0; x < wf.width; ++x) {
+      const bi = Math.min(line.length - 1, Math.floor(x * line.length / wf.width));
+      const n = Math.max(0, Math.min(1, (Number(line[bi]) + 120) / 100));
+      const o = (row * wf.width + x) * 4;
+      img.data[o] = Math.floor(n * 255);
+      img.data[o+1] = Math.floor(n * 180);
+      img.data[o+2] = Math.floor((1 - n) * 180);
+      img.data[o+3] = 255;
+    }
+  }
+  wctx.putImageData(img, 0, 0);
+}
+async function loadSatcom(){
+  const line = document.getElementById('satStatusLine');
+  const logEl = document.getElementById('satDecodeLog');
+  const passEl = document.getElementById('satPassList');
+  const armedEl = document.getElementById('satPassArmed');
+  const tleEl = document.getElementById('satTleAge');
+  try {
+    if (!sdrTownConfig || !sdrTownConfig.enabled) {
+      if (line) line.textContent = 'Enable SDR Town control in FUBAR settings to use Satcom.';
+      return;
+    }
+    const res = await fetch('api/sdr-town/satcom-status', {cache:'no-store'});
+    const data = await res.json();
+    const s = (data && data.satcom) ? data.satcom : null;
+    if (!data.ok || !s) {
+      if (line) line.textContent = (data && data.error) ? data.error : 'Satcom status unavailable (need SDR Town 0.2.69+).';
+      return;
+    }
+    const cfg = s.config || {};
+    const obs = s.observer || {};
+    const focused = document.activeElement && String(document.activeElement.id||'').indexOf('sat') === 0;
+    if (!focused) {
+      if (cfg.lowMHz) document.getElementById('satLow').value = Number(cfg.lowMHz).toFixed(3);
+      if (cfg.highMHz) document.getElementById('satHigh').value = Number(cfg.highMHz).toFixed(3);
+      if (cfg.bandwidthHz) document.getElementById('satBw').value = Number(cfg.bandwidthHz / 1000).toFixed(1);
+      if (cfg.mode) document.getElementById('satMode').value = cfg.mode;
+      if (cfg.squelchDb != null) document.getElementById('satSquelch').value = Number(cfg.squelchDb).toFixed(1);
+      if (obs.latDeg != null) document.getElementById('satLat').value = Number(obs.latDeg).toFixed(5);
+      if (obs.lonDeg != null) document.getElementById('satLon').value = Number(obs.lonDeg).toFixed(5);
+      if (obs.altM != null) document.getElementById('satAlt').value = Number(obs.altM).toFixed(0);
+      if (obs.minElevationDeg != null) document.getElementById('satMinEl').value = Number(obs.minElevationDeg).toFixed(0);
+    }
+    if (s.spectrumDb) satDrawSpectrum(s.spectrumDb);
+    const mhz = s.tunedMHz || s.lockMHz || s.currentMHz || 0;
+    if (line) {
+      line.textContent = (s.deviceConnected ? ('● ' + (s.deviceLabel || 'SDR')) : '○ no device') +
+        ' · ' + (s.state || 'idle') +
+        (s.passArmed ? ' · PASS' : '') +
+        (mhz ? (' · ' + Number(mhz).toFixed(4) + ' MHz') : '') +
+        (s.dopplerHz ? (' · doppler ' + Number(s.dopplerHz).toFixed(0) + ' Hz') : '') +
+        (s.lastStatus ? (' · ' + s.lastStatus) : '');
+    }
+    if (logEl && Array.isArray(s.recentDecodes)) {
+      logEl.textContent = s.recentDecodes.slice(-40).join('\n');
+    }
+    if (tleEl) {
+      const age = s.tleAgeSec;
+      tleEl.textContent = (age == null || age < 0) ? 'TLE: none — Refresh' :
+        (age < 3600 ? ('TLE age: ' + Math.floor(age/60) + 'm') : ('TLE age: ' + (age/3600).toFixed(1) + 'h'));
+    }
+    const passes = Array.isArray(s.passes) ? s.passes : [];
+    if (passEl) {
+      if (!passes.length) passEl.textContent = 'No upcoming passes (set location, select sats, refresh TLE).';
+      else passEl.textContent = passes.slice(0, 24).map(p => {
+        const aos = new Date((p.aosUnix||0)*1000);
+        return aos.toLocaleString() + '  ' + (p.satName||p.satId) + '  ' + (p.downlinkLabel||'') +
+          '  maxEl ' + Number(p.maxElDeg||0).toFixed(1) + '°  ' + Number(p.freqMHz||0).toFixed(4) + ' MHz';
+      }).join('\n');
+    }
+    const armed = s.armed || {};
+    if (armedEl) {
+      if (armed.armed) {
+        armedEl.textContent = 'Armed ' + (armed.downlinkId||'') +
+          (armed.role === 'sstv' ? ' (ISS SSTV — open SSTV in SDR Town)' : '') +
+          ' · el ' + Number(armed.elevationDeg||0).toFixed(1) + '° · tuned ' + Number(armed.tunedMHz||0).toFixed(4) + ' MHz';
+      } else armedEl.textContent = 'No pass armed';
+    }
+    const catBox = document.getElementById('satCatChecks');
+    const sats = (s.catalogue && Array.isArray(s.catalogue.satellites)) ? s.catalogue.satellites :
+      ((s.satellites) ? s.satellites : null);
+    if (catBox && Array.isArray(sats) && !catBox.dataset.built) {
+      catBox.innerHTML = sats.map(sat => {
+        const id = sat.id;
+        const checked = sat.selected ? 'checked' : '';
+        return '<label style="margin-right:10px"><input type="checkbox" data-sat-id="'+id+'" '+checked+'> '+
+          (sat.name||id)+'</label>';
+      }).join('');
+      catBox.dataset.built = '1';
+    }
+    const can = !!(sdrControlSession && sdrControlSession.canControl && sdrTownConfig.allowTune);
+    ['satStartBtn','satSkipBtn','satRecordBtn','satStopBtn','satApplyObsBtn','satRefreshTleBtn',
+     'satArmSstvBtn','satDisarmBtn','satSaveCatBtn'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = !can;
+    });
+  } catch (e) {
+    if (line) line.textContent = 'Satcom poll failed';
+  }
+}
+async function postSatcom(action, extra){
+  if (!sdrControlSession || !sdrControlSession.canControl) {
+    document.getElementById('satStatusLine').textContent = 'Take control on Radio control first.';
+    return;
+  }
+  const payload = Object.assign({
+    action: action,
+    clientId: sdrControlClientId,
+    lowMHz: Number(document.getElementById('satLow').value),
+    highMHz: Number(document.getElementById('satHigh').value),
+    bandwidthKHz: Number(document.getElementById('satBw').value),
+    mode: document.getElementById('satMode').value,
+    squelchDb: Number(document.getElementById('satSquelch').value)
+  }, extra || {});
+  await postSdrTown('api/sdr-town/satcom-control', payload);
+  await loadSatcom();
+}
+async function postSatcomPath(path, body){
+  if (!sdrControlSession || !sdrControlSession.canControl) {
+    document.getElementById('satStatusLine').textContent = 'Take control on Radio control first.';
+    return;
+  }
+  await postSdrTown(path, Object.assign({clientId: sdrControlClientId}, body || {}));
+  const cat = document.getElementById('satCatChecks');
+  if (cat) delete cat.dataset.built;
+  await loadSatcom();
+}
+document.getElementById('satStartBtn').addEventListener('click', () => postSatcom('start'));
+document.getElementById('satStopBtn').addEventListener('click', () => postSatcom('stop'));
+document.getElementById('satSkipBtn').addEventListener('click', () => postSatcom('skip'));
+document.getElementById('satRecordBtn').addEventListener('click', () => postSatcom('record'));
+document.getElementById('satApplyObsBtn').addEventListener('click', () => postSatcomPath('api/sdr-town/satcom-observer', {
+  lat: document.getElementById('satLat').value,
+  lon: document.getElementById('satLon').value,
+  altM: Number(document.getElementById('satAlt').value),
+  minElevationDeg: Number(document.getElementById('satMinEl').value)
+}));
+document.getElementById('satRefreshTleBtn').addEventListener('click', () => postSatcomPath('api/sdr-town/satcom-tle-refresh', {}));
+document.getElementById('satArmSstvBtn').addEventListener('click', () => postSatcomPath('api/sdr-town/satcom-arm', {
+  satId: 'iss', downlinkId: 'iss-sstv', autoTrack: !!document.getElementById('satAutoTrack').checked
+}));
+document.getElementById('satDisarmBtn').addEventListener('click', () => postSatcomPath('api/sdr-town/satcom-arm', {action:'disarm'}));
+document.getElementById('satSaveCatBtn').addEventListener('click', () => {
+  const selected = Array.from(document.querySelectorAll('#satCatChecks input[data-sat-id]:checked')).map(el => el.getAttribute('data-sat-id'));
+  postSatcomPath('api/sdr-town/satcom-catalogue', {selected});
+});
+document.getElementById('satAutoTrack').addEventListener('change', (e) => {
+  postSatcomPath('api/sdr-town/satcom-arm', {satId:'', downlinkId:'', autoTrack: !!e.target.checked, action: 'autotrack_only'});
+});
+
+let inmPlansCache = [];
+async function loadInmarsatPlans(){
+  const planSel = document.getElementById('inmPlan');
+  if (!planSel) return;
+  try {
+    const res = await fetch('api/sdr-town/inmarsat-bandplans', {cache:'no-store'});
+    const data = await res.json();
+    inmPlansCache = data.plans || [];
+    planSel.innerHTML = '';
+    inmPlansCache.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = (p.name||p.id) + (p.region ? (' — ' + p.region) : '');
+      planSel.appendChild(o);
+    });
+    fillInmarsatChannels();
+  } catch (e) {
+    planSel.innerHTML = '<option value="">Plans unavailable (need SDR Town 0.2.71+)</option>';
+  }
+}
+function fillInmarsatChannels(){
+  const planSel = document.getElementById('inmPlan');
+  const chSel = document.getElementById('inmChannel');
+  if (!planSel || !chSel) return;
+  const p = inmPlansCache.find(x => x.id === planSel.value);
+  chSel.innerHTML = '';
+  (p && p.channels || []).forEach(c => {
+    const o = document.createElement('option');
+    o.value = String(c.freqHz);
+    o.dataset.mode = c.mode || 'aero_oqpsk';
+    o.dataset.baud = String(c.baud || 10500);
+    const mhz = (c.freqMHz != null) ? c.freqMHz : (c.freqHz/1e6);
+    o.textContent = (c.label||'') + ' ' + Number(mhz).toFixed(3) + ' MHz';
+    chSel.appendChild(o);
+  });
+}
+async function loadInmarsat(){
+  const st = document.getElementById('inmStatus');
+  const log = document.getElementById('inmMsgLog');
+  try {
+    if (!sdrTownConfig || !sdrTownConfig.enabled) {
+      if (st) st.textContent = 'Enable SDR Town control to use Inmarsat.';
+      return;
+    }
+    const res = await fetch('api/sdr-town/inmarsat-status', {cache:'no-store'});
+    const data = await res.json();
+    const s = (data && data.inmarsat) ? data.inmarsat : null;
+    if (!s) {
+      if (st) st.textContent = (data && data.error) || 'Inmarsat status unavailable (need SDR Town 0.2.71+).';
+      return;
+    }
+    if (st) {
+      st.textContent = (s.state||'?') +
+        (s.locked ? ' LOCK' : '') +
+        ' · ' + (s.tunedMHz != null ? Number(s.tunedMHz).toFixed(3) : '?') + ' MHz' +
+        ' · msgs ' + (s.messages||0) +
+        ' · voice ' + (s.voiceFrames||0) +
+        (s.followingVoice ? ' · VOICE FOLLOW' : '') +
+        (s.lastStatus ? (' · ' + s.lastStatus) : '');
+    }
+    const vf = document.getElementById('inmVoiceFollow');
+    const rec = document.getElementById('inmRecord');
+    if (vf && s.config) vf.checked = !!s.config.voiceFollow;
+    if (rec && s.config) rec.checked = !!s.config.recordVoice;
+    const msgRes = await fetch('api/sdr-town/inmarsat-messages', {cache:'no-store'});
+    const msgData = await msgRes.json();
+    if (log && msgData && msgData.messages) {
+      log.textContent = (msgData.messages||[]).map(m =>
+        '[' + (m.kind||'?') + '] ' + (m.label||'') + ' ' + String(m.text||'').slice(0,160)
+      ).join('\\n');
+    }
+  } catch (e) {
+    if (st) st.textContent = 'Inmarsat poll failed';
+  }
+}
+async function postInmarsatControl(payload){
+  await postSdrTown('api/sdr-town/inmarsat-control', payload);
+  await loadInmarsat();
+}
+const inmPlanEl = document.getElementById('inmPlan');
+if (inmPlanEl) inmPlanEl.addEventListener('change', fillInmarsatChannels);
+const inmRefreshEl = document.getElementById('inmRefreshPlansBtn');
+if (inmRefreshEl) inmRefreshEl.addEventListener('click', loadInmarsatPlans);
+const inmStartEl = document.getElementById('inmStartBtn');
+if (inmStartEl) inmStartEl.addEventListener('click', () => {
+  const plan = document.getElementById('inmPlan').value;
+  const ch = document.getElementById('inmChannel');
+  const opt = ch.options[ch.selectedIndex];
+  postInmarsatControl({
+    action: 'start',
+    bandPlanId: plan,
+    channelHz: Number(ch.value||0),
+    mode: opt ? (opt.dataset.mode||'aero_oqpsk') : 'aero_oqpsk',
+    baud: opt ? Number(opt.dataset.baud||10500) : 10500,
+    voiceFollow: !!document.getElementById('inmVoiceFollow').checked,
+    recordVoice: !!document.getElementById('inmRecord').checked
+  });
+});
+const inmStopEl = document.getElementById('inmStopBtn');
+if (inmStopEl) inmStopEl.addEventListener('click', () => postInmarsatControl({action:'stop'}));
+const inmVfEl = document.getElementById('inmVoiceFollow');
+if (inmVfEl) inmVfEl.addEventListener('change', (e) => postInmarsatControl({voiceFollow: !!e.target.checked}));
+const inmRecEl = document.getElementById('inmRecord');
+if (inmRecEl) inmRecEl.addEventListener('change', (e) => postInmarsatControl({recordVoice: !!e.target.checked}));
+loadInmarsatPlans();
+
+let acMap=null, acLayer=null, acMarkers={};
+function acEnsureMap(){
+  if (acMap || typeof L === 'undefined') return;
+  const el = document.getElementById('acMap');
+  if (!el) return;
+  acMap = L.map(el).setView([-33.87, 151.21], 9);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18, attribution: '&copy; OpenStreetMap'
+  }).addTo(acMap);
+  acLayer = L.layerGroup().addTo(acMap);
+}
+async function loadAircraft(){
+  const st = document.getElementById('acStatus');
+  try {
+    if (!sdrTownConfig || !sdrTownConfig.enabled) {
+      if (st) st.textContent = 'Enable SDR Town control to show aircraft tracks.';
+      return;
+    }
+    acEnsureMap();
+    const res = await fetch('api/sdr-town/aircraft-status', {cache:'no-store'});
+    const data = await res.json();
+    if (!data.ok) {
+      if (st) st.textContent = data.error || 'Aircraft status unavailable (need SDR Town 0.2.70+).';
+      return;
+    }
+    if (st) {
+      st.textContent = 'Tracks ' + ((data.tracks&&data.tracks.length)||0) +
+        ' · net ' + (data.networkOnline ? ('OK age ' + data.networkAgeSec + 's') : 'offline') +
+        ' · local CRC ' + (data.localCrcOk||0) +
+        (data.lastStatus ? (' · ' + data.lastStatus) : '');
+    }
+    if (acMap && data.centerLat != null) {
+      if (!acMap._acCentered) {
+        acMap.setView([data.centerLat, data.centerLon], 9);
+        acMap._acCentered = true;
+      }
+    }
+    if (acLayer) {
+      acLayer.clearLayers();
+      acMarkers = {};
+      (data.tracks||[]).forEach(t => {
+        if (t.lat == null || t.lon == null) return;
+        const color = t.fromAdsc ? '#ffb428' : (t.fromLocal ? '#39FF14' : '#50a0ff');
+        const m = L.circleMarker([t.lat, t.lon], {
+          radius: 6,
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.85
+        }).bindTooltip((t.callsign||t.icao||'?') + ' ' + Math.round(t.altFt||0) + 'ft');
+        m.on('click', () => {
+          const box = document.getElementById('acPopout');
+          const txt = document.getElementById('acPopText');
+          const img = document.getElementById('acPopImg');
+          if (box) box.style.display = 'block';
+          if (txt) txt.innerHTML = '<b>' + (t.callsign||'(no callsign)') + '</b><br>ICAO ' + (t.icao||'') +
+            '<br>Alt ' + Math.round(t.altFt||0) + ' ft · ' + Math.round(t.gsKt||0) + ' kt · track ' + Math.round(t.trackDeg||0) + '°' +
+            '<br>Squawk ' + (t.squawk||'—') +
+            (t.route ? ('<br>Route ' + t.route) : '') +
+            '<br>Source: ' + (t.fromLocal?'local ADS-B ':'') + (t.fromNetwork?'OpenSky ':'') + (t.fromAdsc?'ADS-C':'');
+          if (img) {
+            if (t.photoUrl) {
+              img.style.display = 'block';
+              img.onerror = () => { img.style.display = 'none'; };
+              img.src = t.photoUrl;
+            } else img.style.display = 'none';
+          }
+        });
+        m.addTo(acLayer);
+        acMarkers[t.icao] = m;
+      });
+    }
+  } catch (e) {
+    if (st) st.textContent = 'Aircraft poll failed';
+  }
+}
+document.getElementById('acRefreshBtn').addEventListener('click', async () => {
+  if (!sdrControlSession || !sdrControlSession.canControl) {
+    await loadAircraft();
+    return;
+  }
+  await postSdrTown('api/sdr-town/aircraft-refresh', {clientId: sdrControlClientId});
+  await loadAircraft();
+});
+document.getElementById('acTuneBtn').addEventListener('click', async () => {
+  if (!sdrControlSession || !sdrControlSession.canControl) {
+    document.getElementById('acStatus').textContent = 'Take control to tune 1090.';
+    return;
+  }
+  await postSdrTown('api/sdr-town/tune', {clientId: sdrControlClientId, frequencyMHz: 1090, mode: 'NFM'});
+});
+document.querySelectorAll('#siteTabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.getAttribute('data-tab') === 'aircraft') setTimeout(() => { acEnsureMap(); if (acMap) acMap.invalidateSize(); loadAircraft(); }, 50);
+    if (btn.getAttribute('data-tab') === 'inmarsat') setTimeout(() => { loadInmarsatPlans(); loadInmarsat(); }, 50);
+  });
+});
+
 async function refresh(){
   try {
     const [statusRes, listRes] = await Promise.all([
@@ -1620,9 +2262,14 @@ async function refresh(){
 }
 refresh();
 loadSdrTownControl();
+loadSatcom();
+loadAircraft();
 loadStations();
 setInterval(refresh, 2000);
 setInterval(loadSdrTownControl, 2000);
+setInterval(loadSatcom, 1000);
+setInterval(loadInmarsat, 2000);
+setInterval(loadAircraft, 3000);
 setInterval(sdrRenderControlSession, 1000);
 setInterval(loadStations, 15000);
 </script>
@@ -2258,6 +2905,11 @@ bool CaptureWebServer::handlePathForTest(const std::string& method, const std::s
     return false;
   }
   if (path == "/api/sdr-town/config" || path == "/api/sdr-town/status" ||
+      path == "/api/sdr-town/satcom-status" ||
+      path == "/api/sdr-town/aircraft-status" ||
+      path == "/api/sdr-town/inmarsat-status" ||
+      path == "/api/sdr-town/inmarsat-bandplans" ||
+      path == "/api/sdr-town/inmarsat-messages" ||
       path == "/api/sdr-town/sstv-file") {
     if (method == "GET" || method == "OPTIONS") {
       *status = 200;
@@ -2282,6 +2934,14 @@ bool CaptureWebServer::handlePathForTest(const std::string& method, const std::s
       path == "/api/sdr-town/rf-gain" ||
       path == "/api/sdr-town/volume" ||
       path == "/api/sdr-town/direct-sampling" ||
+      path == "/api/sdr-town/sdrplay" ||
+      path == "/api/sdr-town/satcom-control" ||
+      path == "/api/sdr-town/satcom-observer" ||
+      path == "/api/sdr-town/satcom-catalogue" ||
+      path == "/api/sdr-town/satcom-arm" ||
+      path == "/api/sdr-town/satcom-tle-refresh" ||
+      path == "/api/sdr-town/aircraft-refresh" ||
+      path == "/api/sdr-town/inmarsat-control" ||
       path == "/api/sdr-town/p25-control") {
     if (method == "POST" || method == "OPTIONS") {
       *status = 200;
@@ -2832,6 +3492,185 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     sendResponse(client, 200, "OK", "application/json", response, kCors);
     return;
   }
+  if (path == "/api/sdr-town/satcom-status") {
+    SdrTownBridge bridge;
+    std::string error;
+    const std::string response =
+        bridge.request(sdrTownControlConfigLocked(), "GET", "/v1/satcom/status", "{}", &error);
+    sendResponse(client, error.empty() ? 200 : 502, error.empty() ? "OK" : "Bad Gateway",
+                 "application/json",
+                 error.empty() ? response
+                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/aircraft-status") {
+    SdrTownBridge bridge;
+    std::string error;
+    const std::string response =
+        bridge.request(sdrTownControlConfigLocked(), "GET", "/v1/aircraft/status", "{}", &error);
+    sendResponse(client, error.empty() ? 200 : 502, error.empty() ? "OK" : "Bad Gateway",
+                 "application/json",
+                 error.empty() ? response
+                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/aircraft-refresh") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
+    SdrTownBridge bridge;
+    std::string error;
+    const std::string response = bridge.request(sdrTownControlConfigLocked(), "POST",
+                                                "/v1/aircraft/refresh", body.empty() ? "{}" : body, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json",
+                 error.empty() ? response
+                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/inmarsat-status") {
+    SdrTownBridge bridge;
+    std::string error;
+    const std::string response =
+        bridge.request(sdrTownControlConfigLocked(), "GET", "/v1/inmarsat/status", "{}", &error);
+    sendResponse(client, error.empty() ? 200 : 502, error.empty() ? "OK" : "Bad Gateway",
+                 "application/json",
+                 error.empty() ? response
+                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/inmarsat-bandplans") {
+    SdrTownBridge bridge;
+    std::string error;
+    const std::string response =
+        bridge.request(sdrTownControlConfigLocked(), "GET", "/v1/inmarsat/bandplans", "{}", &error);
+    sendResponse(client, error.empty() ? 200 : 502, error.empty() ? "OK" : "Bad Gateway",
+                 "application/json",
+                 error.empty() ? response
+                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/inmarsat-messages") {
+    SdrTownBridge bridge;
+    std::string error;
+    const std::string response =
+        bridge.request(sdrTownControlConfigLocked(), "GET", "/v1/inmarsat/messages", "{}", &error);
+    sendResponse(client, error.empty() ? 200 : 502, error.empty() ? "OK" : "Bad Gateway",
+                 "application/json",
+                 error.empty() ? response
+                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/inmarsat-control") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
+    SdrTownBridge bridge;
+    std::string error;
+    const std::string response = bridge.request(sdrTownControlConfigLocked(), "POST",
+                                                "/v1/inmarsat/control", body.empty() ? "{}" : body, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json",
+                 error.empty() ? response
+                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/satcom-control") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
+    SdrTownBridge bridge;
+    std::string error;
+    const std::string response = bridge.request(sdrTownControlConfigLocked(), "POST",
+                                                "/v1/satcom/control", body.empty() ? "{}" : body, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json",
+                 error.empty() ? response
+                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/satcom-observer") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
+    SdrTownBridge bridge;
+    std::string error;
+    const std::string response = bridge.request(sdrTownControlConfigLocked(), "POST",
+                                                "/v1/satcom/observer", body.empty() ? "{}" : body, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json",
+                 error.empty() ? response
+                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/satcom-catalogue") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
+    SdrTownBridge bridge;
+    std::string error;
+    const std::string response = bridge.request(sdrTownControlConfigLocked(), "POST",
+                                                "/v1/satcom/catalogue", body.empty() ? "{}" : body, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json",
+                 error.empty() ? response
+                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/satcom-arm") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
+    SdrTownBridge bridge;
+    std::string error;
+    const std::string response = bridge.request(sdrTownControlConfigLocked(), "POST",
+                                                "/v1/satcom/arm", body.empty() ? "{}" : body, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json",
+                 error.empty() ? response
+                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/satcom-tle-refresh") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
+    SdrTownBridge bridge;
+    std::string error;
+    const std::string response = bridge.request(sdrTownControlConfigLocked(), "POST",
+                                                "/v1/satcom/tle/refresh", body.empty() ? "{}" : body, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json",
+                 error.empty() ? response
+                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 kCors);
+    return;
+  }
   if (path == "/api/sdr-town/tune") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError)) {
@@ -2916,6 +3755,20 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     std::string error;
     SdrTownBridge bridge;
     const std::string response = bridge.setDirectSampling(cfg, mode, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json", response, kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/sdrplay") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
+    const auto cfg = sdrTownControlConfigLocked();
+    std::string error;
+    SdrTownBridge bridge;
+    const std::string response = bridge.setSdrplay(cfg, body, &error);
     sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json", response, kCors);
     return;

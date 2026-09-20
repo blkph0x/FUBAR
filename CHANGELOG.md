@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.1.38
+
+- Website **Inmarsat** tab: band plans, Start/Stop, voice-follow + record, live ACARS/EGC message log bridged to SDR Town `/v1/inmarsat/*` (requires SDR Town **0.2.71+** / matching `SdrTownControl.dll`).
+- Aircraft map markers: orange = Inmarsat ADS-C positions (alongside green local ADS-B / blue OpenSky).
+- Pairing note: GitHub Latest FUBAR remains **1.1.33** (Town **0.2.66** DLL). Town GitHub Latest is **0.2.74** — copy `SdrTownControl-0.2.74-win64.dll` beside `FUBAR.exe` as `SdrTownControl.dll`. Inmarsat in Town 0.2.74 is a prototype (no unique-word/FEC). This 1.1.38 source is not a GitHub release yet.
+
+## 1.1.37
+
+- Website **Aircraft** tab: OSM/Leaflet map of ADS-B / OpenSky tracks from SDR Town (read-only), click popout with flight info + photo when available. Requires SDR Town **0.2.70+** and matching `SdrTownControl.dll`.
+- Satcom catalogue honesty mirrored via status (bookmark-only downlinks cannot arm).
+
+## 1.1.36
+
+- Website Satcom tab: home lat/lon (both hemispheres), CelesTrak TLE refresh, upcoming passes, Auto-track Doppler arm, and **Arm ISS SSTV** (requires SDR Town **0.2.69+** / matching `SdrTownControl.dll`).
+
+## 1.1.35
+
+- Website **Satcom** tab: neon band-scanner UI (low/high/BW/mode, spectrum+waterfall, Start/Skip/Record/Stop, squelch) bridged to SDR Town via `SdrTownControl_Request` (`GET/POST /v1/satcom/*`).
+- Requires SDR Town **0.2.68+** and matching `SdrTownControl.dll` (Satcom scanner engine + AX.25/APRS + NOAA APT decode).
+
+## 1.1.34
+
+- Website Radio control shows **SDRplay** device controls (antenna, AGC, IFGR/RFGR, notches, Bias-T, HDR, clock OUT, diversity) only while SDR Town’s active device is SDRplay; otherwise the panel stays hidden and RTL direct-sampling remains as before.
+- Requires SDR Town **0.2.67+** and matching `SdrTownControl.dll` (adds `SdrTownControl_Request` / `POST /v1/sdrplay`).
+
 ## 1.1.33
 
 - Website mode and frequency controls leave P25 Monitor CC / auto-follow so changes stick (no flip-back to P25).
