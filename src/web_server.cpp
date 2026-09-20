@@ -273,14 +273,8 @@ button.play.playing{ background:var(--blue); }
           <select id="satMode"><option>NFM</option><option>WFM</option><option>AM</option><option>USB</option><option>APT</option><option>APRS</option></select>
         </div>
       </div>
-      <div class="satgrid">
-        <div class="satbox"><label>HOME LAT (+N/-S)</label><input id="satLat" value="-33.87"></div>
-        <div class="satbox"><label>HOME LON (+E/-W)</label><input id="satLon" value="151.21"></div>
-        <div class="satbox"><label>ALT m</label><input id="satAlt" inputmode="decimal" value="50"></div>
-        <div class="satbox"><label>MIN EL °</label><input id="satMinEl" inputmode="decimal" value="10"></div>
-      </div>
+      <p class="satstatus">Home lat/lon is set only in SDR Town (not shown here).</p>
       <div class="satbtns">
-        <button type="button" id="satApplyObsBtn">Apply location</button>
         <button type="button" id="satRefreshTleBtn">Refresh TLE</button>
         <button type="button" id="satArmSstvBtn">Arm ISS SSTV</button>
         <button type="button" id="satDisarmBtn">Disarm</button>
@@ -1918,7 +1912,6 @@ async function loadSatcom(){
       return;
     }
     const cfg = s.config || {};
-    const obs = s.observer || {};
     const focused = document.activeElement && String(document.activeElement.id||'').indexOf('sat') === 0;
     if (!focused) {
       if (cfg.lowMHz) document.getElementById('satLow').value = Number(cfg.lowMHz).toFixed(3);
@@ -1926,10 +1919,6 @@ async function loadSatcom(){
       if (cfg.bandwidthHz) document.getElementById('satBw').value = Number(cfg.bandwidthHz / 1000).toFixed(1);
       if (cfg.mode) document.getElementById('satMode').value = cfg.mode;
       if (cfg.squelchDb != null) document.getElementById('satSquelch').value = Number(cfg.squelchDb).toFixed(1);
-      if (obs.latDeg != null) document.getElementById('satLat').value = Number(obs.latDeg).toFixed(5);
-      if (obs.lonDeg != null) document.getElementById('satLon').value = Number(obs.lonDeg).toFixed(5);
-      if (obs.altM != null) document.getElementById('satAlt').value = Number(obs.altM).toFixed(0);
-      if (obs.minElevationDeg != null) document.getElementById('satMinEl').value = Number(obs.minElevationDeg).toFixed(0);
     }
     if (s.spectrumDb) satDrawSpectrum(s.spectrumDb);
     const mhz = s.tunedMHz || s.lockMHz || s.currentMHz || 0;
@@ -1951,7 +1940,7 @@ async function loadSatcom(){
     }
     const passes = Array.isArray(s.passes) ? s.passes : [];
     if (passEl) {
-      if (!passes.length) passEl.textContent = 'No upcoming passes (set location, select sats, refresh TLE).';
+      if (!passes.length) passEl.textContent = 'No upcoming passes (set home in SDR Town, select sats, refresh TLE).';
       else passEl.textContent = passes.slice(0, 24).map(p => {
         const aos = new Date((p.aosUnix||0)*1000);
         return aos.toLocaleString() + '  ' + (p.satName||p.satId) + '  ' + (p.downlinkLabel||'') +
@@ -1979,7 +1968,7 @@ async function loadSatcom(){
       catBox.dataset.built = '1';
     }
     const can = !!(sdrControlSession && sdrControlSession.canControl && sdrTownConfig.allowTune);
-    ['satStartBtn','satSkipBtn','satRecordBtn','satStopBtn','satApplyObsBtn','satRefreshTleBtn',
+    ['satStartBtn','satSkipBtn','satRecordBtn','satStopBtn','satRefreshTleBtn',
      'satArmSstvBtn','satDisarmBtn','satSaveCatBtn'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.disabled = !can;
@@ -2015,16 +2004,10 @@ async function postSatcomPath(path, body){
   if (cat) delete cat.dataset.built;
   await loadSatcom();
 }
-document.getElementById('satStartBtn').addEventListener('click', () => postSatcom('start'));
+document.getElementById('satStartBtn').addEventListener('click', () => postSatcom('start', {force:true}));
 document.getElementById('satStopBtn').addEventListener('click', () => postSatcom('stop'));
 document.getElementById('satSkipBtn').addEventListener('click', () => postSatcom('skip'));
 document.getElementById('satRecordBtn').addEventListener('click', () => postSatcom('record'));
-document.getElementById('satApplyObsBtn').addEventListener('click', () => postSatcomPath('api/sdr-town/satcom-observer', {
-  lat: document.getElementById('satLat').value,
-  lon: document.getElementById('satLon').value,
-  altM: Number(document.getElementById('satAlt').value),
-  minElevationDeg: Number(document.getElementById('satMinEl').value)
-}));
 document.getElementById('satRefreshTleBtn').addEventListener('click', () => postSatcomPath('api/sdr-town/satcom-tle-refresh', {}));
 document.getElementById('satArmSstvBtn').addEventListener('click', () => postSatcomPath('api/sdr-town/satcom-arm', {
   satId: 'iss', downlinkId: 'iss-sstv', autoTrack: !!document.getElementById('satAutoTrack').checked
@@ -2149,7 +2132,7 @@ function acEnsureMap(){
   if (acMap || typeof L === 'undefined') return;
   const el = document.getElementById('acMap');
   if (!el) return;
-  acMap = L.map(el).setView([-33.87, 151.21], 9);
+  acMap = L.map(el).setView([20, 0], 2);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18, attribution: '&copy; OpenStreetMap'
   }).addTo(acMap);
@@ -2175,9 +2158,10 @@ async function loadAircraft(){
         ' · local CRC ' + (data.localCrcOk||0) +
         (data.lastStatus ? (' · ' + data.lastStatus) : '');
     }
-    if (acMap && data.centerLat != null) {
-      if (!acMap._acCentered) {
-        acMap.setView([data.centerLat, data.centerLon], 9);
+    if (acMap && Array.isArray(data.tracks) && data.tracks.length && !acMap._acCentered) {
+      const first = data.tracks.find(t => t.lat != null && t.lon != null);
+      if (first) {
+        acMap.setView([first.lat, first.lon], 6);
         acMap._acCentered = true;
       }
     }
@@ -2936,7 +2920,6 @@ bool CaptureWebServer::handlePathForTest(const std::string& method, const std::s
       path == "/api/sdr-town/direct-sampling" ||
       path == "/api/sdr-town/sdrplay" ||
       path == "/api/sdr-town/satcom-control" ||
-      path == "/api/sdr-town/satcom-observer" ||
       path == "/api/sdr-town/satcom-catalogue" ||
       path == "/api/sdr-town/satcom-arm" ||
       path == "/api/sdr-town/satcom-tle-refresh" ||
@@ -3596,23 +3579,6 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     std::string error;
     const std::string response = bridge.request(sdrTownControlConfigLocked(), "POST",
                                                 "/v1/satcom/control", body.empty() ? "{}" : body, &error);
-    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
-                 "application/json",
-                 error.empty() ? response
-                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
-                 kCors);
-    return;
-  }
-  if (path == "/api/sdr-town/satcom-observer") {
-    std::string controlError;
-    if (!sdrTownControlCommandAllowed(body, &controlError)) {
-      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
-      return;
-    }
-    SdrTownBridge bridge;
-    std::string error;
-    const std::string response = bridge.request(sdrTownControlConfigLocked(), "POST",
-                                                "/v1/satcom/observer", body.empty() ? "{}" : body, &error);
     sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json",
                  error.empty() ? response

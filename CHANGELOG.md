@@ -5,6 +5,7 @@
 - Website **Inmarsat** tab: band plans, Start/Stop, voice-follow + record, live ACARS/EGC message log bridged to SDR Town `/v1/inmarsat/*` (requires SDR Town **0.2.71+** / matching `SdrTownControl.dll`).
 - Aircraft map markers: orange = Inmarsat ADS-C positions (alongside green local ADS-B / blue OpenSky).
 - Pairing note: GitHub Latest FUBAR remains **1.1.33** (Town **0.2.66** DLL). Town GitHub Latest is **0.2.74** — copy `SdrTownControl-0.2.74-win64.dll` beside `FUBAR.exe` as `SdrTownControl.dll`. Inmarsat in Town 0.2.74 is a prototype (no unique-word/FEC). This 1.1.38 source is not a GitHub release yet.
+- Home lat/lon is **not** on the website (set in SDR Town only). Satcom Start under Take control sends `force=true`.
 
 ## 1.1.37
 

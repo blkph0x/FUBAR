@@ -47,6 +47,7 @@ using SetModeFn = int (*)(const SdrTownControlConfig*, const char*, char*, size_
 using SetRfGainFn = int (*)(const SdrTownControlConfig*, double, char*, size_t);
 using SetVolumeFn = int (*)(const SdrTownControlConfig*, double, char*, size_t);
 using SetDirectSamplingFn = int (*)(const SdrTownControlConfig*, int, char*, size_t);
+using RequestFn = int (*)(const SdrTownControlConfig*, const char*, const char*, const char*, char*, size_t);
 using StartP25Fn = int (*)(const SdrTownControlConfig*, double, int, char*, size_t);
 
 std::string wideToUtf8(const std::wstring& value) {
@@ -154,6 +155,7 @@ bool SdrTownBridge::load(std::string* error) {
     fnSetVolume_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_SetVolume"));
     fnSetDirectSampling_ =
         reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_SetDirectSampling"));
+    fnRequest_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_Request"));
     fnStartP25Control_ =
         reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_StartP25Control"));
     if (fnHealth_ && fnStatus_ && fnTune_ && fnSetRfGain_ && fnStartP25Control_) {
@@ -315,6 +317,39 @@ std::string SdrTownBridge::setDirectSampling(const SdrTownBridgeConfig& config,
   if (!okResult(result) && error) {
     *error = response[0] ? response : "SDR Town direct sampling failed";
   }
+  return response;
+}
+
+std::string SdrTownBridge::setSdrplay(const SdrTownBridgeConfig& config,
+                                      const std::string& bodyJson,
+                                      std::string* error) {
+  if (!config.allowTune && !config.allowRfGain) {
+    if (error) *error = "SDRplay device controls are disabled";
+    return disabledJson("SDRplay device controls are disabled");
+  }
+  return request(config, "POST", "/v1/sdrplay", bodyJson, error);
+}
+
+std::string SdrTownBridge::request(const SdrTownBridgeConfig& config,
+                                   const std::string& method,
+                                   const std::string& path,
+                                   const std::string& bodyJson,
+                                   std::string* error) {
+  if (!config.enabled) {
+    if (error) *error = "SDR Town control is disabled";
+    return disabledJson("SDR Town control is disabled");
+  }
+  if (!load(error)) return disabledJson(error && !error->empty() ? error->c_str() : "DLL missing");
+  if (!fnRequest_) {
+    if (error) *error = "Update SdrTownControl.dll (0.2.68+) for this control path";
+    return disabledJson("Update SdrTownControl.dll (0.2.68+) for this control path");
+  }
+  char response[65536]{};
+  auto cfg = controlConfig(config);
+  const int result = reinterpret_cast<RequestFn>(fnRequest_)(
+      &cfg, method.c_str(), path.c_str(), bodyJson.empty() ? "{}" : bodyJson.c_str(), response,
+      sizeof(response));
+  if (!okResult(result) && error) *error = response[0] ? response : "SDR Town request failed";
   return response;
 }
 

@@ -43,6 +43,16 @@ class SdrTownBridge {
   std::string setRfGain(const SdrTownBridgeConfig& config, double rfGainDb, std::string* error);
   std::string setVolume(const SdrTownBridgeConfig& config, double volume, std::string* error);
   std::string setDirectSampling(const SdrTownBridgeConfig& config, int mode, std::string* error);
+  // Pass-through JSON to SDR Town POST /v1/sdrplay (requires SdrTownControl.dll with Request).
+  std::string setSdrplay(const SdrTownBridgeConfig& config,
+                         const std::string& bodyJson,
+                         std::string* error);
+  // Generic pass-through (GET/POST) for newer SDR Town control paths.
+  std::string request(const SdrTownBridgeConfig& config,
+                      const std::string& method,
+                      const std::string& path,
+                      const std::string& bodyJson,
+                      std::string* error);
   std::string startP25Control(const SdrTownBridgeConfig& config,
                               double frequencyHz,
                               bool autoFollow,
@@ -59,5 +69,6 @@ class SdrTownBridge {
   void* fnSetRfGain_ = nullptr;
   void* fnSetVolume_ = nullptr;
   void* fnSetDirectSampling_ = nullptr;
+  void* fnRequest_ = nullptr;
   void* fnStartP25Control_ = nullptr;
 };
