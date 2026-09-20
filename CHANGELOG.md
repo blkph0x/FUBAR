@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.40
+
+- Paired with **SDR Town 0.2.79**. ZIP includes matching `SdrTownControl.dll`.
+- SSTV tab uses Town's mode list (Automatic first). Auto = 7-bit VIS, then 16-bit MP/MR/ML, then line-sync.
+- Take control can **Receive / Finish / Cancel** live SSTV via `/v1/sstv/live|finish|cancel`. No home lat/lon.
+
 ## 1.1.39
 
 - Paired with **SDR Town 0.2.76**. ZIP includes matching `SdrTownControl.dll`.

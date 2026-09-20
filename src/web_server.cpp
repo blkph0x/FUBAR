@@ -246,18 +246,24 @@ button.play.playing{ background:var(--blue); }
       <div class="howto">
         Easy steps:
         <ol>
-          <li>Take control, then tap <b>Switch to NFM</b> and tune the SSTV frequency.</li>
-          <li>In SDR Town open <b>Tools → SSTV Images</b>.</li>
-          <li>Choose <b>Live NFM - main receiver</b>, pick a <b>new empty output folder</b>, then <b>Receive</b>.</li>
-          <li>When the picture looks done, click <b>Finish and save</b>. Images show up here.</li>
+          <li>Take control, tap <b>Switch to NFM</b>, and tune the SSTV frequency.</li>
+          <li>Leave mode on <b>Automatic</b> (VIS, then 16-bit MP/MR/ML, then line-sync) or force a mode.</li>
+          <li>Tap <b>Receive</b>. SDR Town opens SSTV Images and listens to main NFM audio.</li>
+          <li>When the picture looks done, tap <b>Finish and save</b>. Images show up here.</li>
         </ol>
-        FUBAR never starts or stops the SSTV decoder — it only shows saved pictures and status.
+        Same decoder as Tools → SSTV Images. Home lat/lon stays in SDR Town.
       </div>
       <p class="big" id="sstvSummary">Open Tools → SSTV Images in SDR Town</p>
       <div class="meta" id="sstvMeta">Enable SDR Town control in FUBAR settings to refresh this panel.</div>
       <div class="quickmode">
         <button type="button" data-set-mode="NFM" class="sdrModeAction">Switch to NFM</button>
-        <span class="hint">SSTV listens to the main NFM audio</span>
+        <label class="hint">Mode
+          <select id="sstvModeSelect"><option value="auto">Automatic (VIS then line-sync)</option></select>
+        </label>
+        <button type="button" id="sstvReceiveBtn">Receive</button>
+        <button type="button" id="sstvFinishBtn">Finish and save</button>
+        <button type="button" id="sstvCancelBtn">Cancel</button>
+        <span class="hint">Needs SDR Town 0.2.79+ and Take control</span>
       </div>
       <div class="sstvgrid" id="sstvImages"></div>
     </div>
@@ -1380,13 +1386,27 @@ function renderDecodePanels(state){
     tonesHeard.textContent = lines.slice(-40).join('\n');
   }
   if (sstvSummary) sstvSummary.textContent = sstv.summary || 'Open Tools → SSTV Images in SDR Town';
+  const sstvModeSelect = document.getElementById('sstvModeSelect');
+  if (sstvModeSelect && Array.isArray(sstv.modes) && sstv.modes.length) {
+    const previous = sstvModeSelect.value || 'auto';
+    sstvModeSelect.innerHTML = sstv.modes.map(function(m){
+      const id = String(m.id || '');
+      const label = esc(m.label || id);
+      return '<option value="' + esc(id) + '">' + label + '</option>';
+    }).join('');
+    const want = sstv.mode || previous || 'auto';
+    sstvModeSelect.value = want;
+    if (sstvModeSelect.value !== want) sstvModeSelect.value = 'auto';
+  }
   if (sstvMeta) {
     if (!sdrTownConfig.enabled) {
       sstvMeta.textContent = 'Turn on SDR Town control in FUBAR Tools → Settings to show live SSTV status and pictures.';
     } else {
       const bits = [];
       if (sstv.status) bits.push('<b>Status</b> ' + esc(sstv.status));
+      if (sstv.mode) bits.push('<b>Mode</b> ' + esc(sstv.mode));
       if (sstv.outputDirectory) bits.push('<b>Folder</b> ' + esc(sstv.outputDirectory));
+      if (sstv.autoPath) bits.push('<b>Auto</b> ' + esc(sstv.autoPath));
       if (sstv.modeHint) bits.push(esc(sstv.modeHint));
       sstvMeta.innerHTML = bits.join('<br>');
     }
@@ -2010,6 +2030,23 @@ document.getElementById('satRefreshTleBtn').addEventListener('click', () => post
 document.getElementById('satArmSstvBtn').addEventListener('click', () => postSatcomPath('api/sdr-town/satcom-arm', {
   satId: 'iss', downlinkId: 'iss-sstv', autoTrack: !!document.getElementById('satAutoTrack').checked
 }));
+async function postSstv(path, extra){
+  if (!sdrControlSession || !sdrControlSession.canControl) {
+    const meta = document.getElementById('sstvMeta');
+    if (meta) meta.textContent = 'Take control on Radio control first.';
+    return;
+  }
+  const modeEl = document.getElementById('sstvModeSelect');
+  await postSdrTown(path, Object.assign({
+    mode: modeEl && modeEl.value ? modeEl.value : 'auto'
+  }, extra || {}));
+}
+const sstvReceiveBtn = document.getElementById('sstvReceiveBtn');
+if (sstvReceiveBtn) sstvReceiveBtn.addEventListener('click', () => postSstv('api/sdr-town/sstv-live', {}));
+const sstvFinishBtn = document.getElementById('sstvFinishBtn');
+if (sstvFinishBtn) sstvFinishBtn.addEventListener('click', () => postSstv('api/sdr-town/sstv-finish', {}));
+const sstvCancelBtn = document.getElementById('sstvCancelBtn');
+if (sstvCancelBtn) sstvCancelBtn.addEventListener('click', () => postSstv('api/sdr-town/sstv-cancel', {}));
 document.getElementById('satDisarmBtn').addEventListener('click', () => postSatcomPath('api/sdr-town/satcom-arm', {action:'disarm'}));
 document.getElementById('satSaveCatBtn').addEventListener('click', () => {
   const selected = Array.from(document.querySelectorAll('#satCatChecks input[data-sat-id]:checked')).map(el => el.getAttribute('data-sat-id'));
@@ -2910,7 +2947,10 @@ bool CaptureWebServer::handlePathForTest(const std::string& method, const std::s
       path == "/api/sdr-town/satcom-tle-refresh" ||
       path == "/api/sdr-town/aircraft-refresh" ||
       path == "/api/sdr-town/inmarsat-control" ||
-      path == "/api/sdr-town/p25-control") {
+      path == "/api/sdr-town/p25-control" ||
+      path == "/api/sdr-town/sstv-live" ||
+      path == "/api/sdr-town/sstv-finish" ||
+      path == "/api/sdr-town/sstv-cancel") {
     if (method == "POST" || method == "OPTIONS") {
       *status = 200;
       *contentType = "application/json";
@@ -3598,6 +3638,27 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     std::string error;
     const std::string response = bridge.request(sdrTownControlConfigLocked(), "POST",
                                                 "/v1/satcom/arm", body.empty() ? "{}" : body, &error);
+    sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
+                 "application/json",
+                 error.empty() ? response
+                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 kCors);
+    return;
+  }
+  if (path == "/api/sdr-town/sstv-live" || path == "/api/sdr-town/sstv-finish" ||
+      path == "/api/sdr-town/sstv-cancel") {
+    std::string controlError;
+    if (!sdrTownControlCommandAllowed(body, &controlError)) {
+      sendResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      return;
+    }
+    const char* townPath = "/v1/sstv/live";
+    if (path == "/api/sdr-town/sstv-finish") townPath = "/v1/sstv/finish";
+    else if (path == "/api/sdr-town/sstv-cancel") townPath = "/v1/sstv/cancel";
+    SdrTownBridge bridge;
+    std::string error;
+    const std::string response = bridge.request(sdrTownControlConfigLocked(), "POST",
+                                                townPath, body.empty() ? "{}" : body, &error);
     sendResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json",
                  error.empty() ? response
