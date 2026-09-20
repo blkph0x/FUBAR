@@ -304,12 +304,10 @@ button.play.playing{ background:var(--blue); }
   <section class="tabpanel" id="tab-inmarsat">
     <div class="satcomneon" id="inmarsatPanel">
       <p class="kicker">INMARSAT AERO / EGC</p>
-      <p class="satstatus">Experimental prototype via SDR Town 0.2.71+ (band plans + ACARS/ADS-C parse). No unique-word/FEC/Aero AMBE claim. ADS-C positions appear on the Aircraft map (orange).</p>
+      <p class="satstatus">SDR Town 0.2.76 prototype: band plans + ACARS/ADS-C parse. No unique-word/FEC/voice follow. ADS-C marks appear on Aircraft (orange). Home lat/lon is not on this site.</p>
       <div class="satgrid">
         <div class="satbox"><label>BAND PLAN</label><select id="inmPlan"></select></div>
         <div class="satbox"><label>CHANNEL</label><select id="inmChannel"></select></div>
-        <div class="satbox"><label><input type="checkbox" id="inmVoiceFollow" checked> Voice follow</label></div>
-        <div class="satbox"><label><input type="checkbox" id="inmRecord"> Record voice</label></div>
       </div>
       <div class="satbtns">
         <button type="button" id="inmStartBtn" class="primary">START</button>
@@ -2074,17 +2072,10 @@ async function loadInmarsat(){
     }
     if (st) {
       st.textContent = (s.state||'?') +
-        (s.locked ? ' LOCK' : '') +
         ' · ' + (s.tunedMHz != null ? Number(s.tunedMHz).toFixed(3) : '?') + ' MHz' +
         ' · msgs ' + (s.messages||0) +
-        ' · voice ' + (s.voiceFrames||0) +
-        (s.followingVoice ? ' · VOICE FOLLOW' : '') +
         (s.lastStatus ? (' · ' + s.lastStatus) : '');
     }
-    const vf = document.getElementById('inmVoiceFollow');
-    const rec = document.getElementById('inmRecord');
-    if (vf && s.config) vf.checked = !!s.config.voiceFollow;
-    if (rec && s.config) rec.checked = !!s.config.recordVoice;
     const msgRes = await fetch('api/sdr-town/inmarsat-messages', {cache:'no-store'});
     const msgData = await msgRes.json();
     if (log && msgData && msgData.messages) {
@@ -2114,17 +2105,11 @@ if (inmStartEl) inmStartEl.addEventListener('click', () => {
     bandPlanId: plan,
     channelHz: Number(ch.value||0),
     mode: opt ? (opt.dataset.mode||'aero_oqpsk') : 'aero_oqpsk',
-    baud: opt ? Number(opt.dataset.baud||10500) : 10500,
-    voiceFollow: !!document.getElementById('inmVoiceFollow').checked,
-    recordVoice: !!document.getElementById('inmRecord').checked
+    baud: opt ? Number(opt.dataset.baud||10500) : 10500
   });
 });
 const inmStopEl = document.getElementById('inmStopBtn');
 if (inmStopEl) inmStopEl.addEventListener('click', () => postInmarsatControl({action:'stop'}));
-const inmVfEl = document.getElementById('inmVoiceFollow');
-if (inmVfEl) inmVfEl.addEventListener('change', (e) => postInmarsatControl({voiceFollow: !!e.target.checked}));
-const inmRecEl = document.getElementById('inmRecord');
-if (inmRecEl) inmRecEl.addEventListener('change', (e) => postInmarsatControl({recordVoice: !!e.target.checked}));
 loadInmarsatPlans();
 
 let acMap=null, acLayer=null, acMarkers={};

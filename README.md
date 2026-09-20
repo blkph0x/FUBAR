@@ -6,10 +6,10 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 
 | | |
 |---|---|
-| **Current version** | **1.1.38** (source tree; **GitHub Latest is 1.1.33**) |
+| **Current version** | **1.1.39** |
 | **Releases** | https://github.com/blkph0x/FUBAR/releases |
 | **Repo** | https://github.com/blkph0x/FUBAR |
-| **Pairs with** | [SDR Town](https://github.com/Blkph0x/SDR_Town) **0.2.74** (GitHub Latest). Published FUBAR **1.1.33** still ships the **0.2.66** `SdrTownControl.dll` — replace it with Town’s `SdrTownControl-0.2.74-win64.dll` renamed to `SdrTownControl.dll`. |
+| **Pairs with** | [SDR Town](https://github.com/Blkph0x/SDR_Town) **0.2.76**. This ZIP includes matching `SdrTownControl.dll`. |
 
 ## FUBAR + SDR Town
 
@@ -46,7 +46,7 @@ They talk over a **local-only** control link (`127.0.0.1`, default port **8765**
 1. Start **SDR Town** with its local control server (default on install/portable builds; loopback only).
 2. Route audio to FUBAR (VB-CABLE is the usual path for a clean station feed).
 3. In FUBAR, enable **Public website**. Type **Now playing** for the large title visitors see.
-4. In **Tools → Settings**, turn on **SDR Town control** and choose what remote operators may change. Keep a **matching** `SdrTownControl.dll` beside `FUBAR.exe`. GitHub FUBAR 1.1.33 includes the 0.2.66 DLL; for SDR Town **0.2.74** copy `SdrTownControl-0.2.74-win64.dll` from the Town release and rename it `SdrTownControl.dll`. Do not use an older `SdrTownControl-0.2.71-win64.dll` leftover from a Town ZIP glob.
+4. In **Tools → Settings**, turn on **SDR Town control** and choose what remote operators may change. Keep the matching `SdrTownControl.dll` beside `FUBAR.exe` (this 1.1.39 ZIP includes the Town **0.2.76** DLL).
 5. Open the FUBAR site from a phone or LAN PC. Live audio comes from FUBAR’s capture. Live P25 status and tune commands use the control bridge when enabled.
 
 ### Website status board
@@ -91,7 +91,7 @@ Full SDR Town docs and P25 notes live in that repo’s README.
 - Public Server directory at `https://gearsqueens.online/fubar-net` so listeners can find live stations.
 - Stereo live listen for WFM/SDR (no noisy left+right fold) and background playback when a phone locks.
 - Optional SDR Town control panel on the website. FUBAR loads `SdrTownControl.dll` beside `FUBAR.exe` and can tune a local SDR Town instance after an admin enables allowed controls in **Tools → Settings**. See [FUBAR + SDR Town](#fubar--sdr-town).
-- Website **Satcom / Inmarsat / Aircraft / SDRplay** panels are in this **1.1.38 source tree** (not GitHub Latest 1.1.33). They need SDR Town **0.2.67–0.2.74** and the matching 0.2.74 `SdrTownControl.dll`. **Home lat/lon is not on the website** (operator sets it in SDR Town only). Satcom Start under Take control sends `force=true`. Inmarsat in Town 0.2.74 is a **prototype** (no unique-word/FEC). Full matrix: SDR Town `docs/FUBAR_PAIRING.md`.
+- Website **Satcom / Inmarsat / Aircraft / SDRplay** tabs pair with SDR Town **0.2.76**. **Home lat/lon is not on the website.** Satcom Start under Take control sends `force=true`. Inmarsat is a **prototype** (no unique-word/FEC/voice follow).
 - When SDR Town’s active device is **SDRplay**, the website Radio control tab adds matching RSP controls (antenna, AGC, IFGR/RFGR, notches, Bias-T, HDR, clock OUT, Dual Tuner diversity). Non-SDRplay devices keep the existing controls (including RTL direct sampling).
 - SDR Town website control is session based: visitors click **Take control**, queued users wait their turn, the active session has a fixed timer, and only the active controller can extend it.
 - Website controllers can adjust SDR Town bandwidth, RF gain, volume, audio LPF on/off/cutoff, and P25 control-channel monitoring from known or manually entered channels.

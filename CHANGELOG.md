@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.39
+
+- Paired with **SDR Town 0.2.76**. ZIP includes matching `SdrTownControl.dll`.
+- Website Satcom / Inmarsat / Aircraft / SDRplay tabs (Take control). No home lat/lon.
+- Inmarsat: band plan + start/stop + log only. Voice follow is not offered.
+
 ## 1.1.38
 
 - Website **Inmarsat** tab: band plans, Start/Stop, voice-follow + record, live ACARS/EGC message log bridged to SDR Town `/v1/inmarsat/*` (requires SDR Town **0.2.71+** / matching `SdrTownControl.dll`).
