@@ -6,7 +6,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 
 | | |
 |---|---|
-| **Current version** | **1.1.40** |
+| **Current version** | **1.1.41** |
 | **Releases** | https://github.com/blkph0x/FUBAR/releases |
 | **Repo** | https://github.com/blkph0x/FUBAR |
 | **Pairs with** | [SDR Town](https://github.com/Blkph0x/SDR_Town) **0.2.76**. This ZIP includes matching `SdrTownControl.dll`. |
@@ -46,7 +46,7 @@ They talk over a **local-only** control link (`127.0.0.1`, default port **8765**
 1. Start **SDR Town** with its local control server (default on install/portable builds; loopback only).
 2. Route audio to FUBAR (VB-CABLE is the usual path for a clean station feed).
 3. In FUBAR, enable **Public website**. Type **Now playing** for the large title visitors see.
-4. In **Tools → Settings**, turn on **SDR Town control** and choose what remote operators may change. Keep the matching `SdrTownControl.dll` beside `FUBAR.exe` (this 1.1.40 ZIP includes the Town **0.2.79** DLL).
+4. In **Tools → Settings**, turn on **SDR Town control** and choose what remote operators may change. Keep the matching `SdrTownControl.dll` beside `FUBAR.exe` (this 1.1.41 ZIP includes the Town **0.2.80** DLL).
 5. Open the FUBAR site from a phone or LAN PC. Live audio comes from FUBAR’s capture. Live P25 status and tune commands use the control bridge when enabled.
 
 ### Website status board

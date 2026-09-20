@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.41
+
+- Paired with **SDR Town 0.2.80**. SSTV mode list includes **HamDRM digital**.
+
 ## 1.1.40
 
 - Paired with **SDR Town 0.2.79**. ZIP includes matching `SdrTownControl.dll`.
