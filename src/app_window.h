@@ -23,6 +23,8 @@ class AppWindow {
   LRESULT handleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
   LRESULT handleReplayMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
   void createControls();
+  void layoutControls();
+  void revealFocusedControl();
   void populateDevices();
   void refreshDevices();
   void startEngine();
@@ -104,6 +106,9 @@ class AppWindow {
   HWND outputRightValue_ = nullptr;
   HBRUSH idleStatusBrush_ = nullptr;
   HBRUSH recordingStatusBrush_ = nullptr;
+  struct ControlLayout { HWND window; RECT bounds; };
+  std::vector<ControlLayout> controlLayout_;
+  int scrollOffset_ = 0;
   std::vector<AudioDeviceInfo> devices_;
   std::vector<ReplayEntry> replays_;
   std::vector<std::wstring> probedDeviceIds_;

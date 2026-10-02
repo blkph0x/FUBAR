@@ -17,15 +17,19 @@ jobs:
         run: cmake --build build --config Release --parallel
 
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: |
+          ctest --test-dir build -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/test_web_ui.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Assemble portable package
         shell: pwsh
         run: |
           $townRelease = Invoke-RestMethod -Headers @{ 'User-Agent' = 'FUBAR-ci' } `
-            'https://api.github.com/repos/blkph0x/SDR_Town/releases/tags/v0.2.119'
+            'https://api.github.com/repos/blkph0x/SDR_Town/releases/tags/v0.2.120-experimental'
           $townAsset = $townRelease.assets | Where-Object { $_.name -like '*win64*.zip' -and $_.name -notlike '*.sha256' } | Select-Object -First 1
-          if (-not $townAsset) { throw 'Matching SDR Town 0.2.119 release ZIP was not found.' }
+          if (-not $townAsset) { throw 'Matching SDR Town 0.2.120 release ZIP was not found.' }
           Invoke-WebRequest -Headers @{ 'User-Agent' = 'FUBAR-ci' } -Uri $townAsset.browser_download_url -OutFile town.zip
           Expand-Archive town.zip -DestinationPath town -Force
           $townDll = Get-ChildItem town -Filter SdrTownControl.dll -Recurse | Select-Object -First 1

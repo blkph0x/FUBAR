@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(FUBAR VERSION 1.1.43 LANGUAGES C CXX)
+project(FUBAR VERSION 1.1.44 LANGUAGES C CXX)
 
 set(SHINE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/shine/src/lib)
 add_library(shine STATIC
@@ -68,3 +68,7 @@ set_target_properties(fubar PROPERTIES OUTPUT_NAME "FUBAR")
 enable_testing()
 add_test(NAME cli_help COMMAND fubar --cli --help)
 add_test(NAME self_test COMMAND fubar --cli --self-test)
+find_program(NODE_EXECUTABLE node)
+if(NODE_EXECUTABLE)
+  add_test(NAME web_ui COMMAND "${NODE_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_web_ui.cjs")
+endif()

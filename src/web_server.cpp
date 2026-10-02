@@ -32,133 +32,86 @@ constexpr const char* kPage = R"HTML(<!doctype html>
 <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <style>
-:root { --ink:#e8f6c8; --muted:#8ea06a; --bg:#070807; --card:#111411; --line:#223018; --green:#b6ff2a; --blue:#3df0ff; --live:#ff3b3b; }
-*{ box-sizing:border-box; }
-html,body{ margin:0; min-height:100%; background:
-  radial-gradient(900px 400px at 10% -10%, rgba(182,255,42,.08), transparent 50%),
-  radial-gradient(700px 360px at 110% 0%, rgba(61,240,255,.08), transparent 46%),
-  var(--bg); color:var(--ink); font-family:"Segoe UI",sans-serif; }
-header{ max-width:920px; margin:0 auto; padding:28px 18px 8px; }
-.kicker{ letter-spacing:.28em; font-size:11px; color:var(--green); text-transform:uppercase; }
-h1{ margin:.2rem 0; font-size:clamp(2.2rem,7vw,4.4rem); letter-spacing:.04em; }
-.sub{ color:var(--muted); margin:0 0 14px; }
-.pill{ display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); background:#0c100c; border-radius:999px; padding:7px 12px; font-size:13px; }
-.livebox{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:16px 0 8px; padding:14px; background:var(--card); border:1px solid var(--line); border-radius:16px; }
-.livebox #liveBtn{ border:0; border-radius:999px; padding:10px 18px; font-weight:800; cursor:pointer; background:var(--live); color:#fff; }
-.livebox #liveBtn.on{ background:var(--green); color:#111; }
-.nowboard{ margin:16px 0 8px; padding:18px 20px; background:linear-gradient(180deg,#171e12,#10150f); border:1px solid var(--green); border-radius:18px; box-shadow:0 0 28px rgba(182,255,42,.14); }
-.nowboard .kicker{ margin:0 0 8px; }
-.nowboard .title{ margin:0; font-size:clamp(1.45rem,5vw,2.55rem); font-weight:800; letter-spacing:.03em; line-height:1.15; color:#f6ffd8; word-break:break-word; }
-.nowboard .p25status{ margin:10px 0 0; font-size:clamp(0.92rem,2.6vw,1.12rem); font-weight:650; letter-spacing:.02em; color:var(--green); line-height:1.3; word-break:break-word; }
-.nowboard .p25status[hidden]{ display:none !important; }
-.nowboard.empty{ border-color:var(--line); box-shadow:none; background:var(--card); }
-.nowboard.empty .title{ color:var(--muted); font-size:1.05rem; font-weight:600; letter-spacing:.02em; }
-.nowboard.empty .p25status{ color:#9bb87a; }
-.sdrtown{ display:none; margin:16px 0 8px; padding:14px; background:#0c100c; border:1px solid var(--line); border-radius:16px; }
-.sdrtown.on{ display:block; }
-.sdrgrid{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; align-items:end; }
-.sdrgrid label{ display:block; color:var(--muted); font-size:12px; margin-bottom:3px; }
-.sdrgrid input,.sdrgrid select{ width:100%; border:1px solid var(--line); border-radius:10px; background:#070807; color:var(--ink); padding:9px 10px; }
-.sdrgrid input[type=checkbox]{ width:auto; margin-right:6px; vertical-align:middle; }
-.sdrgrid button{ border:0; border-radius:999px; padding:10px 14px; font-weight:800; cursor:pointer; background:var(--green); color:#111; }
-.sdrgrid input:disabled,.sdrgrid select:disabled{ opacity:.62; cursor:not-allowed; }
-.sdrgrid button:disabled,.sdrlease button:disabled{ opacity:.45; cursor:not-allowed; }
-.sdrrow{ grid-column:1 / -1; display:grid; grid-template-columns:1.25fr 1fr auto; gap:8px; align-items:end; }
-.sdrlease{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
-.sdrlease button{ border:1px solid var(--line); border-radius:999px; padding:8px 12px; font-weight:800; cursor:pointer; background:#172214; color:var(--ink); }
-.sdrlease button.primary{ border-color:var(--green); background:var(--green); color:#111; }
-.sdrlease button.warn{ border-color:#ffd166; color:#ffd166; }
-.sdrstate{ color:var(--muted); font-size:13px; }
-.sdrstate.warn{ color:#ffd166; }
-.sdrmeta{ color:var(--muted); font-size:13px; margin-top:8px; min-height:18px; }
-.sdrplaybox{ display:none; margin:12px 0 4px; padding:12px; background:#0a120a; border:1px solid #2a4a22; border-radius:14px; }
-.sdrplaybox.on{ display:block; }
-.sdrplaybox .lab{ color:var(--muted); font-size:12px; margin:0 0 8px; }
-.sdrplaybox .lab b{ color:var(--ink); }
-.sdrplaygrid{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; align-items:end; }
-.sdrplaygrid label{ display:block; color:var(--muted); font-size:12px; margin-bottom:3px; }
-.sdrplaygrid input,.sdrplaygrid select{ width:100%; border:1px solid var(--line); border-radius:10px; background:#070807; color:var(--ink); padding:9px 10px; }
-.sdrplaygrid input[type=checkbox]{ width:auto; margin-right:6px; vertical-align:middle; }
-.sdrplaygrid button{ border:0; border-radius:999px; padding:10px 14px; font-weight:800; cursor:pointer; background:var(--green); color:#111; }
-.sdrplaygrid input:disabled,.sdrplaygrid select:disabled,.sdrplaygrid button:disabled{ opacity:.45; cursor:not-allowed; }
-.sdrplayhint{ color:var(--muted); font-size:12px; margin:8px 0 0; line-height:1.4; }
-@media (max-width:820px){ .sdrplaygrid{ grid-template-columns:1fr 1fr; } }
-@media (max-width:560px){ .sdrplaygrid{ grid-template-columns:1fr; } }
-.modemenu{ margin:12px 0 4px; padding:12px; background:#0c100c; border:1px solid var(--line); border-radius:14px; }
-.modemenu .lab{ color:var(--muted); font-size:12px; margin:0 0 8px; }
-.modemenu .lab b{ color:var(--ink); }
-.modebtns{ display:flex; flex-wrap:wrap; gap:6px; }
-.modebtns button{ border:1px solid var(--line); background:#172214; color:var(--ink); border-radius:999px; padding:8px 12px; font-weight:800; cursor:pointer; }
-.modebtns button.on{ background:var(--green); color:#111; border-color:var(--green); }
-.modebtns button:disabled{ opacity:.45; cursor:not-allowed; }
-.modebtns button.digital{ border-color:var(--blue); color:var(--blue); }
-.modebtns button.digital.on{ background:var(--blue); color:#041018; border-color:var(--blue); }
-.modehint{ color:var(--muted); font-size:12px; margin:8px 0 0; line-height:1.4; }
-.quickmode{ margin:12px 0 0; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-.quickmode button{ border:1px solid var(--line); background:#172214; color:var(--ink); border-radius:999px; padding:8px 14px; font-weight:800; cursor:pointer; }
-.quickmode button:disabled{ opacity:.45; cursor:not-allowed; }
-.quickmode .hint{ color:var(--muted); font-size:12px; }
-.tabs{ display:flex; flex-wrap:wrap; gap:8px; margin:16px 0 10px; }
-.tabs button{ border:1px solid var(--line); background:#0c100c; color:var(--ink); border-radius:999px; padding:9px 14px; font-weight:700; cursor:pointer; }
-.tabs button.on{ background:var(--green); color:#111; border-color:var(--green); }
-.tabpanel{ display:none; margin:0 0 12px; }
-.tabpanel.on{ display:block; }
-.infocard{ padding:16px 18px; background:var(--card); border:1px solid var(--line); border-radius:16px; }
-.infocard h3{ margin:0 0 8px; font-size:1.15rem; }
-.infocard .howto{ color:var(--muted); font-size:14px; line-height:1.45; margin:0 0 14px; }
-.infocard .howto ol{ margin:8px 0 0; padding-left:1.2rem; }
-.infocard .big{ font-size:clamp(1.2rem,3.5vw,1.8rem); font-weight:800; color:#f6ffd8; margin:0 0 8px; word-break:break-word; }
-.infocard .meta{ color:var(--muted); font-size:13px; line-height:1.5; }
-.infocard .meta b{ color:var(--ink); font-weight:700; }
-.heardlist{ margin-top:12px; padding:10px 12px; background:#070807; border:1px solid var(--line); border-radius:12px; max-height:180px; overflow:auto; font-family:ui-monospace,Consolas,monospace; font-size:13px; line-height:1.45; color:#d7ecc0; white-space:pre-wrap; }
-.heardlist:empty::before{ content:'Heard list appears when SDR Town Repeater Control Monitor is enabled.'; color:var(--muted); font-family:inherit; }
-.sstvgrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; margin-top:12px; }
-.sstvgrid a{ display:block; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#0c100c; color:inherit; text-decoration:none; }
-.sstvgrid img{ display:block; width:100%; aspect-ratio:4/3; object-fit:contain; background:#000; }
-.sstvgrid .cap{ padding:8px 10px; font-size:12px; color:var(--muted); white-space:pre-wrap; }
-.satcomneon{ margin:0; padding:14px; background:#000; border:1px solid #39FF14; border-radius:16px; color:#39FF14; font-family:ui-monospace,Consolas,monospace; }
-.satcomneon .kicker{ color:#39FF14; letter-spacing:.28em; }
-.satgrid{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin:10px 0; }
-.satbox{ border:1px solid #39FF14; border-radius:10px; padding:8px; background:#050805; }
-.satbox label{ display:block; font-size:11px; margin-bottom:4px; color:#39FF14; }
-.satbox input,.satbox select{ width:100%; background:#0a0f0a; color:#39FF14; border:1px solid #1f3d1f; border-radius:6px; padding:8px; font-weight:800; }
-#satSpectrum,#satWaterfall{ width:100%; max-width:100%; border:1px solid #1f3d1f; border-radius:8px; background:#000; margin:6px 0; display:block; }
-.satbtns{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
-.satbtns button{ border:2px solid #39FF14; background:#0c160c; color:#39FF14; border-radius:10px; padding:10px 14px; font-weight:800; cursor:pointer; }
-.satbtns button.primary{ background:#39FF14; color:#000; }
-.satbtns button:disabled{ opacity:.4; cursor:not-allowed; }
-.satstatus{ font-size:13px; margin:6px 0; min-height:18px; }
-.satlog{ margin:0; max-height:160px; overflow:auto; background:#050805; border:1px solid #1f3d1f; border-radius:8px; padding:8px; color:#9dff9d; font-size:12px; white-space:pre-wrap; }
-@media (max-width:820px){ .satgrid{ grid-template-columns:1fr 1fr; } }
-@media (max-width:560px){ .satgrid{ grid-template-columns:1fr; } }
-#acMap{ z-index:0; }
-.mix{ display:flex; gap:6px; }
-.mix button{ border:1px solid var(--line); background:#0c100c; color:var(--ink); border-radius:999px; padding:7px 12px; font-weight:700; cursor:pointer; }
-.mix button.on{ background:var(--green); color:#111; border-color:var(--green); }
-#liveMedia.radio{ position:static; width:min(100%,420px); height:40px; opacity:1; pointer-events:auto; flex:1 1 240px; }
-.level{ width:160px; height:8px; background:#1a2218; border-radius:99px; overflow:hidden; }
-.level > span{ display:block; height:100%; width:0; background:var(--green); }
-.dot{ width:9px; height:9px; border-radius:50%; background:var(--muted); }
-.dot.live{ background:var(--live); box-shadow:0 0 12px var(--live); }
-.dot.on{ background:var(--green); box-shadow:0 0 12px var(--green); }
-main{ max-width:920px; margin:0 auto; padding:8px 18px 120px; }
-.row{ display:flex; justify-content:space-between; gap:12px; align-items:end; margin:18px 0 10px; }
-.row h2{ margin:0; font-size:1.05rem; color:var(--green); letter-spacing:.08em; text-transform:uppercase; }
-.meta{ color:var(--muted); font-size:13px; }
-.card{ display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:12px 14px; margin:0 0 10px; }
-button.play{ width:46px; height:46px; border:0; border-radius:50%; background:var(--green); color:#111; font-weight:800; cursor:pointer; }
-button.play.playing{ background:var(--blue); }
-.name{ font-weight:650; }
-.when,.stats{ color:var(--muted); font-size:13px; margin-top:2px; }
-.player{ position:fixed; left:0; right:0; bottom:0; background:rgba(8,10,8,.94); border-top:1px solid var(--line); padding:12px 18px 16px; }
-.player audio{ width:100%; }
-.empty{ padding:28px 8px; color:var(--muted); }
-.station{ display:grid; grid-template-columns:1fr auto; gap:8px 12px; align-items:center; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:12px 14px; margin:0 0 10px; color:inherit; text-decoration:none; }
-.station:hover{ border-color:var(--green); }
-.visit{ border:0; border-radius:999px; padding:8px 14px; font-weight:700; background:#1a2618; color:var(--green); }
-@media (max-width:700px){ .card{ grid-template-columns:auto 1fr; } .stats{ grid-column:1 / -1; } }
-@media (max-width:820px){ .sdrgrid,.sdrrow{ grid-template-columns:1fr 1fr; } .sdrrow{ grid-column:1 / -1; } }
-@media (max-width:560px){ .sdrgrid,.sdrrow{ grid-template-columns:1fr; } }
+:root{color-scheme:dark;--ink:#edf1f0;--muted:#adb9b5;--bg:#141817;--card:#1e2422;--line:#3c4843;--green:#88d6aa;--blue:#82c6ee;--live:#df655e}
+*{box-sizing:border-box;letter-spacing:0}
+[hidden]{display:none!important}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",sans-serif}
+header,main{max-width:1180px;margin:auto;padding:16px 24px}
+header{padding-bottom:0}
+h1{font-size:24px;line-height:1.2;margin:0}
+h2,h3{font-size:18px;line-height:1.4;margin:0 0 12px}
+p{margin:0 0 10px}
+.kicker,.meta,.sub,.when,.stats,.hint,.lab,.sdrstate,.sdrmeta,.satstatus{color:var(--muted);font-size:13px}
+.kicker{font-weight:600;margin:0}
+header>.kicker,header>.sub{display:none}
+button,input,select{font:inherit}
+button{min-height:36px;padding:7px 12px;border:1px solid var(--line);border-radius:5px;background:#29332e;color:var(--ink);cursor:pointer;white-space:normal}
+button:hover:not(:disabled){background:#374b40;border-color:var(--green)}
+button:disabled{opacity:.48;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+input,select{min-width:0;max-width:100%;min-height:36px;border:1px solid var(--line);border-radius:4px;background:#101512;color:var(--ink);padding:6px 8px}
+input[type=checkbox]{min-height:0;width:16px;height:16px;accent-color:var(--green);vertical-align:middle}
+label{display:block;color:var(--muted);font-size:13px}
+.pill{display:flex;align-items:center;gap:8px;margin-top:8px;color:var(--muted);font-size:13px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.dot.on{background:var(--green)}.dot.live{background:var(--live)}
+.nowboard{margin:12px 0;border-bottom:1px solid var(--line);padding-bottom:12px}
+.nowboard .title{font-size:20px;font-weight:650;margin:2px 0;overflow-wrap:anywhere}
+.nowboard .p25status{color:var(--green);margin:4px 0 0}
+.livebox{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--line)}
+.livebox #liveBtn{background:var(--green);color:#122519;font-weight:650;min-width:110px}
+.livebox #liveBtn.on{background:#29332e;color:var(--ink)}
+.mix{display:flex;gap:4px;flex-wrap:wrap}.mix button{font-size:13px}
+.mix button.on,.modebtns button.on{border-color:var(--green);background:#244431;color:#dff9e9}
+.level{width:100px;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.level>span{display:block;height:100%;width:0;background:var(--green)}
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--line);overflow-x:auto;margin:14px 0 0;scrollbar-width:thin}
+.tabs button{flex:none;border:0;border-bottom:3px solid transparent;border-radius:0;background:none;min-height:44px;color:var(--muted)}
+.tabs button.on{color:var(--green);border-bottom-color:var(--green);background:#202c25}
+.tabpanel{display:none;padding:18px 0}.tabpanel.on{display:block}
+.sdrlease{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--line)}
+.sdrlease .sdrstate{flex:1 1 240px}
+.primary,.sdrlease button.primary,#sdrTuneBtn{background:var(--green);color:#122519;font-weight:650}
+.warn,#commandFeedback.error{color:#ffbca6}
+#commandFeedback{margin:0;padding:8px 0;color:var(--green);overflow-wrap:anywhere}
+.infocard,.sdrtown,.satcomneon{min-width:0}
+.sdrtown{display:block}.sdrplaybox{display:none;margin-top:18px;border-top:1px solid var(--line);padding-top:14px}.sdrplaybox.on{display:block}
+.sdrgrid,.sdrplaygrid,.satgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end;margin:12px 0}
+.sdrgrid input:not([type=checkbox]),.sdrgrid select,.sdrplaygrid input:not([type=checkbox]),.sdrplaygrid select,.satgrid input,.satgrid select{width:100%}
+.sdrrow{grid-column:1/-1;display:grid;grid-template-columns:1.25fr 1fr auto;gap:12px;align-items:end;border-top:1px solid var(--line);padding-top:16px;margin-top:8px}
+.modemenu{margin:0 0 16px}.modebtns,.quickmode,.satbtns{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
+.modebtns button{min-width:58px}.digital{color:var(--blue)}
+.modehint,.sdrplayhint{color:var(--muted);font-size:13px;margin-top:8px}
+.infocard .big{font-size:20px;font-weight:600;overflow-wrap:anywhere}
+.howto{display:none}
+.satbox{min-width:0}.satstatus,.sdrmeta{overflow-wrap:anywhere}
+.satlog,.heardlist{white-space:pre-wrap;overflow:auto;overflow-wrap:anywhere;max-height:220px;font:12px/1.5 Consolas,monospace;background:#101512;border:1px solid var(--line);border-radius:4px;padding:10px}
+.heardlist:empty::before{content:'No tones received';color:var(--muted)}
+#satSpectrum,#satWaterfall{width:100%;display:block;background:#090d0b;border:1px solid var(--line);margin:8px 0}
+#acMap,#inmMap{z-index:0;min-height:280px}
+.maplegend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:8px 0}
+.maplegend span::before{content:'';display:inline-block;width:9px;height:9px;background:var(--legend);border-radius:50%;margin-right:5px}
+.sstvgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.sstvgrid a{border:1px solid var(--line);border-radius:6px;overflow:hidden;color:inherit;text-decoration:none}
+.sstvgrid img{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background:#080b09}
+.sstvgrid .cap{padding:8px;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+main{padding-top:0;padding-bottom:36px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:12px 0}
+.row h2{margin:0}
+.card,.station{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;border-bottom:1px solid var(--line);padding:12px 0;color:inherit;text-decoration:none}
+.station{grid-template-columns:1fr auto}.station:hover{color:var(--green)}
+.card>div,.station>div{min-width:0}
+.name{font-weight:600;overflow-wrap:anywhere}.when,.stats{overflow-wrap:anywhere}
+button.play{width:40px;height:40px;padding:0;border-radius:50%;background:var(--green);color:#122519}
+.visit{color:var(--green)}.empty{color:var(--muted);padding:16px 0}
+.player{max-width:1180px;margin:auto;padding:0 24px 24px}
+.player audio{width:100%}
+.player:not(.has-recording)>#audio,.player:not(.has-recording)>#now{display:none}
+#liveMedia.radio{position:static!important;opacity:1!important;pointer-events:auto!important;width:100%!important;height:40px!important}
+details{border-top:1px solid var(--line);margin-top:18px;padding-top:12px}
+summary{cursor:pointer;color:var(--muted);min-height:36px}
+@media(max-width:820px){.sdrgrid,.sdrplaygrid,.satgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.sdrrow{grid-template-columns:1fr 1fr}.sdrrow button{grid-column:1/-1}.sdrlease .sdrstate{flex-basis:100%}}
+@media(max-width:520px){header,main{padding-left:14px;padding-right:14px}.player{padding:0 14px 20px}.sdrgrid,.sdrplaygrid,.satgrid,.sdrrow{grid-template-columns:1fr}.livebox .mix{flex-basis:100%}.level{display:none}.card{grid-template-columns:auto 1fr}.stats{grid-column:2}.satbtns{align-items:stretch}.tabs button{padding:8px 12px}.nowboard .title{font-size:18px}button{min-height:40px}}
 </style>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -174,17 +127,24 @@ button.play.playing{ background:var(--blue); }
     <p class="title" id="nowPlayingText">Waiting for the operator</p>
     <p class="p25status" id="p25StatusText" hidden></p>
   </section>
-  <nav class="tabs" id="siteTabs" aria-label="Station sections">
-    <button type="button" class="on" data-tab="listen">Listen</button>
+  <section aria-label="Live audio">
+  <div class="sdrlease" aria-label="Radio control session">
+    <button id="sdrTakeControlBtn" type="button" class="primary">Take control</button>
+    <button id="sdrExtendControlBtn" type="button">Extend</button>
+    <button id="sdrReleaseControlBtn" type="button">Release</button>
+    <span class="sdrstate" id="sdrControlState" role="status">Connecting to SDR Town...</span>
+  </div>
+  <p id="commandFeedback" role="status" hidden></p>
+  <nav class="tabs" id="siteTabs" role="tablist" aria-label="Station sections">
+    <button type="button" class="on" data-tab="control">Radio</button>
+    <button type="button" data-tab="listen">Recordings</button>
     <button type="button" data-tab="fm">FM station</button>
     <button type="button" data-tab="tones">UHF tones</button>
     <button type="button" data-tab="sstv">SSTV pictures</button>
     <button type="button" data-tab="satcom">Satcom</button>
     <button type="button" data-tab="inmarsat">Inmarsat</button>
     <button type="button" data-tab="aircraft">Aircraft</button>
-    <button type="button" data-tab="control">Radio control</button>
   </nav>
-  <section class="tabpanel on" id="tab-listen">
   <div class="livebox">
     <button id="liveBtn" type="button">Listen live</button>
     <div>
@@ -194,26 +154,18 @@ button.play.playing{ background:var(--blue); }
     <div class="mix" id="liveMix" title="Mono is usually cleaner for WFM on speakers. Stereo is 1:1 left/right.">
       <button type="button" data-mix="mono" class="on">Mono</button>
       <button type="button" data-mix="stereo">Stereo</button>
-      <button type="button" id="radioModeBtn" title="Force the Samsung-style radio player (needed for Chrome notifications)">Phone radio</button>
+      <button type="button" id="radioModeBtn" title="Use the browser media player for background listening">Background player</button>
     </div>
     <div class="level" title="Live level"><span id="liveLevel"></span></div>
   </div>
   </section>
+</header>
+<main>
 )HTML"
 R"HTML(
   <section class="tabpanel" id="tab-fm">
     <div class="infocard">
       <h3>FM station (RDS)</h3>
-      <div class="howto">
-        Easy steps:
-        <ol>
-          <li>Open <b>Radio control</b>, click <b>Take control</b>.</li>
-          <li>Tap <b>Switch to WFM</b> below (or pick WFM on Radio control).</li>
-          <li>Tune an FM broadcast station (around 88–108 MHz).</li>
-          <li>Wait a few seconds — the station name and text appear here automatically.</li>
-        </ol>
-        Mode changes only run while you hold control. FUBAR does not touch the SDR Town DSP thread beyond the normal control API.
-      </div>
       <p class="big" id="rdsSummary">Waiting for FM station data</p>
       <div class="meta" id="rdsMeta">Enable SDR Town control in FUBAR settings so this page can read live RDS.</div>
       <div class="quickmode">
@@ -225,15 +177,6 @@ R"HTML(
   <section class="tabpanel" id="tab-tones">
     <div class="infocard">
       <h3>UHF / VHF tones (CTCSS, DCS &amp; DTMF)</h3>
-      <div class="howto">
-        Easy steps:
-        <ol>
-          <li>Open <b>Radio control</b>, click <b>Take control</b>.</li>
-          <li>Tap <b>Switch to NFM</b> below.</li>
-          <li>Tune the channel you want to identify.</li>
-          <li>Live CTCSS/DCS show below. For DTMF / a heard list, enable <b>Repeater Control Monitor</b> in SDR Town (receive-only).</li>
-        </ol>
-      </div>
       <p class="big" id="tonesSummary">Waiting for CTCSS / DCS</p>
       <div class="meta" id="tonesMeta">Enable SDR Town control in FUBAR settings so this page can read live tones.</div>
       <div class="heardlist" id="tonesHeard"></div>
@@ -246,27 +189,18 @@ R"HTML(
   <section class="tabpanel" id="tab-sstv">
     <div class="infocard">
       <h3>SSTV pictures</h3>
-      <div class="howto">
-        Easy steps:
-        <ol>
-          <li>Take control, tap <b>Switch to NFM</b>, and tune the SSTV frequency.</li>
-          <li>Leave mode on <b>Automatic</b> (VIS, then 16-bit MP/MR/ML, then line-sync) or force a mode.</li>
-          <li>Tap <b>Receive</b>. SDR Town opens SSTV Images and listens to main NFM audio.</li>
-          <li>When the picture looks done, tap <b>Finish and save</b>. Images show up here.</li>
-        </ol>
-        Same decoder as Tools → SSTV Images. Home lat/lon stays in SDR Town.
-      </div>
       <p class="big" id="sstvSummary">Open Tools → SSTV Images in SDR Town</p>
       <div class="meta" id="sstvMeta">Enable SDR Town control in FUBAR settings to refresh this panel.</div>
       <div class="quickmode">
-        <button type="button" data-set-mode="NFM" class="sdrModeAction">Switch to NFM</button>
-        <label class="hint">Mode
+        <label class="hint">RF mode
+          <select id="sstvRfMode"><option value="auto">Automatic RF</option><option>USB</option><option>LSB</option><option>NFM</option><option>AM</option></select>
+        </label>
+        <label class="hint">Image mode
           <select id="sstvModeSelect"><option value="auto">Automatic (VIS then line-sync)</option></select>
         </label>
         <button type="button" id="sstvReceiveBtn">Receive</button>
         <button type="button" id="sstvFinishBtn">Finish and save</button>
         <button type="button" id="sstvCancelBtn">Cancel</button>
-        <span class="hint">Needs SDR Town 0.2.79+ and Take control</span>
       </div>
       <div class="sstvgrid" id="sstvImages"></div>
     </div>
@@ -275,10 +209,10 @@ R"HTML(
     <div class="satcomneon" id="satcomPanel">
       <p class="kicker">SATCOM SCANNER</p>
       <div class="satgrid">
-        <div class="satbox"><label>LOW FREQUENCY</label><input id="satLow" inputmode="decimal" value="420.000"></div>
-        <div class="satbox"><label>HIGH FREQUENCY</label><input id="satHigh" inputmode="decimal" value="430.000"></div>
-        <div class="satbox"><label>BANDWIDTH kHz</label><input id="satBw" inputmode="decimal" value="250"></div>
-        <div class="satbox"><label>MODE</label>
+        <div class="satbox"><label for="satLow">Low frequency MHz</label><input id="satLow" inputmode="decimal" value="420.000"></div>
+        <div class="satbox"><label for="satHigh">High frequency MHz</label><input id="satHigh" inputmode="decimal" value="430.000"></div>
+        <div class="satbox"><label for="satBw">Bandwidth kHz</label><input id="satBw" inputmode="decimal" value="250"></div>
+        <div class="satbox"><label for="satMode">Mode</label>
           <select id="satMode"><option>NFM</option><option>WFM</option><option>AM</option><option>USB</option><option>APT</option><option>APRS</option></select>
         </div>
       </div>
@@ -315,8 +249,8 @@ R"HTML(
       <p class="kicker">INMARSAT AERO / EGC</p>
       <p class="satstatus">Live Inmarsat status and received-aircraft map from SDR Town. Sources and ages are labelled; unknown calls are never assigned to a nearby aircraft.</p>
       <div class="satgrid">
-        <div class="satbox"><label>BAND PLAN</label><select id="inmPlan"></select></div>
-        <div class="satbox"><label>CHANNEL</label><select id="inmChannel"></select></div>
+        <div class="satbox"><label for="inmPlan">Band plan</label><select id="inmPlan"></select></div>
+        <div class="satbox"><label for="inmChannel">Channel</label><select id="inmChannel"></select></div>
       </div>
       <div class="satbtns">
         <button type="button" id="inmStartBtn" class="primary">START</button>
@@ -325,6 +259,7 @@ R"HTML(
       </div>
       <div class="satstatus" id="inmStatus">Inmarsat idle — enable SDR Town control.</div>
       <div id="inmMap" style="height:320px;width:100%;margin-top:10px;border:1px solid #1f3d1f;border-radius:8px;background:#0a1014"></div>
+      <div class="maplegend"><span style="--legend:#88d6aa">Voice activity</span><span style="--legend:#f4f4f4">Received position</span><span style="--legend:#50a0ff">Online position</span><span style="--legend:#ffcf33">Estimated</span></div>
       <div class="satstatus" id="inmMapStatus">Map waiting for SDR Town.</div>
       <pre class="satlog" id="inmMsgLog" style="max-height:280px"></pre>
     </div>
@@ -344,17 +279,11 @@ R"HTML(
       </div>
     </div>
   </section>
-  <section class="tabpanel" id="tab-control">
+  <section class="tabpanel on" id="tab-control">
   <section class="sdrtown" id="sdrTownPanel">
     <p class="kicker">SDR Town control</p>
-    <div class="sdrlease">
-      <button id="sdrTakeControlBtn" type="button" class="primary">Take control</button>
-      <button id="sdrExtendControlBtn" type="button">Extend</button>
-      <button id="sdrReleaseControlBtn" type="button">Release</button>
-      <span class="sdrstate" id="sdrControlState">No one has control yet.</span>
-    </div>
     <div class="modemenu">
-      <p class="lab"><b>Demod / mode</b> — take control, then tap a mode. Keeps the current frequency.</p>
+      <p class="lab"><b>Current mode</b></p>
       <div class="modebtns" id="sdrModeBtns">
         <button type="button" data-set-mode="AUTO" class="sdrModeAction" title="Automatic mode pick">AUTO</button>
         <button type="button" data-set-mode="NFM" class="sdrModeAction" title="Narrow FM — UHF/VHF, tones, SSTV">NFM</button>
@@ -365,13 +294,13 @@ R"HTML(
         <button type="button" data-set-mode="CW" class="sdrModeAction">CW</button>
         <button type="button" data-set-mode="P25" class="sdrModeAction digital" title="Digital P25 trunking — uses Monitor CC at the frequency below">P25</button>
       </div>
-      <p class="modehint" id="sdrModeHint">Analog demods change instantly. P25 starts control-channel monitoring at the frequency in the form below.</p>
+      <p class="modehint" id="sdrModeHint">Connecting...</p>
     </div>
     <div class="sdrgrid">
       <div><label for="sdrFreq">Frequency MHz</label><input id="sdrFreq" inputmode="decimal" value="420.35000" placeholder="e.g. 7.10000 or 95.70000" title="0.1–6000 MHz. Take control, type the frequency, then Tune."></div>
-      <div><label for="sdrMode">Mode (with Tune)</label><select id="sdrMode"><option>AUTO</option><option>NFM</option><option>WFM</option><option>AM</option><option>USB</option><option>LSB</option><option>CW</option><option>P25</option></select></div>
+      <div><label for="sdrMode">Tune mode</label><select id="sdrMode"><option>AUTO</option><option>NFM</option><option>WFM</option><option>AM</option><option>USB</option><option>LSB</option><option>CW</option><option>P25</option></select></div>
       <div><label for="sdrBw">Bandwidth kHz</label><input id="sdrBw" inputmode="decimal" placeholder="auto"></div>
-      <div><label for="sdrLpf"><input id="sdrLpfEnabled" type="checkbox" checked>LPF kHz</label><input id="sdrLpf" inputmode="decimal" placeholder="leave"></div>
+      <div><label><input id="sdrLpfEnabled" type="checkbox" checked>Audio low-pass filter</label><label for="sdrLpf">Cutoff kHz</label><input id="sdrLpf" inputmode="decimal" placeholder="unchanged"></div>
       <div><label for="sdrGain" id="sdrGainLabel">RF gain dB</label><input id="sdrGain" inputmode="decimal" placeholder="leave"></div>
       <div><label for="sdrVolume">Volume %</label><input id="sdrVolume" inputmode="decimal" placeholder="85"></div>
       <div id="sdrRtlBox"><label for="sdrDirectSamp">RTL direct sampling (HF)</label>
@@ -381,11 +310,11 @@ R"HTML(
           <option value="1">I-ADC (HF)</option>
         </select>
       </div>
-      <button id="sdrTuneBtn" type="button">Tune</button>
+      <button id="sdrTuneBtn" type="button">Tune &amp; receive</button>
       <div class="sdrrow">
         <div><label for="sdrP25Known">Known P25 control channel</label><select id="sdrP25Known"><option value="">Manual / detected list empty</option></select></div>
-        <div><label for="sdrP25Freq">P25 CC MHz</label><input id="sdrP25Freq" inputmode="decimal" placeholder="420.35000"></div>
-        <button id="sdrP25Btn" type="button">Monitor CC</button>
+        <div><label for="sdrP25Freq">Control frequency MHz</label><input id="sdrP25Freq" inputmode="decimal" placeholder="420.35000"></div>
+        <button id="sdrP25Btn" type="button">Monitor P25</button>
       </div>
     </div>
     <div class="sdrplaybox" id="sdrplayBox">
@@ -420,12 +349,14 @@ R"HTML(
     <div class="sdrmeta" id="sdrTownStatus">Checking SDR Town bridge...</div>
   </section>
   </section>
-</header>
-<main>
-  <div class="row"><h2>Public servers</h2><div class="meta" id="netCount"></div></div>
-  <div id="stations" class="empty">Looking up stations on gearsqueens.online…</div>
-  <div class="row"><h2>Captures</h2><div class="meta" id="count"></div></div>
+  <section class="tabpanel" id="tab-listen">
+  <div class="row"><h2>Recordings</h2><div class="meta" id="count"></div></div>
   <div id="list" class="empty">Loading captures…</div>
+  </section>
+  <details><summary>Community stations</summary>
+  <div class="row"><h2>Public stations</h2><div class="meta" id="netCount"></div></div>
+  <div id="stations" class="empty">Looking up stations on gearsqueens.online…</div>
+  </details>
 </main>
 <div class="player">
   <div class="meta" id="now" style="margin-bottom:6px">Nothing playing</div>
@@ -446,6 +377,10 @@ let nowPlayingTitle = '';
 let p25StatusLine = '';
 let sdrTownConfig = {enabled:false};
 let sdrTownLiveState = null;
+let sdrTownConnected = false;
+let controlPollBusy = false;
+let sdrplayDraftSeeded = false;
+let currentTab = 'control';
 let sdrControlSession = {role:'idle', canControl:false, remainingMs:0};
 let sdrControlDeadlineMs = 0;
 let sdrControlSeededForLease = false;
@@ -489,23 +424,25 @@ function render(){
   count.textContent = items.length + ' clip' + (items.length===1?'':'s');
   list.innerHTML = items.map(item => `
     <article class="card">
-      <button class="play ${current===item.id?'playing':''}" data-id="${item.id}" aria-label="Play ${item.name}">${current===item.id?'❚❚':'▶'}</button>
+      <button class="play ${current===item.id&&!audio.paused?'playing':''}" data-id="${esc(item.id)}" aria-label="${current===item.id&&!audio.paused?'Pause':'Play'} ${esc(item.name)}">${current===item.id&&!audio.paused?'❚❚':'▶'}</button>
       <div>
-        <div class="name">${item.name}</div>
-        <div class="when">${item.started} · ${item.mode}</div>
+        <div class="name">${esc(item.name)}</div>
+        <div class="when">${esc(item.started)} · ${esc(item.mode)}</div>
       </div>
       <div class="stats">${fmt(item.durationSeconds)} · ${(item.bytes/1024).toFixed(0)} KB</div>
     </article>`).join('');
 }
-function play(id){
+async function play(id){
   const item = items.find(x => x.id === id);
   if (!item) return;
   if (current === id && !audio.paused){ audio.pause(); return; }
   stopLive();
+  if (current !== id) audio.src = 'audio/' + encodeURIComponent(item.id);
   current = id;
-  now.textContent = 'Playing ' + item.name;
-  audio.src = 'audio/' + encodeURIComponent(item.id);
-  audio.play();
+  now.textContent = 'Recording: ' + item.name;
+  document.querySelector('.player').classList.add('has-recording');
+  try { await audio.play(); }
+  catch { now.textContent = 'Playback unavailable: ' + item.name; }
   render();
 }
 list.addEventListener('click', e => {
@@ -514,6 +451,7 @@ list.addEventListener('click', e => {
 });
 audio.addEventListener('pause', render);
 audio.addEventListener('play', render);
+audio.addEventListener('ended', render);
 const liveBtn = document.getElementById('liveBtn');
 const liveHint = document.getElementById('liveHint');
 const liveLevel = document.getElementById('liveLevel');
@@ -1250,7 +1188,7 @@ async function loadStations(){
   const box = document.getElementById('stations');
   const netCount = document.getElementById('netCount');
   try {
-    const res = await fetch('https://gearsqueens.online/fubar-net/servers', {cache:'no-store'});
+    const res = await fetch('https://gearsqueens.online/fubar-net/servers', {cache:'no-store',signal:AbortSignal.timeout(8000)});
     const data = await res.json();
     const servers = data.servers || [];
     netCount.textContent = servers.length ? (servers.length + ' on air') : 'none listed';
@@ -1311,15 +1249,38 @@ function showP25Status(text){
   }
 }
 function switchTab(name){
+  currentTab = name;
   document.querySelectorAll('#siteTabs button').forEach(btn => {
-    btn.classList.toggle('on', btn.getAttribute('data-tab') === name);
+    const selected = btn.getAttribute('data-tab') === name;
+    btn.classList.toggle('on', selected);
+    btn.setAttribute('aria-selected', String(selected));
+    btn.tabIndex = selected ? 0 : -1;
   });
   document.querySelectorAll('.tabpanel').forEach(panel => {
     panel.classList.toggle('on', panel.id === ('tab-' + name));
   });
 }
 document.querySelectorAll('#siteTabs button').forEach(btn => {
+  const tab = btn.dataset.tab;
+  btn.id = 'nav-' + tab;
+  btn.setAttribute('role', 'tab');
+  btn.setAttribute('aria-controls', 'tab-' + tab);
+  const panel = document.getElementById('tab-' + tab);
+  panel.setAttribute('role', 'tabpanel');
+  panel.setAttribute('aria-labelledby', btn.id);
+  btn.setAttribute('aria-selected', String(tab === currentTab));
+  btn.tabIndex = tab === currentTab ? 0 : -1;
   btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab')));
+  btn.addEventListener('keydown', e => {
+    const tabs = Array.from(document.querySelectorAll('#siteTabs button'));
+    let i = tabs.indexOf(btn);
+    if(e.key === 'ArrowRight') i = (i+1)%tabs.length;
+    else if(e.key === 'ArrowLeft') i = (i+tabs.length-1)%tabs.length;
+    else if(e.key === 'Home') i = 0;
+    else if(e.key === 'End') i = tabs.length-1;
+    else return;
+    e.preventDefault(); tabs[i].focus(); tabs[i].click();
+  });
 });
 function formatHeardEvent(ev){
   const where = ev.channel === 'output' ? 'output' : (ev.channel === 'input' ? 'input' : 'tuned');
@@ -1409,7 +1370,7 @@ function renderDecodePanels(state){
     }).join('');
 )HTML"
 R"HTML(
-    const want = sstv.mode || previous || 'auto';
+    const want = sdrControlSession.canControl ? previous : (sstv.mode || previous || 'auto');
     sstvModeSelect.value = want;
     if (sstvModeSelect.value !== want) sstvModeSelect.value = 'auto';
   }
@@ -1437,9 +1398,15 @@ R"HTML(
     }).join('');
   }
 }
-function sdrTownMessage(text){
+function sdrTownMessage(text, routine = false){
   const el = document.getElementById('sdrTownStatus');
   if (el) el.textContent = text || '';
+  if (!routine) {
+    const feedback = document.getElementById('commandFeedback');
+    feedback.textContent = text || '';
+    feedback.hidden = !text;
+    feedback.classList.toggle('error', /failed|error|invalid|unavailable|not reachable|disabled/i.test(text || ''));
+  }
 }
 function sdrControlMs(ms){
   ms = Math.max(0, Number(ms)||0);
@@ -1461,14 +1428,14 @@ function sdrHighlightMode(mode){
     btn.classList.toggle('on', !!current && value === current);
   });
   const select = document.getElementById('sdrMode');
-  if (select && current && current !== 'P25') {
+  if (select && current && current !== 'P25' && !sdrControlSession.canControl) {
     const opt = Array.from(select.options).find(o => String(o.value).toUpperCase() === current);
     if (opt) select.value = opt.value;
   }
 }
 function sdrSetControlsEnabled(){
   const active = !!(sdrControlSession && sdrControlSession.canControl);
-  const enabled = !!sdrTownConfig.enabled;
+  const enabled = !!sdrTownConfig.enabled && sdrTownConnected && !sdrCommandInFlight;
   const canMode = enabled && active && !!sdrTownConfig.allowMode;
   const canP25 = enabled && active && !!sdrTownConfig.allowP25Control;
   const canSdrplay = enabled && active && (!!sdrTownConfig.allowTune || !!sdrTownConfig.allowRfGain);
@@ -1496,11 +1463,20 @@ function sdrSetControlsEnabled(){
     btn.disabled = mode === 'P25' ? !canP25 : !canMode;
   });
   const hint = document.getElementById('sdrModeHint');
+  const canTune = enabled && active && !!sdrTownConfig.allowTune;
+  for (const id of ['sstvReceiveBtn','sstvFinishBtn','sstvCancelBtn','sstvModeSelect','sstvRfMode',
+       'satStartBtn','satStopBtn','satSkipBtn','satRecordBtn','satRefreshTleBtn','satArmSstvBtn',
+       'satDisarmBtn','satAutoTrack','satSaveCatBtn','inmStartBtn','inmStopBtn','acTuneBtn','acRefreshBtn']) {
+    const control = document.getElementById(id);
+    if(control) control.disabled = !canTune;
+  }
   if (hint) {
-    if (!enabled) hint.textContent = 'Enable SDR Town control in FUBAR settings to switch modes from the website.';
-    else if (!active) hint.textContent = 'Click Take control first, then tap a demod/mode. P25 uses Monitor CC at the frequency below.';
+    if (!sdrTownConfig.enabled) hint.textContent = 'Remote control disabled by the station operator';
+    else if (!sdrTownConnected) hint.textContent = 'SDR Town disconnected';
+    else if (sdrCommandInFlight) hint.textContent = 'Applying command...';
+    else if (!active) hint.textContent = 'Read-only';
     else if (!sdrTownConfig.allowMode && !sdrTownConfig.allowP25Control) hint.textContent = 'Mode switching is disabled by the FUBAR admin.';
-    else hint.textContent = 'Analog demods leave P25 Monitor CC and stick. P25 starts control-channel monitoring at the frequency below.';
+    else hint.textContent = 'Control active';
   }
   [
     'sdrplayAntenna','sdrplayAgc','sdrplayIfgr','sdrplayRfgr','sdrplayBw','sdrplayBiasT','sdrplayRfNotch',
@@ -1557,12 +1533,13 @@ function sdrRenderDevicePanels(state){
   show('sdrplayAmpWrap', !!features.diversity);
 
   const ant = document.getElementById('sdrplayAntenna');
-  if (ant && document.activeElement !== ant) {
+  if (ant && document.activeElement !== ant && !(sdrControlSession.canControl && sdrplayDraftSeeded)) {
     const ants = sp.antennas || [];
-    ant.innerHTML = ants.map(a => '<option value="' + String(a).replace(/"/g,'&quot;') + '">' + a + '</option>').join('');
+    ant.innerHTML = ants.map(a => '<option value="' + esc(a) + '">' + esc(a) + '</option>').join('');
     if (sp.antenna) ant.value = sp.antenna;
   }
-  const focusedSdrplay = document.activeElement && String(document.activeElement.id || '').indexOf('sdrplay') === 0;
+  const focusedSdrplay = (sdrControlSession.canControl && sdrplayDraftSeeded) ||
+    (document.activeElement && String(document.activeElement.id || '').indexOf('sdrplay') === 0);
   if (!focusedSdrplay) {
     const setChk = (id, on) => { const el = document.getElementById(id); if (el) el.checked = !!on; };
     const setVal = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
@@ -1587,6 +1564,7 @@ function sdrRenderDevicePanels(state){
     setVal('sdrplayDivMode', div.mode || 'off');
     setVal('sdrplayDivPhase', div.phaseDeg != null ? Number(div.phaseDeg).toFixed(1) : '0');
     setVal('sdrplayDivAmp', div.amplitudeB != null ? Number(div.amplitudeB).toFixed(2) : '1');
+    if(sdrControlSession.canControl) sdrplayDraftSeeded = true;
   }
   const hintEl = document.getElementById('sdrplayHint');
   if (hintEl) {
@@ -1609,6 +1587,8 @@ function sdrRenderControlSession(){
      el.textContent = 'SDR Town website control is disabled.';
 )HTML"
 R"HTML(
+    } else if (!sdrTownConnected) {
+    el.textContent = 'SDR Town disconnected. Reconnecting...';
     } else if (active) {
     const ext = Number(session.extensionsUsed || 0);
     const max = Number(session.maxExtensions || sdrTownConfig.maxExtensions || 0);
@@ -1630,7 +1610,7 @@ function sdrAdoptSession(session){
   const wasActive = sdrControlWasActive;
   sdrControlSession = session || {role:'idle', canControl:false, remainingMs:0};
   sdrControlWasActive = !!sdrControlSession.canControl;
-  if (!sdrControlWasActive || !wasActive) sdrControlSeededForLease = false;
+  if (!sdrControlWasActive || !wasActive) { sdrControlSeededForLease = false; sdrplayDraftSeeded = false; }
   sdrControlDeadlineMs = sdrControlWasActive
     ? Date.now() + Number(sdrControlSession.remainingMs || 0)
     : 0;
@@ -1651,16 +1631,16 @@ function sdrPopulateP25ControlChannels(channels){
 async function sdrControlAction(action){
   try {
     const res = await fetch('api/sdr-town/control-session', {
-      method:'POST',
+      method:'POST', signal:AbortSignal.timeout(15000),
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action, clientId:sdrControlClientId, name:sdrControlName})
     });
     const data = await res.json();
     if (data.session) sdrAdoptSession(data.session);
-    if (!data.ok && data.error) sdrTownMessage(data.error);
+    if (!data.ok && data.error) sdrTownMessage(data.error, action==='status');
     return data;
   } catch (error) {
-    sdrTownMessage('Control session failed - ' + (error && error.message ? error.message : 'network error'));
+    sdrTownMessage('Control session failed - ' + (error && error.message ? error.message : 'network error'), action==='status');
     return {ok:false};
   }
 }
@@ -1687,21 +1667,25 @@ function sdrSeedFields(state){
   sdrSetControlsEnabled();
 }
 async function loadSdrTownControl(){
+  if(controlPollBusy || sdrCommandInFlight) return;
+  controlPollBusy = true;
   const panel = document.getElementById('sdrTownPanel');
   try {
-    const res = await fetch('api/sdr-town/config', {cache:'no-store'});
+    const res = await fetch('api/sdr-town/config', {cache:'no-store',signal:AbortSignal.timeout(10000)});
     sdrTownConfig = await res.json();
     panel.classList.toggle('on', !!sdrTownConfig.enabled);
     if (!sdrTownConfig.enabled) {
+      sdrTownConnected = false;
       sdrAdoptSession({role:'idle', canControl:false, remainingMs:0});
       renderDecodePanels({});
       sdrRenderDevicePanels({});
       return;
     }
     await sdrControlAction('status');
-    const statusRes = await fetch('api/sdr-town/status', {cache:'no-store'});
+    const statusRes = await fetch('api/sdr-town/status', {cache:'no-store',signal:AbortSignal.timeout(10000)});
     const status = await statusRes.json();
     if (status.ok && status.state) {
+      sdrTownConnected = true;
       const s = status.state;
       sdrTownLiveState = s;
       sdrSeedFields(s);
@@ -1714,30 +1698,36 @@ async function loadSdrTownControl(){
       const lpfNote = s.audioLpfEnabled ? (' · LPF ' + Number((s.lpfHz || 0) / 1000).toFixed(1) + ' kHz') : ' · LPF off';
       const volNote = s.volume != null ? (' · Vol ' + Number(s.volume * 100).toFixed(0) + '%') : '';
       const modeShown = sdrEffectiveMode(s) || (s.mode || '');
-      sdrTownMessage('SDR Town ready · ' + Number(s.frequencyMHz || 0).toFixed(5) + ' MHz · ' + modeShown + ' · BW ' + Number((s.bandwidthHz || 0) / 1000).toFixed(1) + ' kHz' + lpfNote + volNote + p25Live + p25Note);
+      sdrTownMessage('SDR Town ready · ' + Number(s.frequencyMHz || 0).toFixed(5) + ' MHz · ' + modeShown + ' · BW ' + Number((s.bandwidthHz || 0) / 1000).toFixed(1) + ' kHz' + lpfNote + volNote + p25Live + p25Note, true);
     } else {
+      sdrTownConnected = false;
       renderDecodePanels({});
       sdrRenderDevicePanels({});
-      sdrTownMessage(status.error || 'SDR Town not reachable. Start SDR Town with --control-server.');
+      sdrTownMessage(status.error || 'SDR Town not reachable.', true);
     }
   } catch {
-    panel.classList.remove('on');
+    sdrTownConnected = false;
+    sdrTownMessage('Connection unavailable. Reconnecting...', true);
     renderDecodePanels({});
     sdrRenderDevicePanels({});
+  } finally {
+    controlPollBusy = false;
+    sdrRenderControlSession();
   }
-  sdrSetControlsEnabled();
 }
 async function postSdrTown(path, payload){
+  if(sdrCommandInFlight) return;
   if (!sdrControlSession || !sdrControlSession.canControl) {
     sdrTownMessage('Click Take control before sending SDR Town commands.');
     return;
   }
   sdrTownMessage('Sending command...');
   sdrCommandInFlight = true;
+  sdrSetControlsEnabled();
   try {
     payload = Object.assign({}, payload || {}, {clientId:sdrControlClientId, force:true});
     const res = await fetch(path, {
-      method:'POST',
+      method:'POST', signal:AbortSignal.timeout(20000),
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload || {})
     });
@@ -1747,18 +1737,19 @@ async function postSdrTown(path, payload){
     catch { data = {ok:false, error:text || ('HTTP ' + res.status)}; }
     if (data.ok) {
       const s = data.state || {};
-      sdrTownLiveState = s;
       const appliedMhz = Number(s.frequencyMHz || payload.frequencyMHz || 0);
+      if(Object.keys(s).length) sdrTownLiveState = s;
       const requestedMhz = Number(payload.frequencyMHz || 0);
       if (requestedMhz > 0 && Math.abs(appliedMhz - requestedMhz) > 0.00005) {
         sdrTownMessage('Tune reported OK but RF stayed on ' + appliedMhz.toFixed(5) + ' MHz (wanted ' + requestedMhz.toFixed(5) + ').');
-      } else {
+      } else if (appliedMhz > 0) {
         const bw = s.bandwidthHz || (payload.bandwidthKHz ? payload.bandwidthKHz * 1000 : 0);
         const modeShown = sdrDesiredMode || sdrEffectiveMode(s) || (s.mode || payload.mode || '');
         sdrTownMessage('Applied · ' + appliedMhz.toFixed(5) + ' MHz · ' + modeShown + (bw ? (' · BW ' + Number(bw / 1000).toFixed(1) + ' kHz') : ''));
       }
+      if(!appliedMhz) sdrTownMessage('Command completed.');
       sdrDesiredMode = '';
-      sdrHighlightMode(sdrEffectiveMode(s));
+      sdrHighlightMode(sdrEffectiveMode(sdrTownLiveState));
       if (s && Object.keys(s).length) {
         renderDecodePanels(s);
         sdrRenderDevicePanels(s);
@@ -1776,6 +1767,7 @@ async function postSdrTown(path, payload){
     sdrTownMessage('Command failed · ' + (error && error.message ? error.message : 'network error'));
   } finally {
     sdrCommandInFlight = false;
+    sdrSetControlsEnabled();
   }
 }
 document.getElementById('sdrTakeControlBtn').addEventListener('click', async () => {
@@ -1825,11 +1817,21 @@ document.getElementById('sdrP25Known').addEventListener('change', () => {
 });
 document.getElementById('sdrTuneBtn').addEventListener('click', () => {
   const frequencyMHz = Number(document.getElementById('sdrFreq').value);
+  if(!Number.isFinite(frequencyMHz) || frequencyMHz <= 0) {
+    sdrTownMessage('Invalid frequency. Enter MHz greater than zero.'); return;
+  }
   const mode = document.getElementById('sdrMode').value;
   const bwText = document.getElementById('sdrBw').value.trim();
   const lpfText = document.getElementById('sdrLpf').value.trim();
   const gainText = document.getElementById('sdrGain').value.trim();
   const volumeText = document.getElementById('sdrVolume').value.trim();
+  if([bwText,lpfText,gainText,volumeText].some(v=>v && !Number.isFinite(Number(v)))) {
+    sdrTownMessage('Invalid setting. Enter numbers for bandwidth, cutoff, gain and volume.'); return;
+  }
+  if((bwText && Number(bwText)<=0) || (lpfText && Number(lpfText)<=0) ||
+     (volumeText && (Number(volumeText)<0 || Number(volumeText)>100))) {
+    sdrTownMessage('Invalid range: bandwidth and cutoff must be positive, volume 0-100%.'); return;
+  }
   const payload = {frequencyMHz, mode};
   if (bwText) payload.bandwidthKHz = Number(bwText);
   payload.audioLpfEnabled = document.getElementById('sdrLpfEnabled').checked;
@@ -1837,6 +1839,9 @@ document.getElementById('sdrTuneBtn').addEventListener('click', () => {
   if (gainText) payload.rfGainDb = Number(gainText);
   if (volumeText) payload.volume = Math.max(0, Math.min(1, Number(volumeText) / 100));
   postSdrTown('api/sdr-town/tune', payload);
+});
+document.getElementById('sdrFreq').addEventListener('keydown', e=>{
+  if(e.key==='Enter'){e.preventDefault();document.getElementById('sdrTuneBtn').click();}
 });
 document.getElementById('sdrP25Btn').addEventListener('click', () => {
   const p25Text = document.getElementById('sdrP25Freq').value.trim() || document.getElementById('sdrP25Known').value || document.getElementById('sdrFreq').value;
@@ -1941,7 +1946,7 @@ async function loadSatcom(){
       if (line) line.textContent = 'Enable SDR Town control in FUBAR settings to use Satcom.';
       return;
     }
-    const res = await fetch('api/sdr-town/satcom-status', {cache:'no-store'});
+    const res = await fetch('api/sdr-town/satcom-status', {cache:'no-store',signal:AbortSignal.timeout(10000)});
     const data = await res.json();
     const s = (data && data.satcom) ? data.satcom : null;
     if (!data.ok || !s) {
@@ -2059,7 +2064,8 @@ async function postSstv(path, extra){
   }
   const modeEl = document.getElementById('sstvModeSelect');
   await postSdrTown(path, Object.assign({
-    mode: modeEl && modeEl.value ? modeEl.value : 'auto'
+    mode: modeEl && modeEl.value ? modeEl.value : 'auto',
+    rfMode: document.getElementById('sstvRfMode').value
   }, extra || {}));
 }
 const sstvReceiveBtn = document.getElementById('sstvReceiveBtn');
@@ -2078,13 +2084,19 @@ document.getElementById('satAutoTrack').addEventListener('change', (e) => {
 });
 
 let inmPlansCache = [];
+let inmPlansBusy = false;
 async function loadInmarsatPlans(){
   const planSel = document.getElementById('inmPlan');
-  if (!planSel) return;
+  const chSel = document.getElementById('inmChannel');
+  if (!planSel || inmPlansBusy) return;
+  inmPlansBusy = true;
+  const previousPlan = planSel.value, previousChannel = chSel ? chSel.value : '';
   try {
-    const res = await fetch('api/sdr-town/inmarsat-bandplans', {cache:'no-store'});
+    const res = await fetch('api/sdr-town/inmarsat-bandplans', {cache:'no-store',signal:AbortSignal.timeout(10000)});
     const data = await res.json();
-    inmPlansCache = data.plans || [];
+    if (!res.ok || !Array.isArray(data.plans) || !data.plans.length)
+      throw new Error(data.error || 'Band plans unavailable');
+    inmPlansCache = data.plans;
     planSel.innerHTML = '';
     inmPlansCache.forEach(p => {
       const o = document.createElement('option');
@@ -2092,9 +2104,17 @@ async function loadInmarsatPlans(){
       o.textContent = (p.name||p.id) + (p.region ? (' — ' + p.region) : '');
       planSel.appendChild(o);
     });
+    if (inmPlansCache.some(p => p.id === previousPlan)) planSel.value = previousPlan;
     fillInmarsatChannels();
+    if (chSel && Array.from(chSel.options).some(o => o.value === previousChannel))
+      chSel.value = previousChannel;
   } catch (e) {
-    planSel.innerHTML = '<option value="">Plans unavailable (need SDR Town 0.2.71+)</option>';
+    if (!inmPlansCache.length) {
+      planSel.innerHTML = '<option value="">Band plans unavailable</option>';
+      if (chSel) chSel.innerHTML = '<option value="">No channel selected</option>';
+    }
+  } finally {
+    inmPlansBusy = false;
   }
 }
 function fillInmarsatChannels(){
@@ -2109,7 +2129,8 @@ function fillInmarsatChannels(){
     o.dataset.mode = c.mode || 'aero_oqpsk';
     o.dataset.baud = String(c.baud || 10500);
     const mhz = (c.freqMHz != null) ? c.freqMHz : (c.freqHz/1e6);
-    o.textContent = (c.label||'') + ' ' + Number(mhz).toFixed(3) + ' MHz';
+    const label=String(c.label||'');
+    o.textContent = /MHz/i.test(label) ? label : (label + ' ' + Number(mhz).toFixed(5) + ' MHz');
     chSel.appendChild(o);
   });
 }
@@ -2121,7 +2142,8 @@ async function loadInmarsat(){
       if (st) st.textContent = 'Enable SDR Town control to use Inmarsat.';
       return;
     }
-    const res = await fetch('api/sdr-town/inmarsat-status', {cache:'no-store'});
+    if (!inmPlansCache.length) await loadInmarsatPlans();
+    const res = await fetch('api/sdr-town/inmarsat-status', {cache:'no-store',signal:AbortSignal.timeout(10000)});
     const data = await res.json();
     const s = (data && data.inmarsat) ? data.inmarsat : null;
     if (!s) {
@@ -2134,19 +2156,22 @@ async function loadInmarsat(){
         ' · msgs ' + (s.messages||0) +
         (s.lastStatus ? (' · ' + s.lastStatus) : '');
     }
-    const msgRes = await fetch('api/sdr-town/inmarsat-messages', {cache:'no-store'});
+    const msgRes = await fetch('api/sdr-town/inmarsat-messages', {cache:'no-store',signal:AbortSignal.timeout(10000)});
     const msgData = await msgRes.json();
     if (log && msgData && msgData.messages) {
       log.textContent = (msgData.messages||[]).map(m =>
         '[' + (m.kind||'?') + '] ' + (m.label||'') + ' ' + String(m.text||'').slice(0,160)
-      ).join('\\n');
+      ).join('\n');
     }
     await loadInmarsatMap();
   } catch (e) {
     if (st) st.textContent = 'Inmarsat poll failed';
   }
 }
+)HTML"
+R"HTML(
 let inmMap=null, inmLayer=null, inmMapCentered=false;
+const inmMarkers=new Map();
 function ensureInmarsatMap(){
   if (inmMap || typeof L === 'undefined') return;
   const el=document.getElementById('inmMap'); if(!el)return;
@@ -2159,23 +2184,36 @@ async function loadInmarsatMap(){
   if(!sdrTownConfig || !sdrTownConfig.enabled){if(st)st.textContent='Enable SDR Town control to show the map.';return;}
   try{
     ensureInmarsatMap();
-    const res=await fetch('api/sdr-town/inmarsat-map-status',{cache:'no-store'});
+    const res=await fetch('api/sdr-town/inmarsat-map-status',{cache:'no-store',signal:AbortSignal.timeout(10000)});
     const data=await res.json();
+    if(!data.ok) throw new Error(data.error || 'Map unavailable');
     const positions=Array.isArray(data.positions)?data.positions:[];
     const aircraft=Array.isArray(data.aircraft)?data.aircraft:[];
     const t=data.tracking||{};
     if(st)st.textContent='Tracks '+aircraft.length+' · positions '+positions.length+' · RF '+(t.mapRfPositions||0)+' · online '+(t.mapOnlinePositions||0)+' · estimated '+(t.mapEstimatedPositions||0)+' · unlocated '+(t.mapUnlocated||0);
     if(!inmLayer)return;
-    inmLayer.clearLayers();
+    const seen=new Set();
     positions.forEach(p=>{
-      const lat=Number(p.latDeg),lon=Number(p.lonDeg);if(!Number.isFinite(lat)||!Number.isFinite(lon))return;
+      const lat=Number(p.latDeg),lon=Number(p.lonDeg);
+      if(p.latDeg==null||p.lonDeg==null||!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)return;
+      const key=String(p.icaoHex||p.aesHex||''); if(!key)return;
+      seen.add(key);
       const source=String(p.positionSource||'unknown');
-      const color=source==='adsb_lol'?'#50a0ff':p.estimated?'#ffcf33':'#f4f4f4';
+      const color=p.voiceActive?'#88d6aa':p.estimated?'#ffcf33':source==='adsb_lol'?'#50a0ff':'#f4f4f4';
       const label=(p.icaoHex||'?')+' · '+source+' · '+Math.round(Number(p.ageSeconds||0))+'s'+(p.voiceActive?' · voice activity':'');
-      L.circleMarker([lat,lon],{radius:p.voiceActive?8:6,color,fillColor:color,fillOpacity:.85}).bindTooltip(esc(label)).addTo(inmLayer);
+      const style={radius:p.voiceActive?8:6,color,fillColor:color,fillOpacity:.85};
+      let marker=inmMarkers.get(key);
+      if(marker) marker.setLatLng([lat,lon]).setStyle(style).setTooltipContent(esc(label));
+      else { marker=L.circleMarker([lat,lon],style).bindTooltip(esc(label)).addTo(inmLayer); inmMarkers.set(key,marker); }
+      if(!inmMapCentered){inmMap.setView([lat,lon],5);inmMapCentered=true;}
     });
-    if(!inmMapCentered && positions.length){const p=positions[0];inmMap.setView([Number(p.latDeg),Number(p.lonDeg)],5);inmMapCentered=true;}
-  }catch(e){if(st)st.textContent='Inmarsat map unavailable';}
+    for(const [key,marker] of inmMarkers) if(!seen.has(key)){inmLayer.removeLayer(marker);inmMarkers.delete(key);}
+    if(st && !inmMap) st.textContent+=' · Map library unavailable';
+  }catch(e){
+    if(st)st.textContent='Inmarsat map unavailable';
+    if(inmLayer)inmLayer.clearLayers();
+    inmMarkers.clear();
+  }
 }
 async function postInmarsatControl(payload){
   await postSdrTown('api/sdr-town/inmarsat-control', payload);
@@ -2190,6 +2228,7 @@ if (inmStartEl) inmStartEl.addEventListener('click', () => {
   const plan = document.getElementById('inmPlan').value;
   const ch = document.getElementById('inmChannel');
   const opt = ch.options[ch.selectedIndex];
+  if (!opt || !(Number(ch.value) > 0)) { sdrTownMessage('Select an Inmarsat channel first.'); return; }
   postInmarsatControl({
     action: 'start',
     bandPlanId: plan,
@@ -2221,7 +2260,7 @@ async function loadAircraft(){
       return;
     }
     acEnsureMap();
-    const res = await fetch('api/sdr-town/aircraft-map-status', {cache:'no-store'});
+    const res = await fetch('api/sdr-town/aircraft-map-status', {cache:'no-store',signal:AbortSignal.timeout(10000)});
     const data = await res.json();
     if (!data.ok) {
       if (st) st.textContent = data.error || 'Aircraft status unavailable (need SDR Town 0.2.70+).';
@@ -2251,7 +2290,7 @@ async function loadAircraft(){
           color: color,
           fillColor: color,
           fillOpacity: 0.85
-        }).bindTooltip((t.callsign||t.icao||'?') + ' ' + Math.round(t.altFt||0) + 'ft');
+        }).bindTooltip(esc((t.callsign||t.icao||'?') + ' ' + Math.round(t.altFt||0) + 'ft'));
         m.on('click', () => {
           const box = document.getElementById('acPopout');
           const txt = document.getElementById('acPopText');
@@ -2296,15 +2335,15 @@ document.getElementById('acTuneBtn').addEventListener('click', async () => {
 document.querySelectorAll('#siteTabs button').forEach(btn => {
   btn.addEventListener('click', () => {
     if (btn.getAttribute('data-tab') === 'aircraft') setTimeout(() => { acEnsureMap(); if (acMap) acMap.invalidateSize(); loadAircraft(); }, 50);
-    if (btn.getAttribute('data-tab') === 'inmarsat') setTimeout(() => { loadInmarsatPlans(); loadInmarsat(); }, 50);
+    if (btn.getAttribute('data-tab') === 'inmarsat') setTimeout(() => { ensureInmarsatMap(); if(inmMap)inmMap.invalidateSize(); loadInmarsat(); }, 50);
   });
 });
 
 async function refresh(){
   try {
     const [statusRes, listRes] = await Promise.all([
-      fetch('api/status', {cache:'no-store'}),
-      fetch('api/captures', {cache:'no-store'})
+      fetch('api/status', {cache:'no-store',signal:AbortSignal.timeout(10000)}),
+      fetch('api/captures', {cache:'no-store',signal:AbortSignal.timeout(10000)})
     ]);
     const status = await statusRes.json();
     items = (await listRes.json()).captures || [];
@@ -2319,18 +2358,24 @@ async function refresh(){
     dot.className = 'dot';
   }
 }
+sdrSetControlsEnabled();
 refresh();
 loadSdrTownControl();
-loadSatcom();
-loadAircraft();
 loadStations();
-setInterval(refresh, 2000);
+function pollAfterCompletion(fn, delay, tab){
+  const tick=async()=>{
+    try { if(!document.hidden && (!tab || currentTab===tab)) await fn(); }
+    finally { setTimeout(tick,delay); }
+  };
+  setTimeout(tick,delay);
+}
+pollAfterCompletion(refresh, 2000);
 setInterval(loadSdrTownControl, 2000);
-setInterval(loadSatcom, 1000);
-setInterval(loadInmarsat, 2000);
-setInterval(loadAircraft, 3000);
+pollAfterCompletion(loadSatcom, 1000, 'satcom');
+pollAfterCompletion(loadInmarsat, 2000, 'inmarsat');
+pollAfterCompletion(loadAircraft, 3000, 'aircraft');
 setInterval(sdrRenderControlSession, 1000);
-setInterval(loadStations, 15000);
+pollAfterCompletion(loadStations, 15000);
 </script>
 </body>
 </html>

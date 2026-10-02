@@ -6,7 +6,7 @@ on:
       tag:
         description: Existing version tag to publish
         required: true
-        default: v1.1.43
+        default: v1.1.44
 
 permissions:
   contents: write
@@ -25,15 +25,19 @@ jobs:
       - name: Build and test
         run: |
           cmake --build build --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ctest --test-dir build -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/test_web_ui.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Assemble portable package
         shell: pwsh
         run: |
           $townRelease = Invoke-RestMethod -Headers @{ 'User-Agent' = 'FUBAR-release' } `
-            'https://api.github.com/repos/blkph0x/SDR_Town/releases/tags/v0.2.119'
+            'https://api.github.com/repos/blkph0x/SDR_Town/releases/tags/v0.2.120-experimental'
           $townAsset = $townRelease.assets | Where-Object { $_.name -like '*win64*.zip' -and $_.name -notlike '*.sha256' } | Select-Object -First 1
-          if (-not $townAsset) { throw 'Matching SDR Town 0.2.119 release ZIP was not found.' }
+          if (-not $townAsset) { throw 'Matching SDR Town 0.2.120 release ZIP was not found.' }
           Invoke-WebRequest -Headers @{ 'User-Agent' = 'FUBAR-release' } -Uri $townAsset.browser_download_url -OutFile town.zip
           Expand-Archive town.zip -DestinationPath town -Force
           $townDll = Get-ChildItem town -Filter SdrTownControl.dll -Recurse | Select-Object -First 1
@@ -43,10 +47,34 @@ jobs:
           Copy-Item $townDll.FullName package/SdrTownControl.dll
           Copy-Item README.md package/README.md
           Copy-Item CHANGELOG.md package/CHANGELOG.md
+          Copy-Item docs package/docs -Recurse
+          $source = (git rev-parse HEAD).Trim()
+          [ordered]@{
+            version = '${{ inputs.tag }}'
+            sourceCommit = $source
+            workflowRun = $env:GITHUB_RUN_ID
+            townVersion = '0.2.120-experimental'
+            executableSha256 = (Get-FileHash package/FUBAR.exe).Hash.ToLowerInvariant()
+            controlDllSha256 = (Get-FileHash package/SdrTownControl.dll).Hash.ToLowerInvariant()
+          } | ConvertTo-Json | Set-Content package/build-info.json -Encoding utf8
           Compress-Archive -Path package/* -DestinationPath FUBAR-Windows-x64.zip -Force
+          $hash = (Get-FileHash FUBAR-Windows-x64.zip).Hash.ToLowerInvariant()
+          "$hash  FUBAR-Windows-x64.zip" | Set-Content FUBAR-Windows-x64.zip.sha256 -Encoding ascii
 
       - name: Create GitHub release and upload package
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ inputs.tag }}" FUBAR-Windows-x64.zip --title "FUBAR ${{ inputs.tag }}" --notes-file CHANGELOG.md
+        run: gh release create "${{ inputs.tag }}" FUBAR-Windows-x64.zip FUBAR-Windows-x64.zip.sha256 --title "FUBAR ${{ inputs.tag }}" --notes-file CHANGELOG.md
+
+      - name: Verify public package
+        shell: pwsh
+        run: |
+          $base = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/${{ inputs.tag }}"
+          Invoke-WebRequest "$base/FUBAR-Windows-x64.zip" -OutFile public.zip -MaximumRetryCount 3 -RetryIntervalSec 5
+          if ((Get-FileHash public.zip).Hash -ne (Get-FileHash FUBAR-Windows-x64.zip).Hash) { throw 'Public package mismatch' }
+          Expand-Archive public.zip -DestinationPath public
+          $info = Get-Content public/build-info.json -Raw | ConvertFrom-Json
+          if ($info.sourceCommit -ne (git rev-parse HEAD).Trim()) { throw 'Source provenance mismatch' }
+          & ./public/FUBAR.exe --cli --self-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

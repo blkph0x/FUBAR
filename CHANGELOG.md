@@ -307,3 +307,17 @@
 - Replay-log window with playback and Explorer integration.
 - Headless command-line mode for scripts and unattended operation.
 - Portable x64 package requiring only standard Windows system DLLs.
+## 1.1.44
+
+- Preserve recording position when resuming; correct pause/end button labels
+  and escape recording names. Recover Inmarsat channel lists after reconnect.
+
+- Responsive, quieter web workspace with persistent live audio and control lease.
+- Preserve tune/SDRplay drafts, prevent overlapping polls and duplicate commands,
+  surface errors across tabs, disable actions without connection/permission/lease.
+- SSTV RF mode selection; source-labelled Inmarsat map with stable markers,
+  active-call colour, tab resizing, and message line breaks.
+- Desktop keyboard navigation, scrollable compact windows, visible Settings,
+  neutral listening status, and clearer recording-frequency metadata label.
+- Pairs with SDR Town 0.2.120; no audio-engine or DSP changes.
+- Automated embedded-JavaScript regression tests run in CTest/CI.

@@ -80,6 +80,10 @@ enum ControlId {
 HWND addControl(HWND parent, const wchar_t* className, const wchar_t* text, DWORD style,
                 int x, int y, int width, int height, int id = 0,
                 DWORD extendedStyle = 0) {
+  if ((_wcsicmp(className, L"BUTTON") == 0 && (style & BS_TYPEMASK) != BS_GROUPBOX) ||
+      _wcsicmp(className, L"EDIT") == 0 || _wcsicmp(className, L"COMBOBOX") == 0 ||
+      _wcsicmp(className, TRACKBAR_CLASSW) == 0 || _wcsicmp(className, L"LISTBOX") == 0)
+    style |= WS_TABSTOP;
   HWND control = CreateWindowExW(extendedStyle, className, text, WS_CHILD | WS_VISIBLE | style,
                                  x, y, width, height, parent,
                                  reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)),
@@ -230,7 +234,7 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
   RegisterClassExW(&brandClass);
 
   HMENU menu = LoadMenuW(instance_, MAKEINTRESOURCEW(IDR_MAINMENU));
-  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.43", WS_OVERLAPPEDWINDOW,
+  window_ = CreateWindowExW(0, kMainClass, L"FUBAR VOX V1.1.44", WS_OVERLAPPEDWINDOW,
                             CW_USEDEFAULT, CW_USEDEFAULT, 780, 880, nullptr, menu, instance_,
                             this);
   if (!window_) return 1;
@@ -239,6 +243,8 @@ int AppWindow::run(HINSTANCE instance, int showCommand) {
 
   MSG message{};
   while (GetMessageW(&message, nullptr, 0, 0) > 0) {
+    if (replayWindow_ && IsDialogMessageW(replayWindow_, &message)) continue;
+    if (IsDialogMessageW(window_, &message)) { revealFocusedControl(); continue; }
     TranslateMessage(&message);
     DispatchMessageW(&message);
   }
@@ -273,9 +279,16 @@ LRESULT CALLBACK AppWindow::replayProc(HWND window, UINT message, WPARAM wParam,
 LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
   switch (message) {
     case WM_CREATE:
-      idleStatusBrush_ = CreateSolidBrush(RGB(190, 35, 35));
+      idleStatusBrush_ = CreateSolidBrush(RGB(48, 70, 78));
       recordingStatusBrush_ = CreateSolidBrush(RGB(25, 150, 70));
       createControls();
+      for (HWND child = GetWindow(window, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT)) {
+        RECT bounds{};
+        GetWindowRect(child, &bounds);
+        MapWindowPoints(nullptr, window, reinterpret_cast<POINT*>(&bounds), 2);
+        controlLayout_.push_back({child, bounds});
+      }
+      layoutControls();
       loadSettings();
       if (cliWebPort_) webPort_ = cliWebPort_;
       refreshWebCheckLabel();
@@ -293,12 +306,37 @@ LRESULT AppWindow::handleMessage(HWND window, UINT message, WPARAM wParam, LPARA
         HDC deviceContext = reinterpret_cast<HDC>(wParam);
         SetTextColor(deviceContext, RGB(255, 255, 255));
         SetBkColor(deviceContext,
-                   statusRecording_ ? RGB(25, 150, 70) : RGB(190, 35, 35));
+                   statusRecording_ ? RGB(25, 150, 70) : RGB(48, 70, 78));
         return reinterpret_cast<LRESULT>(statusRecording_ ? recordingStatusBrush_
                                                           : idleStatusBrush_);
       }
       break;
 
+    case WM_GETMINMAXINFO:
+      reinterpret_cast<MINMAXINFO*>(lParam)->ptMinTrackSize = {780, 420};
+      return 0;
+    case WM_SIZE:
+      if (wParam != SIZE_MINIMIZED) layoutControls();
+      return 0;
+    case WM_VSCROLL: {
+      SCROLLINFO info{sizeof(info), SIF_ALL};
+      GetScrollInfo(window, SB_VERT, &info);
+      switch (LOWORD(wParam)) {
+        case SB_LINEUP: scrollOffset_ -= 30; break;
+        case SB_LINEDOWN: scrollOffset_ += 30; break;
+        case SB_PAGEUP: scrollOffset_ -= static_cast<int>(info.nPage); break;
+        case SB_PAGEDOWN: scrollOffset_ += static_cast<int>(info.nPage); break;
+        case SB_THUMBTRACK: scrollOffset_ = info.nTrackPos; break;
+        case SB_TOP: scrollOffset_ = 0; break;
+        case SB_BOTTOM: scrollOffset_ = info.nMax; break;
+      }
+      layoutControls();
+      return 0;
+    }
+    case WM_MOUSEWHEEL:
+      scrollOffset_ -= GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA * 60;
+      layoutControls();
+      return 0;
     case WM_COMMAND:
       switch (LOWORD(wParam)) {
         case IdStart: startEngine(); return 0;
@@ -438,7 +476,7 @@ void AppWindow::createControls() {
                                 35, IdThreshold);
   SendMessageW(thresholdSlider_, TBM_SETRANGE, TRUE, MAKELONG(-60, -5));
   thresholdValue_ = addControl(window_, L"STATIC", L"-35 dB", SS_CENTER, 620, 178, 80, 22);
-  addControl(window_, L"STATIC", L"Radio frequency (MHz):", SS_RIGHT, 40, 215, 160, 22);
+  addControl(window_, L"STATIC", L"Recording freq (MHz):", SS_RIGHT, 40, 215, 160, 22);
   frequencyEdit_ = addControl(window_, L"EDIT", L"268.000", WS_BORDER | ES_AUTOHSCROLL, 210,
                               211, 110, 24, IdFrequency, WS_EX_CLIENTEDGE);
   addControl(window_, L"STATIC", L"Pre-roll (sec):", SS_RIGHT, 335, 215, 100, 22);
@@ -493,7 +531,7 @@ void AppWindow::createControls() {
   addControl(window_, L"BUTTON", L"Open site", BS_PUSHBUTTON, 320, 612, 80, 28, IdOpenWeb);
   addControl(window_, L"BUTTON", L"Copy URL", BS_PUSHBUTTON, 405, 612, 80, 28, IdCopyWeb);
   webStatus_ = addControl(window_, L"STATIC", L"Website off", 0, 495, 616, 230, 24);
-  publicCheck_ = addControl(window_, L"BUTTON", L"Public Server", BS_AUTOCHECKBOX, 85, 648, 130,
+  publicCheck_ = addControl(window_, L"BUTTON", L"List publicly", BS_AUTOCHECKBOX, 85, 648, 130,
                             24, IdPublic);
   addControl(window_, L"STATIC", L"Station name:", SS_RIGHT, 215, 650, 95, 22);
   stationEdit_ = addControl(window_, L"EDIT", L"FUBAR", WS_BORDER | ES_AUTOHSCROLL, 318, 646, 280,
@@ -502,12 +540,39 @@ void AppWindow::createControls() {
   nowPlayingEdit_ = addControl(window_, L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL, 210, 676, 500,
                                24, IdNowPlaying, WS_EX_CLIENTEDGE);
   SendMessageW(nowPlayingEdit_, EM_SETLIMITTEXT, 80, 0);
-  addControl(window_, L"STATIC",
-             L"Public Server lists this station at https://gearsqueens.online/fubar-net",
-              SS_CENTER, 40, 708, 680, 22);
-  addControl(window_, L"STATIC",
-             L"CLI: FUBAR.exe --cli --headless --web --port 8080 --public-server",
-              SS_CENTER, 40, 734, 680, 22);
+  addControl(window_, L"BUTTON", L"Settings...", BS_PUSHBUTTON, 600, 716, 110, 30,
+             ID_TOOLS_SETTINGS);
+}
+
+void AppWindow::layoutControls() {
+  if (controlLayout_.empty()) return;
+  RECT client{};
+  GetClientRect(window_, &client);
+  constexpr int contentHeight = 766;
+  scrollOffset_ = std::clamp(scrollOffset_, 0, std::max(0, contentHeight - static_cast<int>(client.bottom)));
+  SCROLLINFO info{sizeof(info), SIF_RANGE | SIF_PAGE | SIF_POS, 0, contentHeight - 1,
+                  static_cast<UINT>(std::max<LONG>(1, client.bottom)), scrollOffset_, 0};
+  SetScrollInfo(window_, SB_VERT, &info, TRUE);
+  GetClientRect(window_, &client);
+  const int inset = std::max(0, (static_cast<int>(client.right) - 760) / 2);
+  for (const auto& item : controlLayout_) {
+    SetWindowPos(item.window, nullptr, item.bounds.left + inset, item.bounds.top - scrollOffset_,
+                 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+  InvalidateRect(window_, nullptr, TRUE);
+}
+
+void AppWindow::revealFocusedControl() {
+  const HWND focused = GetFocus();
+  if (!focused || !IsChild(window_, focused)) return;
+  RECT bounds{}, client{};
+  GetWindowRect(focused, &bounds);
+  MapWindowPoints(nullptr, window_, reinterpret_cast<POINT*>(&bounds), 2);
+  GetClientRect(window_, &client);
+  if (bounds.top < 0) scrollOffset_ += bounds.top - 8;
+  else if (bounds.bottom > client.bottom) scrollOffset_ += bounds.bottom - client.bottom + 8;
+  else return;
+  layoutControls();
 }
 
 void AppWindow::populateDevices() {
@@ -1086,7 +1151,7 @@ FubarNetStation AppWindow::currentStation() const {
   station.listenerLimit = web_.maxLiveListeners();
   station.nowPlaying = FubarNetDirectory::sanitizeNowPlaying(
       wideToUtf8(nowPlayingEdit_ ? windowText(nowPlayingEdit_) : nowPlaying_));
-  station.version = "1.1.43";
+  station.version = "1.1.44";
   return station;
 }
 
