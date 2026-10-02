@@ -22,8 +22,17 @@ jobs:
       - name: Assemble portable package
         shell: pwsh
         run: |
+          $townRelease = Invoke-RestMethod -Headers @{ 'User-Agent' = 'FUBAR-ci' } `
+            'https://api.github.com/repos/blkph0x/SDR_Town/releases/tags/v0.2.118-experimental'
+          $townAsset = $townRelease.assets | Where-Object { $_.name -like '*win64.zip' } | Select-Object -First 1
+          if (-not $townAsset) { throw 'Matching SDR Town 0.2.118 release ZIP was not found.' }
+          Invoke-WebRequest -Headers @{ 'User-Agent' = 'FUBAR-ci' } -Uri $townAsset.browser_download_url -OutFile town.zip
+          Expand-Archive town.zip -DestinationPath town -Force
+          $townDll = Get-ChildItem town -Filter SdrTownControl.dll -Recurse | Select-Object -First 1
+          if (-not $townDll) { throw 'Matching SdrTownControl.dll was not found in the Town release.' }
           New-Item -ItemType Directory -Force package | Out-Null
           Copy-Item build/Release/FUBAR.exe package/FUBAR.exe
+          Copy-Item $townDll.FullName package/SdrTownControl.dll
           Copy-Item README.md package/README.md
           Copy-Item CHANGELOG.md package/CHANGELOG.md
           Compress-Archive -Path package/* -DestinationPath FUBAR-Windows-x64.zip -Force

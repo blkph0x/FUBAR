@@ -74,7 +74,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.39 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.42 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -216,6 +216,9 @@ int runSelfTest() {
   std::string type;
   if (!CaptureWebServer::handlePathForTest("GET", "/", webDir, &status, &type) || status != 200 ||
       !CaptureWebServer::handlePathForTest("GET", "/api/captures", webDir, &status, &type) ||
+      !CaptureWebServer::handlePathForTest("GET", "/api/sdr-town/aircraft-map-status", webDir, &status, &type) ||
+      !CaptureWebServer::handlePathForTest("GET", "/api/sdr-town/inmarsat-map-status", webDir, &status, &type) ||
+      !CaptureWebServer::handlePathForTest("POST", "/api/sdr-town/aircraft-map-control", webDir, &status, &type) ||
       CaptureWebServer::handlePathForTest("GET", "/audio/../secret.wav", webDir, &status, &type) ||
       status != 400) {
     std::wcerr << L"Self-test failed: web path filter error\n";

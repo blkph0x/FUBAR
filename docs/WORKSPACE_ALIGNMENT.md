@@ -1,0 +1,24 @@
+# SDR Town workspace alignment
+
+Task T-0096, 2026-10-03. Baselines FUBAR a858247 / Town 950ad45.
+
+Completed in this pass: versioned workspace capabilities, shared Inmarsat hybrid map,
+aircraft RF/network controls, Inmarsat watch/device selection, SSTV RF mode,
+permission enforcement, private leases, bounded structured responses and browser
+rendering. Native DSP, codecs, FUBAR audio capture and streaming remain unchanged.
+
+Town owns received identities, positions, freshness, lookup consent, device
+leases and radio state. FUBAR forwards only explicitly supported routes and
+enforces admin permissions plus current browser lease. Website users cannot
+enable operator internet consent, set home coordinates, read arbitrary files,
+upload IQ automatically, or alter diagnostics consent. No public generic proxy.
+
+Add nlohmann/json, MIT, pinned to Town's existing version, for structured boundary
+validation and sanitization. Replace fixed response truncation with a bounded
+large read; never retry a mutation to resize its response. Instrument request
+failures without recording credentials or radio message contents.
+
+Required gates: C++/CLI tests; hostile/malformed/permission/lease tests; real
+Town-DLL-FUBAR loopback smoke; browser desktop/mobile source/expiry/escaping tests;
+Town GUI/CLI IQ map and unchanged 8400 audio; CI-built matched public packages.
+This document will record the completed feature matrix and remaining limits.

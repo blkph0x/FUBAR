@@ -78,7 +78,8 @@ class CaptureWebServer {
   std::string sdrTownControlConfigJson() const;
   SdrTownBridgeConfig sdrTownControlConfigLocked() const;
   std::string sdrTownControlSessionActionJson(const std::string& body);
-  bool sdrTownControlCommandAllowed(const std::string& body, std::string* response);
+  bool sdrTownControlCommandAllowed(const std::string& body, std::string* response,
+                                    const char* capability = nullptr);
 
   struct SdrControlQueueEntry {
     std::string clientId;
