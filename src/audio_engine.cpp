@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <initguid.h>
 #include <audioclient.h>
+#include <propkeydef.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <mmdeviceapi.h>
 #include <mmsystem.h>

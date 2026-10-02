@@ -199,6 +199,8 @@ button.play.playing{ background:var(--blue); }
     <div class="level" title="Live level"><span id="liveLevel"></span></div>
   </div>
   </section>
+)HTML"
+R"HTML(
   <section class="tabpanel" id="tab-fm">
     <div class="infocard">
       <h3>FM station (RDS)</h3>
@@ -411,7 +413,9 @@ button.play.playing{ background:var(--blue); }
         <div id="sdrplayAmpWrap"><label for="sdrplayDivAmp">B amplitude</label><input id="sdrplayDivAmp" inputmode="decimal" value="1"></div>
         <button id="sdrplayApplyBtn" type="button">Apply SDRplay</button>
       </div>
-      <p class="sdrplayhint" id="sdrplayHint">Port and feature set follow the active RSP model.</p>
+       <p class="sdrplayhint" id="sdrplayHint">Port and feature set follow the active RSP model.</p>
+)HTML"
+R"HTML(
     </div>
     <div class="sdrmeta" id="sdrTownStatus">Checking SDR Town bridge...</div>
   </section>
@@ -607,6 +611,8 @@ function resetHold(el){
     el.load();
   } catch {}
 }
+)HTML"
+R"HTML(
 function showRadioPlayer(on){
   liveMedia.classList.toggle('radio', !!on);
   liveMedia.controls = !!on;
@@ -1001,6 +1007,8 @@ async function attachWorkletRing(ac, channels){
           }
           const absL = left < 0 ? -left : left;
           const absR = right < 0 ? -right : right;
+)HTML"
+R"HTML(
           if (absL > peak) peak = absL;
           if (absR > peak) peak = absR;
           if (this.mix !== 'stereo' || out.length === 1) {
@@ -1198,7 +1206,9 @@ async function playLiveSession(){
     try { tap.node.disconnect(); } catch {}
     liveNode = null;
   }
-}
+ }
+)HTML"
+R"HTML(
 async function startLive(){
   liveWanted = true;
   setLiveUi(true, 'Connecting to live capture…');
@@ -1397,6 +1407,8 @@ function renderDecodePanels(state){
       const label = esc(m.label || id);
       return '<option value="' + esc(id) + '">' + label + '</option>';
     }).join('');
+)HTML"
+R"HTML(
     const want = sstv.mode || previous || 'auto';
     sstvModeSelect.value = want;
     if (sstvModeSelect.value !== want) sstvModeSelect.value = 'auto';
@@ -1594,8 +1606,10 @@ function sdrRenderControlSession(){
   const warningMs = Number(session.warningMs || sdrTownConfig.warningMs || 60000);
   el.classList.toggle('warn', active && remaining > 0 && remaining <= warningMs);
   if (!sdrTownConfig.enabled) {
-    el.textContent = 'SDR Town website control is disabled.';
-  } else if (active) {
+     el.textContent = 'SDR Town website control is disabled.';
+)HTML"
+R"HTML(
+    } else if (active) {
     const ext = Number(session.extensionsUsed || 0);
     const max = Number(session.maxExtensions || sdrTownConfig.maxExtensions || 0);
     el.textContent = (remaining <= warningMs && remaining > 0 ? 'Warning: ' : '') +
@@ -1785,6 +1799,8 @@ document.getElementById('sdrDirectSamp').addEventListener('change', () => {
 document.getElementById('sdrplayApplyBtn').addEventListener('click', () => {
   const payload = {
     antenna: document.getElementById('sdrplayAntenna').value,
+)HTML"
+R"HTML(
     agc: document.getElementById('sdrplayAgc').checked,
     ifgrDb: Number(document.getElementById('sdrplayIfgr').value),
     rfgrDb: Number(document.getElementById('sdrplayRfgr').value),
@@ -1997,8 +2013,10 @@ async function loadSatcom(){
   } catch (e) {
     if (line) line.textContent = 'Satcom poll failed';
   }
-}
-async function postSatcom(action, extra){
+ }
+)HTML"
+R"HTML(
+ async function postSatcom(action, extra){
   if (!sdrControlSession || !sdrControlSession.canControl) {
     document.getElementById('satStatusLine').textContent = 'Take control on Radio control first.';
     return;

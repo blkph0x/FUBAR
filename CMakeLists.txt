@@ -16,6 +16,10 @@ add_library(shine STATIC
 target_include_directories(shine PRIVATE ${SHINE_DIR})
 if(MINGW)
   target_compile_options(shine PRIVATE -std=c99 -w)
+elseif(MSVC)
+  set_property(TARGET shine PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+  target_compile_options(shine PRIVATE
+    "/FI${CMAKE_CURRENT_SOURCE_DIR}/third_party/shine/shine_msvc_compat.h")
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
