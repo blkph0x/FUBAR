@@ -2,7 +2,7 @@
 
 ## 1.1.42
 
-- Aligns the web workspace with SDR Town **0.2.118**.
+- Aligns the web workspace with SDR Town **0.2.119**.
 - Adds the native Inmarsat hybrid map and aircraft workspace status/control bridge.
 - Uses capability-gated SDR Town commands and escapes live aircraft metadata before browser rendering.
 - Release CI packages the matching `SdrTownControl.dll` from the Town release asset.

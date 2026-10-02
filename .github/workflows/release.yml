@@ -6,7 +6,7 @@ on:
       tag:
         description: Existing version tag to publish
         required: true
-        default: v1.1.1
+        default: v1.1.42
 
 permissions:
   contents: write
@@ -31,9 +31,9 @@ jobs:
         shell: pwsh
         run: |
           $townRelease = Invoke-RestMethod -Headers @{ 'User-Agent' = 'FUBAR-release' } `
-            'https://api.github.com/repos/blkph0x/SDR_Town/releases/tags/v0.2.118-experimental'
+            'https://api.github.com/repos/blkph0x/SDR_Town/releases/tags/v0.2.119'
           $townAsset = $townRelease.assets | Where-Object { $_.name -like '*win64.zip' } | Select-Object -First 1
-          if (-not $townAsset) { throw 'Matching SDR Town 0.2.118 release ZIP was not found.' }
+          if (-not $townAsset) { throw 'Matching SDR Town 0.2.119 release ZIP was not found.' }
           Invoke-WebRequest -Headers @{ 'User-Agent' = 'FUBAR-release' } -Uri $townAsset.browser_download_url -OutFile town.zip
           Expand-Archive town.zip -DestinationPath town -Force
           $townDll = Get-ChildItem town -Filter SdrTownControl.dll -Recurse | Select-Object -First 1
