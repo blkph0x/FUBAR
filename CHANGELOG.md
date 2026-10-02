@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.43
+
+- Finalizes the 1.1.42 workspace alignment with the MSVC/CI portability fixes included.
+- Publishes a source-matched package with the SDR Town 0.2.119 control DLL.
+
 ## 1.1.42
 
 - Aligns the web workspace with SDR Town **0.2.119**.

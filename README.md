@@ -6,7 +6,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 
 | | |
 |---|---|
-| **Current version** | **1.1.42** |
+| **Current version** | **1.1.43** |
 | **Releases** | https://github.com/blkph0x/FUBAR/releases |
 | **Repo** | https://github.com/blkph0x/FUBAR |
 | **Pairs with** | [SDR Town](https://github.com/Blkph0x/SDR_Town) **0.2.119**. This ZIP includes the matching `SdrTownControl.dll`. |
@@ -46,7 +46,7 @@ They talk over a **local-only** control link (`127.0.0.1`, default port **8765**
 1. Start **SDR Town** with its local control server (default on install/portable builds; loopback only).
 2. Route audio to FUBAR (VB-CABLE is the usual path for a clean station feed).
 3. In FUBAR, enable **Public website**. Type **Now playing** for the large title visitors see.
-4. In **Tools → Settings**, turn on **SDR Town control** and choose what remote operators may change. Keep the matching `SdrTownControl.dll` beside `FUBAR.exe` (this 1.1.42 ZIP includes the Town **0.2.119** DLL).
+4. In **Tools → Settings**, turn on **SDR Town control** and choose what remote operators may change. Keep the matching `SdrTownControl.dll` beside `FUBAR.exe` (this 1.1.43 ZIP includes the Town **0.2.119** DLL).
 5. Open the FUBAR site from a phone or LAN PC. Live audio comes from FUBAR’s capture. Live P25 status and tune commands use the control bridge when enabled.
 
 ### Website status board
@@ -57,7 +57,7 @@ They talk over a **local-only** control link (`127.0.0.1`, default port **8765**
   - parked on a monitored control channel → `Listening to NSWGRN Control`  
   - no P25 activity → line hidden
 - **UHF tones tab** (SDR Town **0.2.65+**): live CTCSS/DCS, DTMF when Repeater Control Monitor is on, plus a readable heard list
-- **SSTV tab** (SDR Town **0.2.119** / FUBAR **1.1.42**): same mode list as Town (Automatic + analogue families + **HamDRM digital**). Take control can **Receive / Finish / Cancel** live SSTV. Pictures are Town’s saved PNGs. Home lat/lon is never shown or set here.
+- **SSTV tab** (SDR Town **0.2.119** / FUBAR **1.1.43**): same mode list as Town (Automatic + analogue families + **HamDRM digital**). Take control can **Receive / Finish / Cancel** live SSTV. Pictures are Town’s saved PNGs. Home lat/lon is never shown or set here.
 - **Inmarsat map tab**: displays Town-owned ADS-C aircraft positions, source, age, message count and voice activity without duplicating the receiver cache. The Aircraft tab can start the Town 1090 MHz workspace with its wide-capture requirement and can disable network-fed aircraft data.
 
 ### Downloads
