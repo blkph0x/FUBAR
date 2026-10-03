@@ -40,3 +40,18 @@ Limits: no claim of new RF decoder accuracy, physical rotor/SDRplay acceptance,
 or all-device auditory validation. Test machine currently routes Town to
 speakers while FUBAR captures VB-CABLE; website audio requires the intended
 output/input pairing. Privacy and hardware routing are not changed silently.
+
+## Published evidence
+
+FUBAR v1.1.44 source d9bcb0a0e819912db5be84a1f7d9ec46077d655c.
+Main/tag builds 37081402863 / 37081405864 and release Actions 37081407222 PASS.
+https://github.com/blkph0x/FUBAR/releases/tag/v1.1.44
+Anonymous ZIP SHA256:
+1a52483abacee08a8435072e4f2592c8d5495736113a9a8d7602281dd2bab6af
+Public source/version/EXE/DLL hashes verified; shipped self-test PASS. Control
+DLL equals Town 0.2.120-experimental (source 6dc66fa, release run 37079654265).
+Browser resume confirmed at 9.65 seconds after pause at 9.57, without resetting.
+Both native apps left open, browser in Radio with control lease released.
+External community-directory GET timed out at 15 seconds; local website works.
+Native HTTPS announcement failure requires separate server/network diagnosis,
+not an unapproved configuration change during UI qualification.
