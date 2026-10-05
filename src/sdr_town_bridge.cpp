@@ -124,6 +124,18 @@ std::string disabledJson(const char* reason) {
 
 bool okResult(int result) { return result == 0; }
 
+void bridgeTrace(const char* operation, const std::string& method = {},
+                 const std::string& path = {}, int result = 0, std::size_t bytes = 0) {
+  // Diagnostics identify bridge failures without copying tokens, request bodies, or
+  // decoded radio data into the debugger stream.
+  std::ostringstream line;
+  line << "FUBAR SDR Town bridge: " << (operation ? operation : "operation");
+  if (!method.empty()) line << " method=" << method;
+  if (!path.empty()) line << " path=" << path;
+  line << " result=" << result << " responseBytes=" << bytes << "\n";
+  OutputDebugStringA(line.str().c_str());
+}
+
 }  // namespace
 
 SdrTownBridge::SdrTownBridge() = default;
@@ -160,6 +172,7 @@ bool SdrTownBridge::load(std::string* error) {
         reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_StartP25Control"));
     if (fnHealth_ && fnStatus_ && fnTune_ && fnSetRfGain_ && fnStartP25Control_) {
       dll_ = lib;
+      bridgeTrace("loaded");
       return true;
     }
     FreeLibrary(lib);
@@ -175,6 +188,7 @@ std::string SdrTownBridge::status(const SdrTownBridgeConfig& config) {
   char response[32768]{};
   auto cfg = controlConfig(config);
   const int result = reinterpret_cast<StatusFn>(fnStatus_)(&cfg, response, sizeof(response));
+  bridgeTrace("status", "GET", "/v1/status", result, std::strlen(response));
   if (!okResult(result) && response[0] == '\0') return disabledJson("SDR Town status request failed");
   return response;
 }
@@ -339,6 +353,15 @@ std::string SdrTownBridge::request(const SdrTownBridgeConfig& config,
     if (error) *error = "SDR Town control is disabled";
     return disabledJson("SDR Town control is disabled");
   }
+  if (method != "GET" && method != "POST") {
+    if (error) *error = "SDR Town bridge only permits GET and POST";
+    return disabledJson("unsupported bridge method");
+  }
+  if (path.size() < 5 || path.rfind("/v1/", 0) != 0 || path.find("..") != std::string::npos ||
+      path.find('\\') != std::string::npos) {
+    if (error) *error = "SDR Town bridge path must be a safe /v1/ endpoint";
+    return disabledJson("unsafe bridge path");
+  }
   if (!load(error)) return disabledJson(error && !error->empty() ? error->c_str() : "DLL missing");
   if (!fnRequest_) {
     if (error) *error = "Update SdrTownControl.dll (0.2.68+) for this control path";
@@ -349,6 +372,7 @@ std::string SdrTownBridge::request(const SdrTownBridgeConfig& config,
   const int result = reinterpret_cast<RequestFn>(fnRequest_)(
       &cfg, method.c_str(), path.c_str(), bodyJson.empty() ? "{}" : bodyJson.c_str(), response,
       sizeof(response));
+  bridgeTrace("request", method, path, result, std::strlen(response));
   if (!okResult(result) && error) *error = response[0] ? response : "SDR Town request failed";
   return response;
 }

@@ -6,7 +6,7 @@ on:
       tag:
         description: Existing version tag to publish
         required: true
-        default: v1.1.44
+        default: v1.1.45
 
 permissions:
   contents: write
@@ -35,9 +35,9 @@ jobs:
         shell: pwsh
         run: |
           $townRelease = Invoke-RestMethod -Headers @{ 'User-Agent' = 'FUBAR-release' } `
-            'https://api.github.com/repos/blkph0x/SDR_Town/releases/tags/v0.2.120-experimental'
+            'https://api.github.com/repos/blkph0x/SDR_Town/releases/tags/v0.2.125-experimental'
           $townAsset = $townRelease.assets | Where-Object { $_.name -like '*win64*.zip' -and $_.name -notlike '*.sha256' } | Select-Object -First 1
-          if (-not $townAsset) { throw 'Matching SDR Town 0.2.120 release ZIP was not found.' }
+          if (-not $townAsset) { throw 'Matching SDR Town 0.2.125 release ZIP was not found.' }
           Invoke-WebRequest -Headers @{ 'User-Agent' = 'FUBAR-release' } -Uri $townAsset.browser_download_url -OutFile town.zip
           Expand-Archive town.zip -DestinationPath town -Force
           $townDll = Get-ChildItem town -Filter SdrTownControl.dll -Recurse | Select-Object -First 1
@@ -53,7 +53,7 @@ jobs:
             version = '${{ inputs.tag }}'
             sourceCommit = $source
             workflowRun = $env:GITHUB_RUN_ID
-            townVersion = '0.2.120-experimental'
+            townVersion = '0.2.125-experimental'
             executableSha256 = (Get-FileHash package/FUBAR.exe).Hash.ToLowerInvariant()
             controlDllSha256 = (Get-FileHash package/SdrTownControl.dll).Hash.ToLowerInvariant()
           } | ConvertTo-Json | Set-Content package/build-info.json -Encoding utf8

@@ -11,6 +11,10 @@ const ids = [...page.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
 assert.equal(ids.length, new Set(ids).size, 'duplicate element IDs');
 for(const match of page.matchAll(/for="([^"]+)"/g)) assert(ids.includes(match[1]));
 for(const match of page.matchAll(/data-tab="([^"]+)"/g)) assert(ids.includes('tab-'+match[1]));
+assert(source.includes('api/sdr-town/inmarsat-sessions'),'Inmarsat named-session route must remain wired');
+assert(script.includes('inmarsat-sessions'),'Inmarsat named-session client must remain wired');
+assert(script.includes('sstvSessionId'),'SSTV named-session client must remain wired');
+assert(script.includes("captureBandwidthMHz:rate"),'1090 tune must use the selected sample rate');
 function element(id) {
   return {id, value:'', textContent:'', checked:true, disabled:false, hidden:false,
     options:['AUTO','NFM','WFM','AM'].map(value=>({value})),
@@ -84,19 +88,19 @@ assert.equal(context.sdrplayDraftSeeded,false);
   context.inmLayer={removeLayer:m=>removed.push(m),clearLayers:()=>removed.push('all')};
   context.ensureInmarsatMap=()=>{};
   context.esc=s=>String(s).replaceAll('<','&lt;');
-  context.L={circleMarker:(coords,style)=>({coords,style,
+  context.L={divIcon:options=>options,marker:(coords,options)=>({coords,options,
     bindTooltip(text){this.text=text;return this;},addTo(){return this;},
-    setLatLng(coords){this.coords=coords;return this;},setStyle(style){this.style=style;return this;},
+    setLatLng(coords){this.coords=coords;return this;},setIcon(options){this.options=options;return this;},
     setTooltipContent(text){this.text=text;return this;}})};
-  load('loadInmarsatMap');
-  let mapData={ok:true,positions:[{icaoHex:'ABC123',latDeg:1,lonDeg:2,voiceActive:true}],aircraft:[]};
+  load('aircraftMarkerIcon');load('loadInmarsatMap');
+  let mapData={ok:true,positions:[{aesId:74565,icaoHex:'ABC123',latDeg:1,lonDeg:2,voiceActive:true}],aircraft:[]};
   context.fetch=async()=>({json:async()=>mapData});
   await context.loadInmarsatMap();
-  const marker=context.inmMarkers.get('ABC123');assert(marker);
-  assert.equal(marker.style.color,'#88d6aa','active voice colour');
+  const marker=context.inmMarkers.get('74565');assert(marker);
+  assert.match(marker.options.icon.html,/#88d6aa/,'active voice colour');
   mapData.positions[0].latDeg=2;
   await context.loadInmarsatMap();
-  assert.equal(context.inmMarkers.get('ABC123'),marker,'marker must not flash on refresh');
+  assert.equal(context.inmMarkers.get('74565'),marker,'marker must not flash on refresh');
   assert.equal(marker.coords[0],2);
   mapData.positions=[{icaoHex:'BAD',latDeg:null,lonDeg:3},{icaoHex:'BAD2',latDeg:91,lonDeg:0}];
   await context.loadInmarsatMap();assert.equal(context.inmMarkers.size,0);

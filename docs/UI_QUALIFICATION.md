@@ -1,5 +1,13 @@
 # Paired workspace usability qualification
 
+## 1.1.45 pairing delta
+
+The current qualification target is FUBAR 1.1.45 with SDR Town
+0.2.125-experimental. Automated coverage must include the named-session proxy
+routes, AES-only Inmarsat map identity, heading-aware Leaflet markers and the
+2.4 MS/s ADS-B default. The 1.1.44 / Town 0.2.120 evidence below remains a
+historical release record and is not evidence for the current package.
+
 2026-10-03, FUBAR 1.1.44 / SDR Town 0.2.120 (DEC-0166 / T-0097).
 
 Scope: both native applications, local DLL/control bridge and browser UI.

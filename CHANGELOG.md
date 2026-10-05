@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.45
+
+- Pairs with the SDR Town **0.2.125-experimental** release asset and records the matched control DLL in CI provenance.
+- Adds bounded website proxies for SDR Town named Inmarsat, SSTV, Satcom and Aircraft sessions, while preserving the primary-workspace routes.
+- Inmarsat map identity now falls back to validated AES identity when ICAO has not arrived; aircraft markers show heading-aware arrows and retain source/registration/type details.
+- Website 1090 tuning defaults to the Town-supported 2.4 MS/s capture rate instead of requesting an unsafe fixed 20 MS/s rate.
+- Adds debugger-safe bridge instrumentation and rejects non-`/v1/` or non-GET/POST bridge requests without logging credentials or radio payloads.
+
 ## 1.1.43
 
 - Finalizes the 1.1.42 workspace alignment with the MSVC/CI portability fixes included.
