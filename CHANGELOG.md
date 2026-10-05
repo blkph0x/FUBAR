@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.47
+
+- Fixed Windows error 126 when FUBAR loads `SdrTownControl.dll`: the portable package now includes `MSVCP140.dll`, `VCRUNTIME140.dll`, and `VCRUNTIME140_1.dll` required by the bridge.
+- The bridge now loads from an absolute path with dependency resolution anchored to the bridge directory and reports the exact Windows load failure or missing export.
+- Release CI probes the packaged bridge with `LoadLibraryEx` before publishing the asset.
+
 ## 1.1.45
 
 - Pairs with the SDR Town **0.2.125-experimental** release asset and records the matched control DLL in CI provenance.

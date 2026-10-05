@@ -11,6 +11,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -73,12 +74,12 @@ std::wstring envWide(const wchar_t* name) {
   return n > 0 && n < 2048 ? std::wstring(buffer, buffer + n) : std::wstring();
 }
 
-std::string lastWinError() {
-  const DWORD code = GetLastError();
+std::string winErrorMessage(DWORD code) {
   wchar_t* message = nullptr;
   FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
                      FORMAT_MESSAGE_IGNORE_INSERTS,
-                 nullptr, code, 0, reinterpret_cast<LPWSTR>(&message), 0, nullptr);
+                 nullptr, code ? code : ERROR_GEN_FAILURE, 0,
+                 reinterpret_cast<LPWSTR>(&message), 0, nullptr);
   std::wstring text = message ? message : L"unknown error";
   if (message) LocalFree(message);
   return wideToUtf8(text);
@@ -151,14 +152,33 @@ bool SdrTownBridge::available(std::string* error) { return load(error); }
 
 bool SdrTownBridge::load(std::string* error) {
   if (dll_) return true;
-  std::wstring candidates[3];
-  candidates[0] = envWide(L"SDRTOWN_CONTROL_DLL");
-  candidates[1] = exeDir() + L"\\SdrTownControl.dll";
-  candidates[2] = L"SdrTownControl.dll";
+  std::vector<std::filesystem::path> candidates;
+  const auto appendCandidate = [&candidates](const std::wstring& value) {
+    if (value.empty()) return;
+    std::error_code ec;
+    const auto absolute = std::filesystem::absolute(std::filesystem::path(value), ec);
+    const auto path = ec ? std::filesystem::path(value) : absolute;
+    if (std::find(candidates.begin(), candidates.end(), path) == candidates.end()) {
+      candidates.push_back(path);
+    }
+  };
+  appendCandidate(envWide(L"SDRTOWN_CONTROL_DLL"));
+  appendCandidate(exeDir() + L"\\SdrTownControl.dll");
+
+  std::string failures;
   for (const auto& candidate : candidates) {
-    if (candidate.empty()) continue;
-    HMODULE lib = LoadLibraryW(candidate.c_str());
-    if (!lib) continue;
+    const std::wstring path = candidate.wstring();
+    // Resolve native dependencies beside this exact plug-in, not from the
+    // process working directory or an unrelated PATH entry.
+    HMODULE lib = LoadLibraryExW(
+        path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+    const DWORD loadError = lib ? ERROR_SUCCESS : GetLastError();
+    if (!lib) {
+      if (!failures.empty()) failures += "; ";
+      failures += wideToUtf8(path) + " (" + std::to_string(loadError) + ": " +
+                  winErrorMessage(loadError) + ")";
+      continue;
+    }
     fnHealth_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_Health"));
     fnStatus_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_Status"));
     fnTune_ = reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_Tune"));
@@ -172,12 +192,18 @@ bool SdrTownBridge::load(std::string* error) {
         reinterpret_cast<void*>(GetProcAddress(lib, "SdrTownControl_StartP25Control"));
     if (fnHealth_ && fnStatus_ && fnTune_ && fnSetRfGain_ && fnStartP25Control_) {
       dll_ = lib;
-      bridgeTrace("loaded");
+      bridgeTrace("loaded", {}, wideToUtf8(path));
       return true;
     }
+    if (!failures.empty()) failures += "; ";
+    failures += wideToUtf8(path) + " (loaded, but required exports are missing)";
     FreeLibrary(lib);
   }
-  if (error) *error = "SdrTownControl.dll could not be loaded: " + lastWinError();
+  if (error) {
+    *error = "SdrTownControl.dll could not be loaded";
+    if (!failures.empty()) *error += ": " + failures;
+  }
+  bridgeTrace("load-failed", {}, {}, ERROR_MOD_NOT_FOUND);
   return false;
 }
 

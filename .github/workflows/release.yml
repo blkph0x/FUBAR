@@ -6,7 +6,7 @@ on:
       tag:
         description: Existing version tag to publish
         required: true
-        default: v1.1.46
+        default: v1.1.47
 
 permissions:
   contents: write
@@ -47,6 +47,13 @@ jobs:
           New-Item -ItemType Directory -Force package | Out-Null
           Copy-Item build/Release/FUBAR.exe package/FUBAR.exe
           Copy-Item $townDll.FullName package/SdrTownControl.dll
+          foreach ($runtimeName in @('MSVCP140.dll', 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll')) {
+            $runtime = Get-ChildItem town -Filter $runtimeName -Recurse | Select-Object -First 1
+            if (-not $runtime) { throw "Matching SDR Town runtime file was not found: $runtimeName" }
+            Copy-Item $runtime.FullName (Join-Path package $runtimeName)
+          }
+          & ./scripts/test_control_dll.ps1 -Path package/SdrTownControl.dll
+          if ($LASTEXITCODE -ne 0) { throw 'SdrTownControl.dll load probe failed' }
           Copy-Item README.md package/README.md
           Copy-Item CHANGELOG.md package/CHANGELOG.md
           Copy-Item docs package/docs -Recurse
@@ -58,6 +65,7 @@ jobs:
             townVersion = '0.2.125-experimental'
             executableSha256 = (Get-FileHash package/FUBAR.exe).Hash.ToLowerInvariant()
             controlDllSha256 = (Get-FileHash package/SdrTownControl.dll).Hash.ToLowerInvariant()
+            controlRuntime = @('MSVCP140.dll', 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll')
           } | ConvertTo-Json | Set-Content package/build-info.json -Encoding utf8
           Compress-Archive -Path package/* -DestinationPath FUBAR-Windows-x64.zip -Force
           $hash = (Get-FileHash FUBAR-Windows-x64.zip).Hash.ToLowerInvariant()

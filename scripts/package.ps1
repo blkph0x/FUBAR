@@ -1,7 +1,8 @@
 param(
   [ValidateSet("Debug", "Release")]
   [string]$Configuration = "Release",
-  [string]$SdrTownControlDll = ""
+  [string]$SdrTownControlDll = "",
+  [string]$SdrTownRuntimeDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -31,6 +32,23 @@ New-Item -ItemType Directory -Force $dist | Out-Null
 Copy-Item -LiteralPath $exe -Destination (Join-Path $dist "FUBAR.exe") -Force
 if ($controlDll) {
   Copy-Item -LiteralPath $controlDll -Destination (Join-Path $dist "SdrTownControl.dll") -Force
+  $runtimeRoots = @()
+  if (-not [string]::IsNullOrWhiteSpace($SdrTownRuntimeDir)) { $runtimeRoots += $SdrTownRuntimeDir }
+  if (-not [string]::IsNullOrWhiteSpace($env:SDRTOWN_RUNTIME_DIR)) { $runtimeRoots += $env:SDRTOWN_RUNTIME_DIR }
+  $runtimeRoots += (Split-Path -Parent $controlDll)
+  $runtimeRoots = $runtimeRoots | Where-Object { Test-Path $_ } | Select-Object -Unique
+  foreach ($runtimeName in @("MSVCP140.dll", "VCRUNTIME140.dll", "VCRUNTIME140_1.dll")) {
+    $runtimeFile = $runtimeRoots |
+      ForEach-Object { Join-Path $_ $runtimeName } |
+      Where-Object { Test-Path $_ } |
+      Select-Object -First 1
+    if (-not $runtimeFile) {
+      throw "SdrTownControl.dll requires $runtimeName, but it was not found beside the DLL or in SdrTownRuntimeDir."
+    }
+    Copy-Item -LiteralPath $runtimeFile -Destination (Join-Path $dist $runtimeName) -Force
+  }
+  & (Join-Path $PSScriptRoot "test_control_dll.ps1") -Path (Join-Path $dist "SdrTownControl.dll")
+  if ($LASTEXITCODE -ne 0) { throw "SdrTownControl.dll load probe failed" }
 } else {
   Write-Warning "SdrTownControl.dll was not found. The FUBAR website will show SDR Town control unavailable until the DLL is placed beside FUBAR.exe."
 }
@@ -41,6 +59,9 @@ $zip = Join-Path $projectRoot "FUBAR-Windows-x64.zip"
 $packageFiles = @(
   (Join-Path $dist "FUBAR.exe"),
   (Join-Path $dist "SdrTownControl.dll"),
+  (Join-Path $dist "MSVCP140.dll"),
+  (Join-Path $dist "VCRUNTIME140.dll"),
+  (Join-Path $dist "VCRUNTIME140_1.dll"),
   (Join-Path $dist "README.md"),
   (Join-Path $dist "CHANGELOG.md")
 ) | Where-Object { Test-Path $_ }

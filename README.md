@@ -6,7 +6,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 
 | | |
 |---|---|
-| **Current version** | **1.1.46** |
+| **Current version** | **1.1.47** |
 | **Releases** | https://github.com/blkph0x/FUBAR/releases |
 | **Repo** | https://github.com/blkph0x/FUBAR |
 | **Pairs with** | [SDR Town](https://github.com/Blkph0x/SDR_Town) **0.2.125-experimental**. This ZIP includes the matching `SdrTownControl.dll`. |
@@ -40,6 +40,8 @@ FUBAR and [SDR Town](https://github.com/Blkph0x/SDR_Town) are separate apps that
 
 They talk over a **local-only** control link (`127.0.0.1`, default port **8765**). Visitors never connect to SDR Town directly. They use FUBAR’s website; FUBAR talks to SDR Town through `SdrTownControl.dll` when an admin enables it.
 
+The Windows package includes the bridge DLL's required Microsoft C++ runtime files. Keep `SdrTownControl.dll`, `MSVCP140.dll`, `VCRUNTIME140.dll`, and `VCRUNTIME140_1.dll` beside `FUBAR.exe`; copying only the bridge DLL produces Windows error 126 ("The specified module could not be found").
+
 ### Typical use cases
 
 | Use case | What you do | What visitors get |
@@ -66,7 +68,7 @@ They talk over a **local-only** control link (`127.0.0.1`, default port **8765**
 1. Start **SDR Town** with its local control server (default on install/portable builds; loopback only).
 2. Route audio to FUBAR (VB-CABLE is the usual path for a clean station feed).
 3. In FUBAR, enable **Public website**. Type **Now playing** for the large title visitors see.
-4. In **Tools → Settings**, turn on **SDR Town control** and choose what remote operators may change. Keep the matching `SdrTownControl.dll` beside `FUBAR.exe` (this 1.1.46 ZIP includes the Town **0.2.125-experimental** DLL).
+4. In **Tools → Settings**, turn on **SDR Town control** and choose what remote operators may change. Keep the matching `SdrTownControl.dll` beside `FUBAR.exe` (this 1.1.47 ZIP includes the Town **0.2.125-experimental** DLL and its native runtime dependencies).
 5. Open the FUBAR site from a phone or LAN PC. Live audio comes from FUBAR’s capture. Live P25 status and tune commands use the control bridge when enabled.
 
 ### Website status board

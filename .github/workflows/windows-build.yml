@@ -39,6 +39,13 @@ jobs:
           New-Item -ItemType Directory -Force package | Out-Null
           Copy-Item build/Release/FUBAR.exe package/FUBAR.exe
           Copy-Item $townDll.FullName package/SdrTownControl.dll
+          foreach ($runtimeName in @('MSVCP140.dll', 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll')) {
+            $runtime = Get-ChildItem town -Filter $runtimeName -Recurse | Select-Object -First 1
+            if (-not $runtime) { throw "Matching SDR Town runtime file was not found: $runtimeName" }
+            Copy-Item $runtime.FullName (Join-Path package $runtimeName)
+          }
+          & ./scripts/test_control_dll.ps1 -Path package/SdrTownControl.dll
+          if ($LASTEXITCODE -ne 0) { throw 'SdrTownControl.dll load probe failed' }
           Copy-Item README.md package/README.md
           Copy-Item CHANGELOG.md package/CHANGELOG.md
           Compress-Archive -Path package/* -DestinationPath FUBAR-Windows-x64.zip -Force

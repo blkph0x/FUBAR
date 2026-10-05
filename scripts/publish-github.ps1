@@ -1,7 +1,8 @@
 param(
   [string]$RepositoryName = "FUBAR",
-  [string]$Tag = "v1.1.46",
-  [string]$SdrTownControlDll = ""
+  [string]$Tag = "v1.1.47",
+  [string]$SdrTownControlDll = "",
+  [string]$SdrTownRuntimeDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,9 +19,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if ([string]::IsNullOrWhiteSpace($SdrTownControlDll)) {
-  & (Join-Path $PSScriptRoot "package.ps1") -Configuration Release
+  & (Join-Path $PSScriptRoot "package.ps1") -Configuration Release -SdrTownRuntimeDir $SdrTownRuntimeDir
 } else {
-  & (Join-Path $PSScriptRoot "package.ps1") -Configuration Release -SdrTownControlDll $SdrTownControlDll
+  & (Join-Path $PSScriptRoot "package.ps1") -Configuration Release -SdrTownControlDll $SdrTownControlDll -SdrTownRuntimeDir $SdrTownRuntimeDir
 }
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $asset)) {
   throw "Release package build failed"
