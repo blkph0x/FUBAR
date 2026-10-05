@@ -1,6 +1,6 @@
 # SDR Town workspace alignment
 
-Task T-0098, 2026-10-06. Baseline FUBAR 1.1.45 / Town 0.2.125-experimental.
+Task T-0098, 2026-10-06. Baseline FUBAR 1.1.46 / Town 0.2.125-experimental.
 
 This pass closes the release-pairing drift present in the previous 1.1.44
 package. FUBAR now consumes Town's named Inmarsat/SSTV/Satcom/Aircraft session

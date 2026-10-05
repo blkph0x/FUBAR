@@ -8,6 +8,11 @@
 - Website 1090 tuning defaults to the Town-supported 2.4 MS/s capture rate instead of requesting an unsafe fixed 20 MS/s rate.
 - Adds debugger-safe bridge instrumentation and rejects non-`/v1/` or non-GET/POST bridge requests without logging credentials or radio payloads.
 
+## 1.1.46
+
+- Adds website controls for local ADS-B start/stop and disabling internet-fed aircraft tracks, matching Town's privacy and receiver controls.
+- Keeps the selected ADS-B sample rate visible and synchronized with Town's applied rate.
+
 ## 1.1.43
 
 - Finalizes the 1.1.42 workspace alignment with the MSVC/CI portability fixes included.

@@ -279,6 +279,9 @@ R"HTML(
       <div class="satbtns" style="margin-top:8px">
         <button type="button" id="acRefreshBtn">Refresh network</button>
         <button type="button" id="acTuneBtn">Tune 1090 (needs control)</button>
+        <button type="button" id="acStopBtn">Stop 1090</button>
+        <label><input type="checkbox" id="acLocalDecode"> Local ADS-B</label>
+        <label><input type="checkbox" id="acInternetAircraft" checked> Internet aircraft</label>
         <label>IQ sample rate
           <select id="acSampleRate" title="Requested hardware sample rate for local 1090 MHz ADS-B">
             <option value="2.4">2.4 MS/s (recommended)</option>
@@ -1483,7 +1486,8 @@ function sdrSetControlsEnabled(){
   const canTune = enabled && active && !!sdrTownConfig.allowTune;
   for (const id of ['sstvReceiveBtn','sstvFinishBtn','sstvCancelBtn','sstvModeSelect','sstvRfMode',
        'satStartBtn','satStopBtn','satSkipBtn','satRecordBtn','satRefreshTleBtn','satArmSstvBtn',
-       'satDisarmBtn','satAutoTrack','satSaveCatBtn','inmStartBtn','inmStopBtn','acTuneBtn','acRefreshBtn']) {
+       'satDisarmBtn','satAutoTrack','satSaveCatBtn','inmStartBtn','inmStopBtn','acTuneBtn','acStopBtn',
+       'acRefreshBtn','acLocalDecode','acInternetAircraft']) {
     const control = document.getElementById(id);
     if(control) control.disabled = !canTune;
   }
@@ -2328,6 +2332,10 @@ async function loadAircraft(){
     const rateEl=document.getElementById('acSampleRate');
     if(rateEl && document.activeElement!==rateEl && Number.isFinite(Number(data.captureBandwidthMHz)) && data.captureBandwidthMHz>=2 && data.captureBandwidthMHz<=20)
       rateEl.value=String(data.captureBandwidthMHz);
+    const localEl=document.getElementById('acLocalDecode');
+    if(localEl && document.activeElement!==localEl) localEl.checked=!!data.localDecodeEnabled;
+    const internetEl=document.getElementById('acInternetAircraft');
+    if(internetEl && document.activeElement!==internetEl) internetEl.checked=data.networkEnabled!==false;
     if (acMap && Array.isArray(data.tracks) && data.tracks.length && !acMap._acCentered) {
       const first = data.tracks.find(t => t.lat != null && t.lon != null);
       if (first) {
@@ -2388,6 +2396,23 @@ document.getElementById('acTuneBtn').addEventListener('click', async () => {
   }
   const rate=Number(document.getElementById('acSampleRate').value||2.4);
   await postSdrTown('api/sdr-town/aircraft-map-control', {clientId: sdrControlClientId, action:'tune', captureBandwidthMHz:rate});
+});
+document.getElementById('acStopBtn').addEventListener('click', async () => {
+  await postSdrTown('api/sdr-town/aircraft-map-control', {clientId: sdrControlClientId, action:'stop'});
+  await loadAircraft();
+});
+document.getElementById('acLocalDecode').addEventListener('change', async e => {
+  await postSdrTown('api/sdr-town/aircraft-map-control', {clientId: sdrControlClientId, action:'local', enabled:!!e.target.checked});
+  await loadAircraft();
+});
+document.getElementById('acInternetAircraft').addEventListener('change', async e => {
+  if(e.target.checked) {
+    e.target.checked=false;
+    document.getElementById('acStatus').textContent='Re-enable Internet aircraft in SDR Town; FUBAR can disable it and clear network tracks.';
+    return;
+  }
+  await postSdrTown('api/sdr-town/aircraft-map-control', {clientId: sdrControlClientId, action:'network-off'});
+  await loadAircraft();
 });
 document.querySelectorAll('#siteTabs button').forEach(btn => {
   btn.addEventListener('click', () => {
