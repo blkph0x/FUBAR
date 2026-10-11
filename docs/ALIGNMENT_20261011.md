@@ -14,6 +14,11 @@ process tests so an audio-less runner proves the repair rather than bypassing it
 Local repaired Release build and 4/4 CTest pass (1.21 s). Initial new fixture
 used port 0, correctly rejected by the CLI; it now reserves a valid free port.
 Release 1.1.49 supersedes the failed, unpublished 1.1.48 tag without rewriting it.
+After repair, clean-runner 38113899752 proves a second failure: the 2.5 s bridge
+deadline expired on cold satellite session construction, but a direct native
+GET 1.063 s later confirmed pair_a existed. Generic workspace calls now have
+a bounded 10 s budget and content-free duration/error diagnostics. No automatic
+mutation retries; ordinary health/status and dedicated tuning/P25 budgets stay.
 Town decision DEC-0219 governs this pass. Accepted P25 DSP is unchanged here.
 
 Confirmed defects: 0.2.125 DLL pin, hardcoded ISS downlink, named Inmarsat

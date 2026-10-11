@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -396,10 +397,23 @@ std::string SdrTownBridge::request(const SdrTownBridgeConfig& config,
   }
   char response[65536]{};
   auto cfg = controlConfig(config);
+  // Clean-runner 38113899752: cold native workspace construction completed
+  // after the old 2.5 s deadline (confirmed by a subsequent native session GET).
+  // Give workspace operations a bounded 10 s budget; never retry a mutation.
+  // Health/status polling and the dedicated radio/P25 calls retain their budget.
+  cfg.timeoutMs = 10000;
+  const auto started = std::chrono::steady_clock::now();
   const int result = reinterpret_cast<RequestFn>(fnRequest_)(
       &cfg, method.c_str(), path.c_str(), bodyJson.empty() ? "{}" : bodyJson.c_str(), response,
       sizeof(response));
   bridgeTrace("request", method, path, result, std::strlen(response));
+  const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - started).count();
+  if (elapsed >= 2500 || !okResult(result)) {
+    // No credentials, request bodies or decoded content in lifecycle diagnostics.
+    std::fprintf(stderr, "SDR Town workspace request: %s elapsedMs=%lld result=%d\n",
+                 method.c_str(), static_cast<long long>(elapsed), result);
+  }
   if (!okResult(result) && error) *error = response[0] ? response : "SDR Town request failed";
   return response;
 }

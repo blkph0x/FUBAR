@@ -44,7 +44,7 @@ def main():
             req=urllib.request.Request(base+'/api/sdr-town/'+path,
                 data=None if body is None else json.dumps(body).encode(), headers={'Content-Type':'application/json'})
             try:
-                with urllib.request.urlopen(req,timeout=8) as r: return r.status,json.load(r)
+                with urllib.request.urlopen(req,timeout=15) as r: return r.status,json.load(r)
             except urllib.error.HTTPError as e:
                 data=e.read().decode()
                 return e.code,json.loads(data) if data.startswith('{') else data
