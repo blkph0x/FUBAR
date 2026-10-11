@@ -41,3 +41,13 @@ jobs:
         with:
           name: FUBAR-Windows-x64
           path: FUBAR-Windows-x64.zip
+
+      - name: Retain paired diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paired-diagnostics
+          path: |
+            build/pair-test/*.sanitized.log
+            build/pair-test/result.json
+          if-no-files-found: ignore

@@ -1,6 +1,10 @@
 # Paired workflow alignment
 
 Status: local implementation/verification complete; public package checks pending.
+Clean-runner paired startup failed before v1.1.48 publication (Actions
+38112905743). DLL loading and native/JS tests passed. Retain sanitized process
+logs and exit codes to identify the startup failure; no gate is waived and
+there is no published 1.1.48 package. Public Town 0.2.137 pairs locally.
 Town decision DEC-0219 governs this pass. Accepted P25 DSP is unchanged here.
 
 Confirmed defects: 0.2.125 DLL pin, hardcoded ISS downlink, named Inmarsat

@@ -55,7 +55,7 @@ def main():
                     status,state=request('status')
                     if status==200 and state.get('ok'): break
                 except (OSError,ValueError): pass
-                assert f.poll() is None and t.poll() is None, 'Paired process exited'
+                assert f.poll() is None and t.poll() is None, f'Paired process exited: FUBAR={f.poll()}, Town={t.poll()}'
                 assert time.monotonic()<deadline, 'Pair did not connect'
                 time.sleep(.2)
             print('PAIR_URL='+base, flush=True)
@@ -109,6 +109,10 @@ def main():
         finally:
             for process in (f,t):
                 if process.poll() is None: process.kill(); process.wait(timeout=15)
+            for name in ('town','fubar'):
+                content=(args.output/(name+'.log')).read_text(errors='replace').replace(token,'[test-token]')
+                (args.output/(name+'.sanitized.log')).write_text(content,encoding='utf-8')
+                print(f'{name} startup/shutdown log tail:\n'+ '\n'.join(content.splitlines()[-40:]),flush=True)
     text=(args.output/'town.log').read_text(errors='replace')
     assert 'Started real Soapy streaming' not in text
     print('PASS: real paired DLL/HTTP, sessions, privacy, ownership refusal and graceful no-RF shutdown')

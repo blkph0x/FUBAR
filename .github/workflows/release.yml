@@ -61,7 +61,7 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ inputs.tag }}" FUBAR-Windows-x64.zip FUBAR-Windows-x64.zip.sha256 --title "FUBAR ${{ inputs.tag }}" --notes-file CHANGELOG.md
+        run: gh release create "${{ inputs.tag }}" FUBAR-Windows-x64.zip FUBAR-Windows-x64.zip.sha256 --title "FUBAR ${{ inputs.tag }}" --notes-file CHANGELOG.md --latest=false
 
       - name: Verify public package
         shell: pwsh
@@ -74,3 +74,13 @@ jobs:
           if ($info.sourceCommit -ne (git rev-parse HEAD).Trim()) { throw 'Source provenance mismatch' }
           & ./public/FUBAR.exe --cli --self-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Retain paired diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paired-diagnostics
+          path: |
+            build/pair-test/*.sanitized.log
+            build/pair-test/result.json
+          if-no-files-found: ignore
