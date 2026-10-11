@@ -24,6 +24,11 @@ buffer truncation: public JSON became "Invalid SDR Town response". Workspace
 requests now allocate the DLL's existing 256 KiB budget on the heap. The DLL's
 overall bounded transport limit remains; oversized maps still require future
 native pagination, not silently removing limits or copying unbounded data.
+Clean-runner 38114095528 confirms cold session open succeeds with the measured
+budget (2535 ms). It then exposed a fixture assumption: native dry-run correctly
+returns success for a resolvable placeholder, unlike this host's stale saved
+Listen identity. Match startGuiRuntimeDeviceAt's explicit dry-run contract and
+assert exact forwarded settings plus no streaming on every enumerated device.
 Town decision DEC-0219 governs this pass. Accepted P25 DSP is unchanged here.
 
 Confirmed defects: 0.2.125 DLL pin, hardcoded ISS downlink, named Inmarsat

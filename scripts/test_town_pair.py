@@ -106,9 +106,12 @@ def main():
             assert not post('inmarsat-sessions',{'sessionId':'pair_a','action':'configure','config':{'baud':99}})[1]['ok']
             assert not post('inmarsat-control',{'action':'set','baud':99})[1]['ok']
             code,tuned=post('tune',{'frequencyMHz':145.8,'mode':'NFM','bandwidthKHz':15,'squelchDb':-98})
-            # Dry-run applies monitor settings but cannot start a physical radio.
-            assert not tuned['ok'],tuned
-            assert request('status')[1]['state']['squelchDb']==-98
+            # Native dry-run acknowledges a resolvable device without opening it;
+            # a stale saved Listen identity fails with "tune failed" on a host.
+            assert tuned.get('ok') or 'tune failed' in json.dumps(tuned),tuned
+            applied=request('status')[1]['state']
+            assert applied['squelchDb']==-98 and applied['frequencyHz']==145800000
+            assert not any(d.get('streaming') for d in applied['devices']), 'Dry-run opened RF'
             assert post('tune',{'frequencyMHz':145.8,'squelchDb':-200})[0]==400
             assert post('satcom-control',{'action':'stop'})[1]['ok']
             for workflow in ('satcom','inmarsat','aircraft'):
