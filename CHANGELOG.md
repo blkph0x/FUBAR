@@ -1,6 +1,13 @@
 # Changelog
 
-## 1.1.48
+## 1.1.49
+
+- Repair debugger-confirmed audio COM cleanup crash on computers without audio
+  endpoints; interface release now precedes apartment shutdown in every exit path.
+- Includes the alignment work below. Version 1.1.48 was blocked by this
+  clean-runner failure and never published as a downloadable release.
+
+## 1.1.48 (unpublished)
 
 - Pairs with SDR Town 0.2.137, with its verified DLL, runtime files and notices.
 - Session-addressed Inmarsat maps/messages, satellite and aircraft controls;

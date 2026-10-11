@@ -29,6 +29,19 @@
 
 namespace {
 
+// The apartment must outlive every COM interface, including early-return paths.
+// CI dump 38113376195: releasing IMMDeviceCollection after CoUninitialize crashed.
+class ComApartment {
+ public:
+  ComApartment() : result_(CoInitializeEx(nullptr, COINIT_MULTITHREADED)) {}
+  ~ComApartment() { if (SUCCEEDED(result_)) CoUninitialize(); }
+  ComApartment(const ComApartment&) = delete;
+  ComApartment& operator=(const ComApartment&) = delete;
+  HRESULT result() const { return result_; }
+ private:
+  const HRESULT result_;
+};
+
 template <typename T>
 class ComPtr {
  public:
@@ -409,8 +422,8 @@ AudioEngine::~AudioEngine() {
 
 std::vector<AudioDeviceInfo> AudioEngine::enumerateInputDevices(std::wstring* error) {
   std::vector<AudioDeviceInfo> devices;
-  const HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-  const bool uninitialize = SUCCEEDED(comResult);
+  const ComApartment apartment;
+  const HRESULT comResult = apartment.result();
   if (FAILED(comResult) && comResult != RPC_E_CHANGED_MODE) {
     if (error) *error = hresultText(L"COM initialization", comResult);
     return devices;
@@ -422,7 +435,6 @@ std::vector<AudioDeviceInfo> AudioEngine::enumerateInputDevices(std::wstring* er
                                     reinterpret_cast<void**>(enumerator.put()));
   if (FAILED(result)) {
     if (error) *error = hresultText(L"Audio device enumerator", result);
-    if (uninitialize) CoUninitialize();
     return devices;
   }
 
@@ -464,7 +476,6 @@ std::vector<AudioDeviceInfo> AudioEngine::enumerateInputDevices(std::wstring* er
     *error = hresultText(L"Input device enumeration", result);
   }
 
-  if (uninitialize) CoUninitialize();
   return devices;
 }
 
@@ -534,8 +545,8 @@ void AudioEngine::setStatus(const std::wstring& status) {
 }
 
 void AudioEngine::captureThread() {
-  const HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-  const bool uninitialize = SUCCEEDED(comResult);
+  const ComApartment apartment;
+  const HRESULT comResult = apartment.result();
   if (FAILED(comResult) && comResult != RPC_E_CHANGED_MODE) {
     setStatus(hresultText(L"COM initialization", comResult));
     return;
@@ -547,7 +558,6 @@ void AudioEngine::captureThread() {
                                     reinterpret_cast<void**>(enumerator.put()));
   if (FAILED(result)) {
     setStatus(hresultText(L"Audio device enumerator", result));
-    if (uninitialize) CoUninitialize();
     return;
   }
 
@@ -559,7 +569,6 @@ void AudioEngine::captureThread() {
   }
   if (FAILED(result)) {
     setStatus(hresultText(L"Opening input device", result));
-    if (uninitialize) CoUninitialize();
     return;
   }
 
@@ -568,7 +577,6 @@ void AudioEngine::captureThread() {
                             reinterpret_cast<void**>(client.put()));
   if (FAILED(result)) {
     setStatus(hresultText(L"WASAPI client activation", result));
-    if (uninitialize) CoUninitialize();
     return;
   }
 
@@ -576,7 +584,6 @@ void AudioEngine::captureThread() {
   result = client->GetMixFormat(&mixFormat);
   if (FAILED(result) || !mixFormat) {
     setStatus(hresultText(L"Reading input format", result));
-    if (uninitialize) CoUninitialize();
     return;
   }
 
@@ -584,7 +591,6 @@ void AudioEngine::captureThread() {
   if (!decoder.valid()) {
     setStatus(L"Unsupported input format: " + decoder.description());
     CoTaskMemFree(mixFormat);
-    if (uninitialize) CoUninitialize();
     return;
   }
 
@@ -593,7 +599,6 @@ void AudioEngine::captureThread() {
   if (FAILED(result)) {
     setStatus(hresultText(L"Starting shared audio capture", result));
     CoTaskMemFree(mixFormat);
-    if (uninitialize) CoUninitialize();
     return;
   }
 
@@ -603,7 +608,6 @@ void AudioEngine::captureThread() {
   if (FAILED(result)) {
     setStatus(hresultText(L"Capture service", result));
     CoTaskMemFree(mixFormat);
-    if (uninitialize) CoUninitialize();
     return;
   }
 
@@ -747,7 +751,6 @@ void AudioEngine::captureThread() {
   if (FAILED(result)) {
     setStatus(hresultText(L"Audio capture start", result));
     CoTaskMemFree(mixFormat);
-    if (uninitialize) CoUninitialize();
     return;
   }
 
@@ -882,5 +885,4 @@ void AudioEngine::captureThread() {
   inputLeftDb_ = inputRightDb_ = outputLeftDb_ = outputRightDb_ = -90.0f;
   setStatus(L"Idle");
   CoTaskMemFree(mixFormat);
-  if (uninitialize) CoUninitialize();
 }

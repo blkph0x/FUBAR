@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(FUBAR VERSION 1.1.48 LANGUAGES C CXX)
+project(FUBAR VERSION 1.1.49 LANGUAGES C CXX)
 
 set(SHINE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/shine/src/lib)
 add_library(shine STATIC
@@ -69,6 +69,10 @@ set_target_properties(fubar PROPERTIES OUTPUT_NAME "FUBAR")
 enable_testing()
 add_test(NAME cli_help COMMAND fubar --cli --help)
 add_test(NAME self_test COMMAND fubar --cli --self-test)
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME startup COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_startup.py" "$<TARGET_FILE:fubar>")
+endif()
 find_program(NODE_EXECUTABLE node)
 if(NODE_EXECUTABLE)
   add_test(NAME web_ui COMMAND "${NODE_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_web_ui.cjs")

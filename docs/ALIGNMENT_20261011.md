@@ -5,6 +5,15 @@ Clean-runner paired startup failed before v1.1.48 publication (Actions
 38112905743). DLL loading and native/JS tests passed. Retain sanitized process
 logs and exit codes to identify the startup failure; no gate is waived and
 there is no published 1.1.48 package. Public Town 0.2.137 pairs locally.
+Symbolized clean-runner dump 38113376195 confirms ACCESS_VIOLATION in
+ComPtr<IMMDeviceCollection>::reset, called after CoUninitialize in
+AudioEngine::enumerateInputDevices. Use a noncopyable apartment scope created
+before interface owners, also in captureThread (same early-return defect).
+Keep real enumeration in web-only startup; add repeated enumeration/no-capture
+process tests so an audio-less runner proves the repair rather than bypassing it.
+Local repaired Release build and 4/4 CTest pass (1.21 s). Initial new fixture
+used port 0, correctly rejected by the CLI; it now reserves a valid free port.
+Release 1.1.49 supersedes the failed, unpublished 1.1.48 tag without rewriting it.
 Town decision DEC-0219 governs this pass. Accepted P25 DSP is unchanged here.
 
 Confirmed defects: 0.2.125 DLL pin, hardcoded ISS downlink, named Inmarsat

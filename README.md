@@ -6,7 +6,7 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 
 | | |
 |---|---|
-| **Current version** | **1.1.48** |
+| **Current version** | **1.1.49** |
 | **Releases** | https://github.com/blkph0x/FUBAR/releases |
 | **Repo** | https://github.com/blkph0x/FUBAR |
 | **Pairs with** | [SDR Town](https://github.com/Blkph0x/SDR_Town) **0.2.137**. This ZIP includes the matching `SdrTownControl.dll`. |
@@ -68,7 +68,7 @@ The Windows package includes the bridge DLL's required Microsoft C++ runtime fil
 1. Start **SDR Town** with its local control server (default on install/portable builds; loopback only).
 2. Route audio to FUBAR (VB-CABLE is the usual path for a clean station feed).
 3. In FUBAR, enable **Public website**. Type **Now playing** for the large title visitors see.
-4. In **Tools → Settings**, turn on **SDR Town control** and choose what remote operators may change. Keep the matching `SdrTownControl.dll` beside `FUBAR.exe` (this 1.1.48 ZIP includes the Town **0.2.137** DLL and its native runtime dependencies).
+4. In **Tools → Settings**, turn on **SDR Town control** and choose what remote operators may change. Keep the matching `SdrTownControl.dll` beside `FUBAR.exe` (this 1.1.49 ZIP includes the Town **0.2.137** DLL and its native runtime dependencies).
 5. Open the FUBAR site from a phone or LAN PC. Live audio comes from FUBAR’s capture. Live P25 status and tune commands use the control bridge when enabled.
 
 ### Website status board
@@ -79,7 +79,7 @@ The Windows package includes the bridge DLL's required Microsoft C++ runtime fil
   - parked on a monitored control channel → `Listening to NSWGRN Control`  
   - no P25 activity → line hidden
 - **UHF tones tab** (SDR Town **0.2.65+**): live CTCSS/DCS, DTMF when Repeater Control Monitor is on, plus a readable heard list
-- **SSTV tab** (Town **0.2.137** / FUBAR **1.1.48**): Automatic plus the 49 live-capable analog modes; file-only formats are not offered for RF. Select a radio/frequency and an optional named session, then Receive / Finish / Cancel. Host-configured folders save completed images automatically; web images use bounded, opaque IDs.
+- **SSTV tab** (Town **0.2.137** / FUBAR **1.1.49**): Automatic plus the 49 live-capable analog modes; file-only formats are not offered for RF. Select a radio/frequency and an optional named session, then Receive / Finish / Cancel. Host-configured folders save completed images automatically; web images use bounded, opaque IDs.
 - **Inmarsat map tab**: displays Town-owned ADS-C aircraft positions, source, age, message count and voice activity without duplicating the receiver cache. The Aircraft tab can start the Town 1090 MHz workspace with its wide-capture requirement and can disable network-fed aircraft data.
 
 ### Downloads
