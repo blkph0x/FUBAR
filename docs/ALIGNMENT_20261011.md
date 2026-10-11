@@ -19,6 +19,11 @@ deadline expired on cold satellite session construction, but a direct native
 GET 1.063 s later confirmed pair_a existed. Generic workspace calls now have
 a bounded 10 s budget and content-free duration/error diagnostics. No automatic
 mutation retries; ordinary health/status and dedicated tuning/P25 budgets stay.
+The real-DLL fragmented 90 KiB payload fixture also reproduced a 64 KiB caller
+buffer truncation: public JSON became "Invalid SDR Town response". Workspace
+requests now allocate the DLL's existing 256 KiB budget on the heap. The DLL's
+overall bounded transport limit remains; oversized maps still require future
+native pagination, not silently removing limits or copying unbounded data.
 Town decision DEC-0219 governs this pass. Accepted P25 DSP is unchanged here.
 
 Confirmed defects: 0.2.125 DLL pin, hardcoded ISS downlink, named Inmarsat

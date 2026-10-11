@@ -395,7 +395,9 @@ std::string SdrTownBridge::request(const SdrTownBridgeConfig& config,
     if (error) *error = "Update SdrTownControl.dll (0.2.68+) for this control path";
     return disabledJson("Update SdrTownControl.dll (0.2.68+) for this control path");
   }
-  char response[65536]{};
+  // Match the DLL's bounded HTTP response budget; maps/messages can exceed
+  // 64 KiB (test_bridge_payload.py). Keep this storage off the worker stack.
+  std::vector<char> response(262144);
   auto cfg = controlConfig(config);
   // Clean-runner 38113899752: cold native workspace construction completed
   // after the old 2.5 s deadline (confirmed by a subsequent native session GET).
@@ -404,9 +406,9 @@ std::string SdrTownBridge::request(const SdrTownBridgeConfig& config,
   cfg.timeoutMs = 10000;
   const auto started = std::chrono::steady_clock::now();
   const int result = reinterpret_cast<RequestFn>(fnRequest_)(
-      &cfg, method.c_str(), path.c_str(), bodyJson.empty() ? "{}" : bodyJson.c_str(), response,
-      sizeof(response));
-  bridgeTrace("request", method, path, result, std::strlen(response));
+      &cfg, method.c_str(), path.c_str(), bodyJson.empty() ? "{}" : bodyJson.c_str(), response.data(),
+      response.size());
+  bridgeTrace("request", method, path, result, std::strlen(response.data()));
   const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - started).count();
   if (elapsed >= 2500 || !okResult(result)) {
@@ -414,8 +416,8 @@ std::string SdrTownBridge::request(const SdrTownBridgeConfig& config,
     std::fprintf(stderr, "SDR Town workspace request: %s elapsedMs=%lld result=%d\n",
                  method.c_str(), static_cast<long long>(elapsed), result);
   }
-  if (!okResult(result) && error) *error = response[0] ? response : "SDR Town request failed";
-  return response;
+  if (!okResult(result) && error) *error = response[0] ? response.data() : "SDR Town request failed";
+  return response.data();
 }
 
 std::string SdrTownBridge::startP25Control(const SdrTownBridgeConfig& config,

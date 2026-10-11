@@ -38,6 +38,8 @@ jobs:
         run: |
           & ./scripts/stage_town_pair.ps1 -Package package
           Copy-Item build/Release/FUBAR.exe package/FUBAR.exe
+          python scripts/test_bridge_payload.py --fubar package/FUBAR.exe --dll package/SdrTownControl.dll
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/test_town_pair.py --town town/SDR_Town.exe --fubar package/FUBAR.exe --dll package/SdrTownControl.dll --output build/pair-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item README.md package/README.md
