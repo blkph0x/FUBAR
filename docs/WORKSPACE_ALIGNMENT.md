@@ -1,5 +1,9 @@
 # SDR Town workspace alignment
 
+Historical plan below. Current implementation and measured gaps are in
+[ALIGNMENT_20261011.md](ALIGNMENT_20261011.md). The previous text overstated
+session-map and public-image isolation; DEC-0219 tests and repairs those paths.
+
 Task T-0098, 2026-10-06. Baseline FUBAR 1.1.47 / Town 0.2.125-experimental.
 
 This pass closes the release-pairing drift present in the previous 1.1.44

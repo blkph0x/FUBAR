@@ -35,6 +35,7 @@ class SdrTownBridge {
                    int audioLpfEnabled,
                    double rfGainDb,
                    double volume,
+                   double squelchDb,
                    std::string* error);
   // Change demod/mode at the current frequency (SDR Town /v1/mode). Does not retune RF.
   std::string setMode(const SdrTownBridgeConfig& config,

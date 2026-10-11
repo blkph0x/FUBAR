@@ -6,7 +6,7 @@ on:
       tag:
         description: Existing version tag to publish
         required: true
-        default: v1.1.47
+        default: v1.1.48
 
 permissions:
   contents: write
@@ -36,23 +36,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $townRelease = Invoke-RestMethod -Headers @{ 'User-Agent' = 'FUBAR-release'; 'Authorization' = "Bearer $env:GH_TOKEN" } `
-            'https://api.github.com/repos/blkph0x/SDR_Town/releases/tags/v0.2.125-experimental'
-          $townAsset = $townRelease.assets | Where-Object { $_.name -like '*win64*.zip' -and $_.name -notlike '*.sha256' } | Select-Object -First 1
-          if (-not $townAsset) { throw 'Matching SDR Town 0.2.125 release ZIP was not found.' }
-          Invoke-WebRequest -Headers @{ 'User-Agent' = 'FUBAR-release' } -Uri $townAsset.browser_download_url -OutFile town.zip
-          Expand-Archive town.zip -DestinationPath town -Force
-          $townDll = Get-ChildItem town -Filter SdrTownControl.dll -Recurse | Select-Object -First 1
-          if (-not $townDll) { throw 'Matching SdrTownControl.dll was not found in the Town release.' }
-          New-Item -ItemType Directory -Force package | Out-Null
+          & ./scripts/stage_town_pair.ps1 -Package package
           Copy-Item build/Release/FUBAR.exe package/FUBAR.exe
-          Copy-Item $townDll.FullName package/SdrTownControl.dll
-          foreach ($runtimeName in @('MSVCP140.dll', 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll')) {
-            $runtime = Get-ChildItem town -Filter $runtimeName -Recurse | Select-Object -First 1
-            if (-not $runtime) { throw "Matching SDR Town runtime file was not found: $runtimeName" }
-            Copy-Item $runtime.FullName (Join-Path package $runtimeName)
-          }
-          & ./scripts/test_control_dll.ps1 -Path package/SdrTownControl.dll
+          python scripts/test_town_pair.py --town town/SDR_Town.exe --fubar package/FUBAR.exe --dll package/SdrTownControl.dll --output build/pair-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item README.md package/README.md
           Copy-Item CHANGELOG.md package/CHANGELOG.md
           Copy-Item docs package/docs -Recurse
@@ -61,7 +48,7 @@ jobs:
             version = '${{ inputs.tag }}'
             sourceCommit = $source
             workflowRun = $env:GITHUB_RUN_ID
-            townVersion = '0.2.125-experimental'
+            townVersion = '0.2.137'
             executableSha256 = (Get-FileHash package/FUBAR.exe).Hash.ToLowerInvariant()
             controlDllSha256 = (Get-FileHash package/SdrTownControl.dll).Hash.ToLowerInvariant()
             controlRuntime = @('MSVCP140.dll', 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll')

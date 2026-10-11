@@ -17,6 +17,8 @@
 #include "fubar_net.h"
 #include "app_paths.h"
 #include "sdr_town_bridge.h"
+#include "sdr_public_boundary.h"
+#include "../third_party/nlohmann/json.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -74,7 +76,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.47 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.48 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -83,6 +85,9 @@ void printHelp() {
       << L"Options:\n"
       << L"  --cli                 Keep the terminal attached for logs and input\n"
       << L"  --web                 Enable the public capture website (default port 80)\n"
+      << L"  --web-only            Loopback-only website test, no audio capture\n"
+      << L"  --sdr-town-port N     Headless Town control; token from FUBAR_SDR_TOWN_TOKEN\n"
+      << L"  --allow-radio-control Enable headless radio permissions (lease still required)\n"
       << L"  --port N              Website TCP port, 1-65535 (default 80). Implies --web\n"
       << L"  --device N            Capture device index from --list-devices\n"
       << L"  --mode MODE           stereo, left, right, or mono\n"
@@ -111,6 +116,24 @@ ChannelMode parseMode(const std::wstring& text) {
 }
 
 int runSelfTest() {
+  SdrPublicBoundary boundary;
+  std::string boundaryError;
+  for(const char* bad : {"[]", "not json", R"({"config":{"outputDirectory":"C:/private"}})",
+                         R"({"force":true})",R"({"watch":{"channels":[{"path":"private"}]}})"})
+    if(SdrPublicBoundary::validateRequest(bad,&boundaryError))return 1;
+  if(!SdrPublicBoundary::validateRequest(R"({"clientId":"test","action":"arm","force":false})",&boundaryError))return 1;
+  const auto imagePath=std::filesystem::temp_directory_path()/L"fubar-boundary-test.png";
+  {std::ofstream image(imagePath,std::ios::binary);image << "test-only";}
+  const auto encoded=imagePath.u8string();
+  const std::string utf8(reinterpret_cast<const char*>(encoded.data()),encoded.size());
+  const auto redacted=nlohmann::json::parse(boundary.response(nlohmann::json{{"token","secret"},{"outputDirectory","private"},
+    {"images",nlohmann::json::array({{{"path",utf8},{"name","test.png"}}})}}.dump()));
+  if(redacted.contains("token") || redacted.contains("outputDirectory") || redacted["images"][0].contains("path"))return 1;
+  if(boundary.response(R"({"recentLines":["C:/private/file.log"],"position":{"latDeg":-34,"lonDeg":151}})").find("C:/private")!=std::string::npos)return 1;
+  const auto imageId=redacted["images"][0].value("imageId",std::string{});
+  if(imageId.empty() || boundary.image(imageId).empty() || !boundary.image(utf8).empty())return 1;
+  std::filesystem::remove(imagePath);
+  if(!boundary.image(imageId).empty())return 1;
   if (!testAudioSampleDecoder()) {
     std::wcerr << L"Self-test failed: audio sample decoder error\n";
     return 1;
@@ -565,6 +588,8 @@ int wmain(int argc, wchar_t** argv) {
   bool listDevices = false;
   bool selfTest = false;
   bool webEnabled = false;
+  bool webOnly = false;
+  SdrTownBridgeConfig controlConfig;
   bool publicServer = false;
   std::uint16_t webPort = 80;
   bool webPortSet = false;
@@ -618,6 +643,18 @@ int wmain(int argc, wchar_t** argv) {
         options.appendSession = true;
       } else if (argument == L"--split-stereo") {
         options.splitStereoFiles = true;
+      } else if (argument == L"--web-only") {
+        webOnly = headless = webEnabled = true;
+      } else if (argument == L"--sdr-town-port") {
+        const int port=std::stoi(next());
+        if(port<1 || port>65535)throw std::runtime_error("Invalid control port");
+        controlConfig.port=static_cast<std::uint16_t>(port);
+        controlConfig.enabled=true;
+        const char* token=std::getenv("FUBAR_SDR_TOWN_TOKEN");
+        if(!token || !*token)throw std::runtime_error("Set FUBAR_SDR_TOWN_TOKEN for headless pairing");
+        controlConfig.token=token;
+      } else if (argument == L"--allow-radio-control") {
+        controlConfig.allowTune=controlConfig.allowMode=controlConfig.allowRfGain=controlConfig.allowP25Control=true;
       } else if (argument == L"--web") {
         webEnabled = true;
       } else if (argument == L"--port") {
@@ -684,12 +721,13 @@ int wmain(int argc, wchar_t** argv) {
   FubarNetClient netClient;
   FubarNetStation station;
   if (webEnabled) {
+    website.setSdrTownControlConfig(controlConfig);
     website.setRoot(options.outputDirectory);
     website.setLiveHub(&engine.liveHub());
     website.setMaxLiveListeners(liveMaxListeners);
     website.setNowPlaying(FubarNetDirectory::sanitizeNowPlaying(
         std::string(nowPlaying.begin(), nowPlaying.end())));
-    if (!website.start(webPort)) {
+    if (!website.start(webPort, webOnly)) {
       std::wcerr << L"Website failed: " << website.lastError() << L"\n";
     } else {
       std::wcout << L"[web] " << website.lanUrl() << L"\n";
@@ -710,7 +748,7 @@ int wmain(int argc, wchar_t** argv) {
   }
 
   SetConsoleCtrlHandler(consoleHandler, TRUE);
-  engine.start(
+  if (!webOnly) engine.start(
       options,
       [](const std::wstring& status) { std::wcout << L"[status] " << status << L"\n"; },
       [](const ReplayEntry& entry) {

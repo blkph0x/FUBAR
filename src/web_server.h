@@ -36,7 +36,7 @@ class CaptureWebServer {
     return static_cast<std::uint16_t>(value);
   }
 
-  bool start(std::uint16_t port = 80);
+  bool start(std::uint16_t port = 80, bool loopbackOnly = false);
   void stop();
   bool running() const;
   std::uint16_t port() const;

@@ -38,7 +38,7 @@ function load(name) {
 }
 for(const name of ['sdrEffectiveMode','sdrHighlightMode','sdrSetControlsEnabled','sdrTownMessage',
   'sdrControlMs','sdrRenderControlSession','sdrAdoptSession','sdrPopulateP25ControlChannels',
-  'sdrSeedFields','sdrControlAction','loadSdrTownControl','postSdrTown']) load(name);
+  'sdrSeedFields','sdrControlAction','loadSdrTownControl','commandError','postSdrTown']) load(name);
 elements.sdrMode.value='WFM';
 context.sdrHighlightMode('AUTO');
 assert.equal(elements.sdrMode.value,'WFM','poll must retain owner draft');
@@ -77,6 +77,7 @@ assert.equal(context.sdrplayDraftSeeded,false);
   await context.postSdrTown('test',{});
   assert.equal(elements.commandFeedback.textContent,'Test rejection');
   assert.equal(context.sdrCommandInFlight,false,'command lock released');
+  assert.equal(context.commandError(JSON.stringify({error:'RF disabled in GUI dry-run'}),400),'RF disabled in GUI dry-run');
   context.fetch=async()=>{throw new Error('timeout');};
   await context.postSdrTown('test',{});
   assert.equal(context.sdrCommandInFlight,false);
@@ -92,12 +93,22 @@ assert.equal(context.sdrplayDraftSeeded,false);
     bindTooltip(text){this.text=text;return this;},addTo(){return this;},
     setLatLng(coords){this.coords=coords;return this;},setIcon(options){this.options=options;return this;},
     setTooltipContent(text){this.text=text;return this;}})};
-  load('aircraftMarkerIcon');load('loadInmarsatMap');
+  load('workflowSession');load('sessionView');load('aircraftMarkerIcon');load('loadInmarsatMap');
+  elements.inmSessionId.value='qa-a';
+  assert.equal(context.sessionView('inmarsat','inm','map','default'),'api/sdr-town/inmarsat-sessions?sessionId=qa-a&view=map');
+  context.fetch=async()=>({json:async()=>{elements.inmSessionId.value='qa-b';return {ok:true,positions:[{aesId:7,latDeg:1,lonDeg:2}]};}});
+  await context.loadInmarsatMap();
+  assert.equal(context.inmMarkers.size,0,'late response from old receiver must not populate the selected receiver');
+  elements.inmSessionId.value='';
   let mapData={ok:true,positions:[{aesId:74565,icaoHex:'ABC123',latDeg:1,lonDeg:2,voiceActive:true}],aircraft:[]};
   context.fetch=async()=>({json:async()=>mapData});
   await context.loadInmarsatMap();
   const marker=context.inmMarkers.get('74565');assert(marker);
   assert.match(marker.options.icon.html,/#88d6aa/,'active voice colour');
+  mapData.positions[0].groundTrackDeg=null;
+  await context.loadInmarsatMap();assert.match(marker.options.html,/unknown/,'missing heading is not north');
+  mapData.positions[0].groundTrackDeg=0;
+  await context.loadInmarsatMap();assert(!marker.options.html.includes('unknown'),'valid north heading is retained');
   mapData.positions[0].latDeg=2;
   await context.loadInmarsatMap();
   assert.equal(context.inmMarkers.get('74565'),marker,'marker must not flash on refresh');
@@ -124,6 +135,17 @@ assert.equal(context.sdrplayDraftSeeded,false);
   elements.inmChannel.value='1546100000';
   await context.loadInmarsatPlans();assert.equal(elements.inmChannel.value,'1546100000');
   assert(script.includes('if (!inmPlansCache.length) await loadInmarsatPlans();'));
+  // Stop is a pure stop; a running radio must not be reconfigured first.
+  load('postSatcom');const savedPost=context.postSdrTown;
+  const sent=[];context.postSdrTown=async(p,b)=>{sent.push({p,b});return {ok:true};};
+  context.loadSatcom=async()=>{};elements.satSessionId.value='';
+  await context.postSatcom('stop');
+  assert.deepEqual(JSON.parse(JSON.stringify(sent[0].b)),{action:'stop'});
+  sent.length=0;elements.satSessionId.value='named';
+  context.postSdrTown=async(p,b)=>{sent.push({p,b});return undefined;};
+  await context.postSatcom('start');
+  assert.equal(sent.length,1,'failed configure must not start with old settings');
+  assert.equal(sent[0].b.action,'configure');context.postSdrTown=savedPost;
   // Resume must not replace src (which resets the media position).
   context.items=[{id:'clip',name:'test.wav',started:'today',mode:'mono'}];
   context.current='';context.now=element('now');let sourceAssignments=0;

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.48
+
+- Pairs with SDR Town 0.2.137, with its verified DLL, runtime files and notices.
+- Session-addressed Inmarsat maps/messages, satellite and aircraft controls;
+  explicit radio selection, watch-list editing and native satellite profiles.
+- Live SSTV modes are capability-filtered. Images are shared through opaque
+  allowlisted IDs; arbitrary host paths and output-directory injection refused.
+- Remote actions never force another workflow off its radio. Delayed map
+  responses cannot overwrite a newly selected session. Errors are readable.
+- Real authenticated DLL/HTTP pair testing runs in build and release Actions.
+- Audio still streams the selected Windows input, not separate workflow buses.
+
 ## 1.1.47
 
 - Fixed Windows error 126 when FUBAR loads `SdrTownControl.dll`: the portable package now includes `MSVCP140.dll`, `VCRUNTIME140.dll`, and `VCRUNTIME140_1.dll` required by the bridge.

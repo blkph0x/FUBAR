@@ -227,6 +227,7 @@ std::string SdrTownBridge::tune(const SdrTownBridgeConfig& config,
                                 int audioLpfEnabled,
                                 double rfGainDb,
                                 double volume,
+                                double squelchDb,
                                 std::string* error) {
   if (!config.enabled || !config.allowTune) {
     if (error) *error = "Frequency control is disabled";
@@ -244,7 +245,7 @@ std::string SdrTownBridge::tune(const SdrTownBridgeConfig& config,
   req.lpfHz = lpfHz;
   req.audioLpfEnabled = audioLpfEnabled;
   req.rfGainDb = config.allowRfGain ? rfGainDb : NAN;
-  req.squelchDb = NAN;
+  req.squelchDb = squelchDb;
   req.startDevice = 1;
   req.p25AutoFollow = 0;
   req.force = 1;
