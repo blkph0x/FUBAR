@@ -72,6 +72,18 @@ def main():
                 for suffix in ('a','b'):
                     name='pair_'+suffix
                     code,opened=post(workflow+'-sessions',{'sessionId':name,'action':'open'})
+                    if code != 200 or not opened['ok']:
+                        # Diagnose an ambiguous bridge result without repeating a command.
+                        started=time.monotonic()
+                        probe=urllib.request.Request(f'http://127.0.0.1:{town}/v1/{workflow}/sessions',
+                            headers={'Authorization':'Bearer '+token})
+                        try:
+                            with urllib.request.urlopen(probe,timeout=15) as r:
+                                direct=json.load(r)
+                            print('NATIVE_AFTER_FAILURE',workflow,'elapsed',time.monotonic()-started,
+                                  'sessions',[s.get('sessionId') for s in direct.get('sessions',[])],flush=True)
+                        except Exception as e:
+                            print('NATIVE_AFTER_FAILURE',workflow,type(e).__name__,str(e).replace(token,'[test-token]'),flush=True)
                     assert code==200 and opened['ok'],(workflow,opened)
                 for suffix in ('a','b'):
                     name='pair_'+suffix
