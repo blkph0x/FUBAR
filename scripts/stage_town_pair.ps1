@@ -1,7 +1,7 @@
 param([string]$Package = 'package')
 $ErrorActionPreference = 'Stop'
 # DEC-0219: one immutable companion dependency for build and release jobs.
-$version = '0.2.137'
+$version = '0.2.138'
 $headers = @{ 'User-Agent' = 'FUBAR-paired-release' }
 if ($env:GH_TOKEN) { $headers.Authorization = "Bearer $env:GH_TOKEN" }
 $release = Invoke-RestMethod -Headers $headers "https://api.github.com/repos/blkph0x/SDR_Town/releases/tags/v$version"

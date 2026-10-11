@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include "../third_party/nlohmann/json.hpp"
 
 namespace {
 
@@ -229,13 +230,30 @@ std::string SdrTownBridge::tune(const SdrTownBridgeConfig& config,
                                 double rfGainDb,
                                 double volume,
                                 double squelchDb,
-                                std::string* error) {
+                                std::string* error, const std::string& deviceKey) {
   if (!config.enabled || !config.allowTune) {
     if (error) *error = "Frequency control is disabled";
     return disabledJson("frequency control is disabled");
   }
   if (!load(error)) return disabledJson(error && !error->empty() ? error->c_str() : "DLL missing");
 
+  // DEC-0221: carry the selected stable identity atomically with Tune, without
+  // changing the public DLL C struct or silently falling back to the first SDR.
+  if (!deviceKey.empty()) {
+    nlohmann::json body{{"frequencyHz",frequencyHz},{"deviceKey",deviceKey},
+                        {"startDevice",true},{"force",true}};
+    if (config.allowMode && !mode.empty()) body["mode"] = mode;
+    if (bandwidthHz > 0) body["bandwidthHz"] = bandwidthHz;
+    if (lpfHz > 0) body["lpfHz"] = lpfHz;
+    if (audioLpfEnabled >= 0) body["audioLpfEnabled"] = audioLpfEnabled != 0;
+    if (config.allowRfGain && std::isfinite(rfGainDb)) body["rfGainDb"] = rfGainDb;
+    if (std::isfinite(squelchDb)) body["squelchDb"] = squelchDb;
+    std::string failure;
+    auto response = request(config,"POST","/v1/tune",body.dump(),&failure);
+    if (!failure.empty()) { if (error) *error = failure; return response; }
+    if (std::isfinite(volume)) return setVolume(config,volume,error);
+    return response;
+  }
   // Website Take-control operators intentionally leave P25 — force analog retune/mode.
   char response[32768]{};
   auto cfg = controlConfig(config);
@@ -272,7 +290,7 @@ std::string SdrTownBridge::tune(const SdrTownBridgeConfig& config,
 
 std::string SdrTownBridge::setMode(const SdrTownBridgeConfig& config,
                                    const std::string& mode,
-                                   std::string* error) {
+                                   std::string* error, const std::string& deviceKey) {
   if (!config.enabled || !config.allowMode) {
     if (error) *error = "Mode control is disabled";
     return disabledJson("mode control is disabled");
@@ -282,6 +300,14 @@ std::string SdrTownBridge::setMode(const SdrTownBridgeConfig& config,
     return disabledJson("mode is required");
   }
   if (!load(error)) return disabledJson(error && !error->empty() ? error->c_str() : "DLL missing");
+  if (!deviceKey.empty()) {
+    if (!config.allowTune) {
+      if (error) *error = "Radio selection requires frequency control";
+      return disabledJson("Radio selection requires frequency control");
+    }
+    return request(config,"POST","/v1/mode",
+        nlohmann::json{{"mode",mode},{"deviceKey",deviceKey},{"force",true}}.dump(),error);
+  }
   if (!fnSetMode_) {
     if (error) *error = "SdrTownControl.dll does not expose mode switching";
     return disabledJson("SdrTownControl.dll does not expose mode switching");
@@ -423,12 +449,20 @@ std::string SdrTownBridge::request(const SdrTownBridgeConfig& config,
 std::string SdrTownBridge::startP25Control(const SdrTownBridgeConfig& config,
                                            double frequencyHz,
                                            bool autoFollow,
-                                           std::string* error) {
+                                           std::string* error, const std::string& deviceKey) {
   if (!config.enabled || !config.allowP25Control) {
     if (error) *error = "P25 control is disabled";
     return disabledJson("P25 control is disabled");
   }
   if (!load(error)) return disabledJson(error && !error->empty() ? error->c_str() : "DLL missing");
+  if (!deviceKey.empty()) {
+    if (!config.allowTune) {
+      if (error) *error = "Radio selection requires frequency control";
+      return disabledJson("Radio selection requires frequency control");
+    }
+    return request(config,"POST","/v1/p25/control",nlohmann::json{
+        {"frequencyHz",frequencyHz},{"autoFollow",autoFollow},{"deviceKey",deviceKey}}.dump(),error);
+  }
   char response[32768]{};
   auto cfg = controlConfig(config);
   const int result = reinterpret_cast<StartP25Fn>(fnStartP25Control_)(

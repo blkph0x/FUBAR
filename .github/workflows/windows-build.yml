@@ -34,6 +34,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/test_town_pair.py --town town/SDR_Town.exe --fubar package/FUBAR.exe --dll package/SdrTownControl.dll --output build/pair-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/test_town_pair.py --town town/SDR_Town.exe --fubar package/FUBAR.exe --dll package/SdrTownControl.dll --output build/pair-auto --automatic-pairing
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item README.md package/README.md
           Copy-Item CHANGELOG.md package/CHANGELOG.md
           Compress-Archive -Path package/* -DestinationPath FUBAR-Windows-x64.zip -Force

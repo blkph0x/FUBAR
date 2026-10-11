@@ -6,10 +6,10 @@ to run without the GUI. Both interfaces use the same WASAPI capture engine.
 
 | | |
 |---|---|
-| **Current version** | **1.1.49** |
+| **Current version** | **1.1.50** |
 | **Releases** | https://github.com/blkph0x/FUBAR/releases |
 | **Repo** | https://github.com/blkph0x/FUBAR |
-| **Pairs with** | [SDR Town](https://github.com/Blkph0x/SDR_Town) **0.2.137**. This ZIP includes the matching `SdrTownControl.dll`. |
+| **Pairs with** | [SDR Town](https://github.com/Blkph0x/SDR_Town) **0.2.138**. This ZIP includes the matching `SdrTownControl.dll`. |
 
 ## FUBAR + SDR Town
 
@@ -68,7 +68,7 @@ The Windows package includes the bridge DLL's required Microsoft C++ runtime fil
 1. Start **SDR Town** with its local control server (default on install/portable builds; loopback only).
 2. Route audio to FUBAR (VB-CABLE is the usual path for a clean station feed).
 3. In FUBAR, enable **Public website**. Type **Now playing** for the large title visitors see.
-4. In **Tools → Settings**, turn on **SDR Town control** and choose what remote operators may change. Keep the matching `SdrTownControl.dll` beside `FUBAR.exe` (this 1.1.49 ZIP includes the Town **0.2.137** DLL and its native runtime dependencies).
+4. In **Tools → Settings**, turn on **SDR Town control** and choose what remote operators may change. Keep the matching `SdrTownControl.dll` beside `FUBAR.exe` (this 1.1.50 ZIP includes the Town **0.2.138** DLL and its native runtime dependencies). Run both applications under the same Windows account for automatic authenticated pairing. On the website choose **Take control**, **Radio for tuning**, then **Tune & receive**. Missing saved radios no longer leave web users without a way to select the current device. Busy radios remain protected.
 5. Open the FUBAR site from a phone or LAN PC. Live audio comes from FUBAR’s capture. Live P25 status and tune commands use the control bridge when enabled.
 
 ### Website status board

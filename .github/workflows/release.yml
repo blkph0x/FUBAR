@@ -6,7 +6,7 @@ on:
       tag:
         description: Existing version tag to publish
         required: true
-        default: v1.1.49
+        default: v1.1.50
 
 permissions:
   contents: write
@@ -42,6 +42,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/test_town_pair.py --town town/SDR_Town.exe --fubar package/FUBAR.exe --dll package/SdrTownControl.dll --output build/pair-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/test_town_pair.py --town town/SDR_Town.exe --fubar package/FUBAR.exe --dll package/SdrTownControl.dll --output build/pair-auto --automatic-pairing
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item README.md package/README.md
           Copy-Item CHANGELOG.md package/CHANGELOG.md
           Copy-Item docs package/docs -Recurse
@@ -50,7 +52,7 @@ jobs:
             version = '${{ inputs.tag }}'
             sourceCommit = $source
             workflowRun = $env:GITHUB_RUN_ID
-            townVersion = '0.2.137'
+            townVersion = '0.2.138'
             executableSha256 = (Get-FileHash package/FUBAR.exe).Hash.ToLowerInvariant()
             controlDllSha256 = (Get-FileHash package/SdrTownControl.dll).Hash.ToLowerInvariant()
             controlRuntime = @('MSVCP140.dll', 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll')

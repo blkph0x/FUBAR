@@ -16,14 +16,15 @@ assert(script.includes('inmarsat-sessions'),'Inmarsat named-session client must 
 assert(script.includes('sstvSessionId'),'SSTV named-session client must remain wired');
 assert(script.includes("captureBandwidthMHz:rate"),'1090 tune must use the selected sample rate');
 function element(id) {
-  return {id, value:'', textContent:'', checked:true, disabled:false, hidden:false,
+  return {id, value:'', textContent:'', checked:true, disabled:false, hidden:false, dataset:{},
+    replaceChildren(){this.options=[];this.value='';},appendChild(o){this.options.push(o);},
     options:['AUTO','NFM','WFM','AM'].map(value=>({value})),
     classList:{toggle(){},add(){},remove(){}}};
 }
 const elements = Object.fromEntries(ids.map(id=>[id,element(id)]));
 const modes=['AUTO','NFM','WFM','P25'].map(mode=>({...element(mode),getAttribute:()=>mode}));
 const context=vm.createContext({console, AbortSignal, Date, Map, Set,
-  document:{getElementById:id=>elements[id],querySelectorAll:()=>modes,activeElement:null},
+  document:{getElementById:id=>elements[id],querySelectorAll:()=>modes,activeElement:null,createElement:()=>element('new')},
   sdrTownConfig:{enabled:true,allowTune:true,allowMode:true,allowP25Control:true,allowRfGain:true},
   sdrTownConnected:true,sdrControlSession:{canControl:true,extensionsUsed:0,maxExtensions:2},
   sdrCommandInFlight:false, sdrTownLiveState:{}, sdrControlSeededForLease:false,
@@ -38,7 +39,20 @@ function load(name) {
 }
 for(const name of ['sdrEffectiveMode','sdrHighlightMode','sdrSetControlsEnabled','sdrTownMessage',
   'sdrControlMs','sdrRenderControlSession','sdrAdoptSession','sdrPopulateP25ControlChannels',
-  'sdrSeedFields','sdrControlAction','loadSdrTownControl','commandError','postSdrTown']) load(name);
+  'populateWorkflowDevices','sdrRadioSelection','sdrSeedFields','sdrControlAction','loadSdrTownControl','commandError','postSdrTown']) load(name);
+context.sdrTownLiveState={capabilities:{selectListenDevice:true}};
+context.sdrSeedFields({activeDeviceKey:'radio-one',devices:[{stableKey:'radio-one',label:'First'}]});
+assert.equal(elements.sdrDevice.value,'radio-one');
+elements.sdrDevice.value='radio-two';
+context.sdrSeedFields({activeDeviceKey:'radio-one',devices:[{stableKey:'radio-one',label:'First'},{stableKey:'radio-two',label:'Second'}]});
+assert.equal(elements.sdrDevice.value,'radio-two','poll must retain operator radio choice');
+assert.equal(context.sdrRadioSelection().deviceKey,'radio-two');
+context.populateWorkflowDevices([{stableKey:'radio-one',label:'First'}]);
+assert.equal(elements.sdrDevice.value,'radio-two','unplug must not silently select another radio');
+assert.equal(elements.sdrDevice.options.at(-1).textContent,'Unavailable selected radio');
+context.sdrTownLiveState=null;
+assert.equal(context.sdrRadioSelection().deviceKey,undefined,'older server must not silently ignore keyed tuning');
+context.sdrTownLiveState={capabilities:{selectListenDevice:true}};
 elements.sdrMode.value='WFM';
 context.sdrHighlightMode('AUTO');
 assert.equal(elements.sdrMode.value,'WFM','poll must retain owner draft');

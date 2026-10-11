@@ -347,6 +347,7 @@ R"HTML(
       <p class="modehint" id="sdrModeHint">Connecting...</p>
     </div>
     <div class="sdrgrid">
+      <div><label for="sdrDevice">Radio for tuning</label><select id="sdrDevice"><option value="">Select radio</option></select><small id="sdrDeviceStatus"></small></div>
       <div><label for="sdrFreq">Frequency MHz</label><input id="sdrFreq" inputmode="decimal" value="420.35000" placeholder="e.g. 7.10000 or 95.70000" title="0.1–6000 MHz. Take control, type the frequency, then Tune."></div>
       <div><label for="sdrMode">Tune mode</label><select id="sdrMode"><option>AUTO</option><option>NFM</option><option>WFM</option><option>AM</option><option>USB</option><option>LSB</option><option>CW</option><option>P25</option></select></div>
       <div><label for="sdrBw">Bandwidth kHz</label><input id="sdrBw" inputmode="decimal" placeholder="auto"></div>
@@ -1358,6 +1359,7 @@ function renderDecodePanels(state){
   const sessionSstv = (sstvRoot.sessions||[]).find(x=>x.sessionId===selectedSstv);
   const sstv = selectedSstv ? Object.assign({},sstvRoot,{images:[],status:'Session not open',summary:'Session '+selectedSstv},sessionSstv||{}) : sstvRoot;
   populateWorkflowDevices(s.devices||[]);
+  document.getElementById('sdrDeviceStatus').textContent = s.listenDeviceError || '';
   const rdsSummary = document.getElementById('rdsSummary');
   const rdsMeta = document.getElementById('rdsMeta');
   const tonesSummary = document.getElementById('tonesSummary');
@@ -1494,6 +1496,7 @@ function sdrSetControlsEnabled(){
   const canP25 = enabled && active && !!sdrTownConfig.allowP25Control;
   const canSdrplay = enabled && active && (!!sdrTownConfig.allowTune || !!sdrTownConfig.allowRfGain);
   document.getElementById('sdrFreq').disabled = !enabled || !active || !sdrTownConfig.allowTune;
+  document.getElementById('sdrDevice').disabled = !enabled || !active || !sdrTownConfig.allowTune || !sdrTownLiveState?.capabilities?.selectListenDevice;
   document.getElementById('sdrMode').disabled = !canMode;
   document.getElementById('sdrBw').disabled = !enabled || !active || !sdrTownConfig.allowTune;
   document.getElementById('sdrLpfEnabled').disabled = !enabled || !active || !sdrTownConfig.allowTune;
@@ -1704,13 +1707,21 @@ async function sdrControlAction(action){
   }
 }
 function sdrSeedFields(state){
+  populateWorkflowDevices((state||{}).devices||[]);
   const active = !!(sdrControlSession && sdrControlSession.canControl);
   if (active && sdrControlSeededForLease) return;
-  const focused = document.activeElement && ['sdrFreq','sdrMode','sdrBw','sdrLpf','sdrGain','sdrVolume','sdrDirectSamp','sdrP25Freq','sdrP25Known'].includes(document.activeElement.id);
+  const focused = document.activeElement && ['sdrDevice','sdrFreq','sdrMode','sdrBw','sdrLpf','sdrGain','sdrVolume','sdrDirectSamp','sdrP25Freq','sdrP25Known'].includes(document.activeElement.id);
   // Never overwrite while the operator is typing — otherwise HF entries like 7 MHz
   // snap back to the live status frequency (often 100 MHz) every poll.
   if (focused) return;
   const s = state || {};
+  const radio=document.getElementById('sdrDevice');
+  const selectedKey=s.activeDeviceKey || s.listenDeviceKey || '';
+  if(selectedKey && !Array.from(radio.options).some(o=>o.value===selectedKey)){
+    const option=document.createElement('option');option.value=selectedKey;
+    option.textContent='Unavailable saved radio';radio.appendChild(option);
+  }
+  radio.value=selectedKey;
   if (s.frequencyMHz) document.getElementById('sdrFreq').value = Number(s.frequencyMHz).toFixed(5);
   if (s.mode && sdrTownConfig.allowMode) document.getElementById('sdrMode').value = s.mode;
   if (s.bandwidthHz) document.getElementById('sdrBw').value = Number(s.bandwidthHz / 1000).toFixed(1);
@@ -1902,7 +1913,7 @@ document.getElementById('sdrTuneBtn').addEventListener('click', () => {
      (volumeText && (Number(volumeText)<0 || Number(volumeText)>100))) {
     sdrTownMessage('Invalid range: bandwidth and cutoff must be positive, volume 0-100%.'); return;
   }
-  const payload = {frequencyMHz, mode};
+  const payload = {frequencyMHz, mode, ...sdrRadioSelection()};
   if(squelchText && (Number(squelchText)<-160 || Number(squelchText)>60)){
     sdrTownMessage('Squelch must be between -160 and 60 dBFS.');return;
   }
@@ -1920,7 +1931,7 @@ document.getElementById('sdrFreq').addEventListener('keydown', e=>{
 document.getElementById('sdrP25Btn').addEventListener('click', () => {
   const p25Text = document.getElementById('sdrP25Freq').value.trim() || document.getElementById('sdrP25Known').value || document.getElementById('sdrFreq').value;
   const frequencyMHz = Number(p25Text);
-  postSdrTown('api/sdr-town/p25-control', {frequencyMHz, autoFollow:true});
+  postSdrTown('api/sdr-town/p25-control', {frequencyMHz, autoFollow:true, ...sdrRadioSelection()});
 });
 async function sdrApplyMode(mode){
   mode = String(mode || '').toUpperCase();
@@ -1957,7 +1968,7 @@ async function sdrApplyMode(mode){
       sdrTownMessage('Enter a P25 control-channel frequency first, then tap P25.');
       return;
     }
-    await postSdrTown('api/sdr-town/p25-control', {frequencyMHz, autoFollow:true});
+    await postSdrTown('api/sdr-town/p25-control', {frequencyMHz, autoFollow:true, ...sdrRadioSelection()});
     return;
   }
   if (!sdrTownConfig.allowMode) {
@@ -1965,7 +1976,7 @@ async function sdrApplyMode(mode){
     sdrTownMessage('Mode switching is disabled by the FUBAR admin.');
     return;
   }
-  await postSdrTown('api/sdr-town/mode', {mode});
+  await postSdrTown('api/sdr-town/mode', {mode, ...sdrRadioSelection()});
 }
 document.querySelectorAll('.sdrModeAction').forEach(btn => {
   btn.addEventListener('click', () => sdrApplyMode(btn.getAttribute('data-set-mode')));
@@ -2243,7 +2254,7 @@ function sessionView(workflow,prefix,view,fallback){
   return id ? 'api/sdr-town/'+workflow+'-sessions?sessionId='+encodeURIComponent(id)+'&view='+view : fallback;
 }
 function populateWorkflowDevices(devices){
-  for(const prefix of ['sstv','sat','inm','ac']){
+  for(const prefix of ['sdr','sstv','sat','inm','ac']){
     const select=document.getElementById(prefix+'Device');
     const previous=select.value;
     const entries=devices.filter(d=>d.stableKey).map(d=>({value:d.stableKey,label:d.label}));
@@ -2252,11 +2263,15 @@ function populateWorkflowDevices(devices){
     if(select.dataset.signature===signature)continue;
     select.dataset.signature=signature;
     select.replaceChildren();
-    for(const d of [{value:'',label:prefix==='sstv'?'Receiver tap':'Assigned radio'},...entries]){
+    for(const d of [{value:'',label:prefix==='sdr'?'Select radio':prefix==='sstv'?'Receiver tap':'Assigned radio'},...entries]){
       const o=document.createElement('option');o.value=d.value;o.textContent=d.label;select.appendChild(o);
     }
     select.value=previous;
   }
+}
+function sdrRadioSelection(){
+  const key=document.getElementById('sdrDevice').value;
+  return key && sdrTownConfig.allowTune && sdrTownLiveState?.capabilities?.selectListenDevice ? {deviceKey:key} : {};
 }
 async function workflowAction(workflow,prefix,action){
   try{
@@ -3788,12 +3803,23 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
   path = urlDecode(path);
 
   std::string sessionQuery;
+  std::string radioDeviceKey;
   if (path.rfind("/api/sdr-town/",0)==0) {
     if (method=="POST") {
       std::string error;
       if (!SdrPublicBoundary::validateRequest(body,&error)) {
         sendResponse(client,400,"Bad Request","application/json",nlohmann::json{{"ok",false},{"error",error}}.dump(),kCors);
         return;
+      }
+      if(path=="/api/sdr-town/tune" || path=="/api/sdr-town/mode" || path=="/api/sdr-town/p25-control") {
+        const auto command=nlohmann::json::parse(body);
+        if(command.contains("deviceKey")) {
+          radioDeviceKey=command["deviceKey"].get<std::string>();
+          if(radioDeviceKey.empty()) {
+            sendResponse(client,400,"Bad Request","application/json",R"({"ok":false,"error":"Select an available radio"})",kCors);
+            return;
+          }
+        }
       }
     }
     if (method=="GET" && path.ends_with("-sessions") && !queryString.empty()) {
@@ -4155,7 +4181,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     SdrTownBridge bridge;
     const std::string response = bridge.tune(cfg, hz, mode, bwK > 0.0 ? bwK * 1000.0 : 0.0,
                                              lpfK > 0.0 ? lpfK * 1000.0 : 0.0,
-                                             audioLpfEnabled, rfGain, volume, squelch, &error);
+                                             audioLpfEnabled, rfGain, volume, squelch, &error, radioDeviceKey);
     sendSdrResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json", response, kCors);
     return;
@@ -4170,7 +4196,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     const std::string mode = FubarNetDirectory::jsonGetString(body, "mode");
     std::string error;
     SdrTownBridge bridge;
-    const std::string response = bridge.setMode(cfg, mode, &error);
+    const std::string response = bridge.setMode(cfg, mode, &error, radioDeviceKey);
     sendSdrResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json", response, kCors);
     return;
@@ -4247,7 +4273,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     const bool autoFollow = FubarNetDirectory::jsonGetBool(body, "autoFollow", true);
     std::string error;
     SdrTownBridge bridge;
-    const std::string response = bridge.startP25Control(cfg, hz, autoFollow, &error);
+    const std::string response = bridge.startP25Control(cfg, hz, autoFollow, &error, radioDeviceKey);
     sendSdrResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json", response, kCors);
     return;

@@ -36,11 +36,11 @@ class SdrTownBridge {
                    double rfGainDb,
                    double volume,
                    double squelchDb,
-                   std::string* error);
+                   std::string* error, const std::string& deviceKey = {});
   // Change demod/mode at the current frequency (SDR Town /v1/mode). Does not retune RF.
   std::string setMode(const SdrTownBridgeConfig& config,
                       const std::string& mode,
-                      std::string* error);
+                      std::string* error, const std::string& deviceKey = {});
   std::string setRfGain(const SdrTownBridgeConfig& config, double rfGainDb, std::string* error);
   std::string setVolume(const SdrTownBridgeConfig& config, double volume, std::string* error);
   std::string setDirectSampling(const SdrTownBridgeConfig& config, int mode, std::string* error);
@@ -57,7 +57,7 @@ class SdrTownBridge {
   std::string startP25Control(const SdrTownBridgeConfig& config,
                               double frequencyHz,
                               bool autoFollow,
-                              std::string* error);
+                              std::string* error, const std::string& deviceKey = {});
 
  private:
   bool load(std::string* error);

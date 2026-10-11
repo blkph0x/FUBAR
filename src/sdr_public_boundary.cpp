@@ -26,6 +26,8 @@ bool SdrPublicBoundary::validateRequest(const std::string& text, std::string* er
   const auto j=json::parse(text,nullptr,false);
   if(!j.is_object()) return fail("JSON object required");
   if(j.contains("clientId") && !j["clientId"].is_string()) return fail("Invalid client ID");
+  if(j.contains("deviceKey") && (!j["deviceKey"].is_string() || j["deviceKey"].get_ref<const std::string&>().size()>512))
+    return fail("Invalid radio identity");
   std::function<bool(const json&,int)> safe=[&](const json& value,int depth){
     if(depth>12)return false;
     if(value.is_object()) for(auto it=value.begin();it!=value.end();++it) {

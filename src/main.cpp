@@ -76,7 +76,7 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 
 void printHelp() {
   std::wcout
-      << L"FUBAR 1.1.49 - VOX audio monitor and recorder\n\n"
+      << L"FUBAR 1.1.50 - VOX audio monitor and recorder\n\n"
       << L"Usage:\n"
       << L"  FUBAR.exe                                  Open GUI without a console\n"
       << L"  FUBAR.exe --cli --list-devices             List capture devices\n"
@@ -651,8 +651,8 @@ int wmain(int argc, wchar_t** argv) {
         controlConfig.port=static_cast<std::uint16_t>(port);
         controlConfig.enabled=true;
         const char* token=std::getenv("FUBAR_SDR_TOWN_TOKEN");
-        if(!token || !*token)throw std::runtime_error("Set FUBAR_SDR_TOWN_TOKEN for headless pairing");
-        controlConfig.token=token;
+        // With no override, the packaged DLL uses protected same-user pairing.
+        if(token && *token) controlConfig.token=token;
       } else if (argument == L"--allow-radio-control") {
         controlConfig.allowTune=controlConfig.allowMode=controlConfig.allowRfGain=controlConfig.allowP25Control=true;
       } else if (argument == L"--web") {

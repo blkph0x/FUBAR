@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.50
+
+- Add primary stable-radio selection to Tune, mode and Monitor P25 requests.
+- Preserve radio drafts on status polling; missing devices require explicit recovery.
+- Pair with Town 0.2.138 and its authenticated, DPAPI-protected same-user DLL pairing.
+- Test real keyed requests, rejection without setting changes, default pairing,
+  unauthenticated refusal and existing web control-session boundaries in CI.
+- No P25 decoder, vocoder or audio-buffer changes.
+
 ## 1.1.49
 
 - Repair debugger-confirmed audio COM cleanup crash on computers without audio
