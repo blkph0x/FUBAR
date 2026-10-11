@@ -22,4 +22,15 @@ Logs/screenshots in ignored build/pair-radio-auto and build/live-radio-test.
 
 No vocoder/decoder/audio-path edits. Named sessions and reserved/busy radios
 remain protected. A radio change during primary P25 requires stopping it first.
-1.1.50 pins the matching0.2.138 DLL. Actions/public-package verification pending.
+1.1.50 pins the matching0.2.138 DLL. Main/tag Actions38132803982/38132806304
+and release38132807766 PASS. Sourcec60f99227d9d84bce27eaf4be6752dc1100fce15.
+Public Latest https://github.com/blkph0x/FUBAR/releases/tag/v1.1.50.
+ZIP SHA256 da420fc9736c396de5bb4a8d88901b598f0bf38461fab242fcbfecca717eadf4;
+EXE bda77484719cbad6c695c7e655708c71a193494fe54078823d6e35dc49301fa4.
+Downloaded binary hashes/provenance, self-test and real paired automatic-auth
+GUI/DLL tests PASS. Town0.2.138 also Latest, sourcefd000db, Actions38129155696.
+Bundled DLL SHA256343d94d85c79b40c41fc68ccae136bc4ba2a5c6fd1e53fddf899ff2f54d54e7d
+is identical to its public standalone and Town-package copies. Evidence under
+build/public-1.1.50. Downloaded-pair explicit-token test and physical RTL
+98.1/98.2/98.1MHz web tuning also PASS (real hardware, normal shutdown).
+No physical SDRplay or new P25 audio-quality claim.
