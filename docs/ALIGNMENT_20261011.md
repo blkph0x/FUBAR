@@ -1,6 +1,16 @@
 # Paired workflow alignment
 
-Status: local implementation/verification complete; public package checks pending.
+Status: published as 1.1.49, paired with Town 0.2.137; both Latest.
+Release source 2087a8a4b476001d4a3edb6f28780fd818e0a0c5, release Actions
+38114493140 and Windows Actions 38114297986/38114488968 all PASS.
+Public ZIP SHA256 f8a4a3a16e0f12cfbffd01739d7053d70e8d9b4477f6cbf44e1792601046c166.
+Downloaded executable self-test, startup, real-DLL 90 KiB fixture and the full
+public-to-public Town/DLL/FUBAR session test pass; both processes exit 0.
+DLL SHA256 a3166ce8695e6326be248944d9e6d9ae290f60a3152be2f470245f4234125d20
+matches Town's published module exactly. Source/notices/rebuild kit included.
+
+### Failure investigation history
+
 Clean-runner paired startup failed before v1.1.48 publication (Actions
 38112905743). DLL loading and native/JS tests passed. Retain sanitized process
 logs and exit codes to identify the startup failure; no gate is waived and
