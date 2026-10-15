@@ -1,11 +1,12 @@
 # Companion Hardening: FUBAR 1.1.52
 
-Status: source-qualified, awaiting FUBAR Actions/public qualification. Parent decision DEC-0223; Town system/UX audit
+Status: public-package-qualified. Parent decision DEC-0223; Town system/UX audit
 F06/F07. Town owns native transport, snapshot cache and receiver lifecycle.
 FUBAR owns bounded admission, bridge validation and production-browser consumption.
-The parent authorized scoped commit/push and FUBAR publication after Town's public
-release verification. No public-service configuration, RF or DSP changes are made.
-Latest promotion remains a separate gate requiring explicit parent approval.
+Scoped source commit/push and FUBAR publication completed after Town's public
+release verification. No public-service configuration, RF or DSP changes were made.
+Published assets/tags are not replaced by this docs-only evidence update on main.
+The parent promoted both verified releases to Latest after the public paired proof.
 Historical evidence in ALIGNMENT_20261011.md is not rewritten.
 
 ## Control Admission
@@ -73,6 +74,47 @@ or admission state. Rejection styling follows failure, not error-message wording
 
 ## Tests And Evidence
 
+### Public 1.1.52 Qualification
+
+[FUBAR v1.1.52](https://github.com/blkph0x/FUBAR/releases/tag/v1.1.52) is built from
+`2b419ec61c538b6693aa11b6efd178dff14df5f9`. Release Actions 38733569638 and both
+Windows build runs 38733568815/38733569167 passed. An anonymous download of the
+public package was checked against its sidecar and GitHub asset digest. Embedded
+build-info.json and town-pair.json match the exact FUBAR/Town source commits,
+release runs, versions and immutable Town ZIP pin. All 84 corresponding-source
+files match a fresh tagged Windows Git export byte-for-byte, including expected
+Git CRLF conversion. The EXE self-test/version and DLL/runtime inventory passed.
+
+Exact public SHA256 values:
+
+- FUBAR ZIP: `2d4653cb75617a5ddb34cf69ccbc9448e695586efa04fbceb8966e4de8fd2f66`
+- FUBAR EXE: `18b43fa004ab4c1caafaa7a3e4d91d660b9f67b059645fd7af09ff2eae92ad0c`
+- Town EXE: `2b89048a97202665e61d3e83a3fc5751df26294878a94190a1239fab720bbfb8`
+- Control DLL: `3cb79fc1d46f8119700b22a66ab4901705b6c39fe93e35a86605cb8c642013ba`
+
+Public-package evidence root:
+`D:\FUBAR-ReleaseQA\1.1.52\public-run38733569638`.
+The ZIP is FUBAR-Windows-x64.zip and extracted binaries are under package/.
+The public Town EXE is retained at
+`D:\FUBAR-ReleaseQA\1.1.51\stage-precommit\town\SDR_Town.exe` with the hash above.
+
+- pair-180/result.json: actual public Town/FUBAR, 180 seconds, production browser
+  at 360/390/1280, Town PID 51676 and FUBAR PID 51180, both normal exit zero.
+- pair-auto/result.json: default protected automatic pairing without supplied
+  tokens, 60 seconds, Town PID 25784 and FUBAR PID 52752, both normal exit zero.
+- hardening/result.json: actual public EXE/DLL, bounded admission/errors, 512-row
+  paging, delayed response ordering, compact POST/legacy 413 readback and browser
+  matrix, FUBAR PID 51576, normal exit zero.
+
+public-proof.json combines these results with before/after hashes, binary paths,
+source Actions and confirmation that all five exact QA PIDs are absent.
+verification.json contains detailed provenance/runtime hashes; release-metadata.json,
+source-actions.json, ci-diagnostics/, browser logs, sanitized logs and screenshots
+are retained alongside it. No RF tune, operator FUBAR GUI launch or public-service
+change was made. The parent then promoted FUBAR 1.1.52 and Town 0.2.139 to Latest;
+anonymous GitHub Latest API checks confirmed both versions. The companion did not
+alter published assets or tags. Promotion evidence is included in public-proof.json.
+
 ### 1.1.52 CI Regression Repair
 
 Release run 38730716546 at b291d22a3d58891a7e2b35b92ed48d925c115926
@@ -100,7 +142,8 @@ native requests. The explicit held call must remain pending until gate release.
 Full outer-function tests cover late errors, A-B-A status, stale messages after a
 new map error, direct-map supersession, bootstrap and continuation cancellation.
 No timeout increase or weaker error assertion is used.
-The Town pin remains unchanged. Hosted 1.1.52/public qualification is pending.
+The Town pin remains unchanged. Hosted/public qualification subsequently passed
+as recorded above.
 
 After the outer-pipeline repair, Release/main CTest 4/4 and production-object
 CTest 2/2 passed. The final real-DLL browser matrix passed and FUBAR PID 49480
@@ -194,8 +237,10 @@ sanitized diagnostics/screenshots. Local tests do not establish hosted CI succes
   including DLL loading and provenance checks. A simulated changed ZIP digest
   was rejected before extraction. The public Town DLL loopback/browser matrix
   passed with exit zero under `D:\FUBAR-ReleaseQA\1.1.51\public-town-hardening`.
-- The final native build and actual no-RF pair passed locally. Hosted CI and
-  source-matched public package verification are still required for publication.
+- Hosted 1.1.52 release and both source builds passed. Source-matched public ZIP,
+  provenance, binaries, browser failures, 180-second pair and automatic pairing
+  passed independently; see the exact public evidence above. Published tag/assets
+  remain unchanged by the follow-up documentation commit.
 - External browser requests (map tiles, CDNs, directory) are blocked in fixtures.
   This is not a map-tile rendering, public-service or internet-source acceptance.
 - No new RF decode accuracy, physical SDR/rotor behavior, live audio listening,

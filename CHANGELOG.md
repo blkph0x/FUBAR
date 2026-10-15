@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.52 (source-qualified; release Actions pending)
+## 1.1.52 (2026-10-15)
 
 - Prevent older same-session map requests from overwriting a newer success or
   failure in Aircraft and Inmarsat. One Inmarsat generation covers status,
@@ -11,6 +11,12 @@
 - Includes the companion hardening below, with the same immutable Town 0.2.139
   package. Tag v1.1.51 is preserved: its release run 38730716546 failed the browser
   error check and published no release assets. See the paired notes for evidence.
+- Release run 38733569638 and both source build runs passed. The downloaded public
+  package passed provenance/hash/source checks, the 180-second browser pair,
+  automatic pairing and malformed-upstream browser matrix; all QA processes
+  exited normally. This documentation update does not replace published assets.
+- After public proof, the parent promoted FUBAR 1.1.52 and Town 0.2.139 to Latest;
+  anonymous Latest API checks confirmed both versions without changing tags/assets.
 
 ## 1.1.51 (unpublished; browser race blocked release)
 

@@ -1,5 +1,26 @@
 # Paired workspace usability qualification
 
+## 1.1.52 Public Qualification (2026-10-15)
+
+Published source `2b419ec61c538b6693aa11b6efd178dff14df5f9` passed release
+Actions 38733569638 and Windows build runs 38733568815/38733569167. The public
+ZIP, build-info/town-pair provenance, EXE, DLL, runtime inventory and all 84
+corresponding-source files were verified against the tag's Windows Git export.
+
+The actual downloaded FUBAR 1.1.52 and public Town 0.2.139 passed the 180-second
+production-browser pair (Town PID 51676, FUBAR PID 51180), 60-second automatic
+pairing (Town PID 25784, FUBAR PID 52752), and real-DLL malformed-upstream/browser
+matrix (FUBAR PID 51576). Every process exited normally with code zero; all five
+exact PIDs were confirmed absent and hashes were unchanged after testing.
+
+Combined proof, exact hashes/paths, individual result files, sanitized logs and
+screenshots: `D:\FUBAR-ReleaseQA\1.1.52\public-run38733569638\public-proof.json`.
+See [public provenance and limits](PAIRED_HARDENING_20261015.md). Published assets
+and tags remain immutable; this evidence update is docs-only on main. After proof,
+the parent promoted FUBAR 1.1.52 and Town 0.2.139 to Latest; anonymous API checks
+confirmed both. Native FUBAR GUI, physical RF and external
+map tiles/CDNs remain outside this qualification.
+
 ## 1.1.52 Request Freshness
 
 Release run 38730716546 for 1.1.51 failed the malformed-upstream browser check
@@ -12,7 +33,7 @@ outer requests attempting to overwrite a newer map error.
 Reverse success/failure order is tested with delayed real-DLL browser responses,
 after completing and draining prior native requests. No sleeps are used to order
 these regressions, and malformed-response assertions remain unchanged.
-Tag v1.1.51 remains unchanged; 1.1.52 Actions/public-pair verification is pending.
+Tag v1.1.51 remains unchanged; 1.1.52 Actions/public-pair verification passed above.
 Release/main tests 4/4 and production-object tests 2/2 pass. The final browser
 failure matrix passed at `D:\FUBAR-ReleaseQA\1.1.52\final-hardening`; the actual
 public Town + source-built 1.1.52 180-second browser pair passed at
