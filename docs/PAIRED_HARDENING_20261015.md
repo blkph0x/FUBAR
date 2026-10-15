@@ -1,4 +1,4 @@
-# Companion Hardening: FUBAR 1.1.51
+# Companion Hardening: FUBAR 1.1.52
 
 Status: source-qualified, awaiting FUBAR Actions/public qualification. Parent decision DEC-0223; Town system/UX audit
 F06/F07. Town owns native transport, snapshot cache and receiver lifecycle.
@@ -72,6 +72,49 @@ use a task selector. Polls and late ticket responses do not overwrite newer draf
 or admission state. Rejection styling follows failure, not error-message wording.
 
 ## Tests And Evidence
+
+### 1.1.52 CI Regression Repair
+
+Release run 38730716546 at b291d22a3d58891a7e2b35b92ed48d925c115926
+failed during Assemble portable package: the browser still displayed Tracks after
+a malformed-upstream response. No release or assets were published. Tag v1.1.51
+is retained unchanged; the correction uses a new v1.1.52 tag.
+
+A delayed-response regression against the actual embedded JavaScript reproduced
+the same-session race: an older successful Aircraft request overwrote a newer
+failure. Session-selection revisions alone did not order concurrent polls/button
+requests. Aircraft and Inmarsat now each track request revisions, checked before
+and after every page and before applying either success or failure. Older results
+cannot overwrite newer outcomes or request additional continuation pages.
+Independent review reproduced further stale Inmarsat outer-pipeline writes. One
+generation now spans bootstrap, status, messages, map and catch paths, so an old
+outer request cannot mint a newer map request and supersede current results.
+
+Production-JavaScript tests cover both reverse completion orders for both maps,
+including obsolete continuations. Real-browser tests hold responses obtained
+through FUBAR and the public Town DLL, finish a newer request, then release the
+older success/failure and assert the current status survives. Scenario assertions
+run with map polling inactive; the explicit delayed-response tests exercise the
+overlap deterministically after completing a fresh pipeline and draining tracked
+native requests. The explicit held call must remain pending until gate release.
+Full outer-function tests cover late errors, A-B-A status, stale messages after a
+new map error, direct-map supersession, bootstrap and continuation cancellation.
+No timeout increase or weaker error assertion is used.
+The Town pin remains unchanged. Hosted 1.1.52/public qualification is pending.
+
+After the outer-pipeline repair, Release/main CTest 4/4 and production-object
+CTest 2/2 passed. The final real-DLL browser matrix passed and FUBAR PID 49480
+exited zero: `D:\FUBAR-ReleaseQA\1.1.52\final-hardening\result.json`.
+The actual public Town 0.2.139 plus source-built FUBAR 1.1.52 180-second browser
+pair passed under `D:\FUBAR-ReleaseQA\1.1.52\source-pair-180`; Town PID 15516
+and FUBAR PID 49284 both exited normally with code zero. The local FUBAR EXE
+SHA256 is `3d84c331637552e5743ea0126e93204fde609486979bf5e1c03ee917352b4e42`.
+Public Town EXE/DLL hashes match the dependency provenance below. This is source
+qualification, not a claim about a future hosted 1.1.52 package. The original
+failed CI diagnostics are retained at
+`D:\FUBAR-ReleaseQA\1.1.51\failed-release-38730716546`.
+
+### Earlier 1.1.51 Local Evidence
 
 Local MSVC Release build, main CTest 4/4, standalone production-object tests 2/2
 and extracted production JavaScript pass. The standalone suites test 128 supplied

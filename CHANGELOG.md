@@ -1,6 +1,18 @@
 # Changelog
 
-## 1.1.51 (source-qualified; release Actions pending)
+## 1.1.52 (source-qualified; release Actions pending)
+
+- Prevent older same-session map requests from overwriting a newer success or
+  failure in Aircraft and Inmarsat. One Inmarsat generation covers status,
+  messages, map and errors, including A-B-A selection changes. Obsolete requests
+  stop before further pages or map follow-ups.
+- Add deterministic reverse-completion regressions in production JavaScript and
+  real-DLL browser tests; retain all malformed-response and bounded-error checks.
+- Includes the companion hardening below, with the same immutable Town 0.2.139
+  package. Tag v1.1.51 is preserved: its release run 38730716546 failed the browser
+  error check and published no release assets. See the paired notes for evidence.
+
+## 1.1.51 (unpublished; browser race blocked release)
 
 - Bound control admission to 32 waiting tickets, eight displayed queue names and
   bounded request budgets. Use server-issued browser tickets; preserve active

@@ -2321,6 +2321,11 @@ async function fetchPagedView(path, isCurrent=()=>true){
   throw new Error('View exceeds page budget');
 }
 const workflowViewRevision={inm:0,ac:0,sat:0};
+const mapRequestRevision={inm:0,ac:0};
+function beginMapRefresh(prefix){
+  const request=++mapRequestRevision[prefix], revision=workflowViewRevision[prefix], selectedSession=workflowSession(prefix);
+  return ()=>request===mapRequestRevision[prefix] && revision===workflowViewRevision[prefix] && selectedSession===workflowSession(prefix);
+}
 function populateWorkflowSessions(prefix,sessions){
   const select=document.getElementById(prefix+'SessionId'), previous=select.value;
   const entries=(sessions||[]).filter(s=>/^[A-Za-z0-9_-]{1,32}$/.test(s.sessionId||''))
@@ -2455,20 +2460,21 @@ function fillInmarsatChannels(){
 async function loadInmarsat(){
   const st = document.getElementById('inmStatus');
   const log = document.getElementById('inmMsgLog');
+  const isCurrent=beginMapRefresh('inm'), selectedSession=inmSessionId();
   try {
     if (!sdrTownConfig || !sdrTownConfig.enabled) {
       if (st) st.textContent = 'Enable SDR Town control to use Inmarsat.';
       return;
     }
     if (!inmPlansCache.length) await loadInmarsatPlans();
-    const selectedSession=inmSessionId();
+    if(!isCurrent())return;
     const statusPath=selectedSession?'api/sdr-town/inmarsat-sessions':'api/sdr-town/inmarsat-status';
     const res = await fetch(statusPath, {cache:'no-store',signal:AbortSignal.timeout(10000)});
     const data = await res.json();
+    if(!isCurrent())return;
     const s = selectedSession
       ? ((data.sessions||[]).find(x=>String(x.sessionId||'')===selectedSession)||null)
       : ((data && data.inmarsat) ? data.inmarsat : null);
-    if(selectedSession!==inmSessionId())return;
     if (!s) {
       if (st) st.textContent = selectedSession
         ? ('Inmarsat session "'+esc(selectedSession)+'" is not open.')
@@ -2489,15 +2495,16 @@ async function loadInmarsat(){
       document.getElementById('inmWatchTogether').checked=inmWatchDraft.simultaneousInBand!==false;
       document.getElementById('inmWatchBudget').value=inmWatchDraft.maxConcurrentChannels||2;renderWatch();
     }
-    const msgData = await fetchPagedView(sessionView('inmarsat','inm','messages','api/sdr-town/inmarsat-messages'));
-    if(selectedSession!==inmSessionId())return;
+    const msgData = await fetchPagedView(sessionView('inmarsat','inm','messages','api/sdr-town/inmarsat-messages'),isCurrent);
+    if(!isCurrent())return;
     if (log && msgData && msgData.messages) {
       log.textContent = (msgData.messages||[]).map(m =>
         '[' + (m.kind||'?') + '] ' + (m.label||'') + ' ' + String(m.text||'').slice(0,160)
       ).join('\n');
     }
-    await loadInmarsatMap();
+    await loadInmarsatMap(isCurrent);
   } catch (e) {
+    if(!isCurrent())return;
     if (st) st.textContent = 'Inmarsat poll failed';
   }
 }
@@ -2512,11 +2519,10 @@ function ensureInmarsatMap(){
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap'}).addTo(inmMap);
   inmLayer=L.layerGroup().addTo(inmMap);
 }
-async function loadInmarsatMap(){
+async function loadInmarsatMap(isCurrent=beginMapRefresh('inm')){
+  if(!isCurrent())return;
   const st=document.getElementById('inmMapStatus');
   if(!sdrTownConfig || !sdrTownConfig.enabled){if(st)st.textContent='Enable SDR Town control to show the map.';return;}
-  const revision=workflowViewRevision.inm, selectedSession=workflowSession('inm');
-  const isCurrent=()=>revision===workflowViewRevision.inm && selectedSession===workflowSession('inm');
   try{
     ensureInmarsatMap();
     const data=await fetchPagedView(sessionView('inmarsat','inm','map','api/sdr-town/inmarsat-map-status'),isCurrent);
@@ -2607,8 +2613,7 @@ function acEnsureMap(){
 }
 async function loadAircraft(){
   const st = document.getElementById('acStatus');
-  const revision=workflowViewRevision.ac, selectedSession=workflowSession('ac');
-  const isCurrent=()=>revision===workflowViewRevision.ac && selectedSession===workflowSession('ac');
+  const isCurrent=beginMapRefresh('ac');
   try {
     if (!sdrTownConfig || !sdrTownConfig.enabled) {
       if (st) st.textContent = 'Enable SDR Town control to show aircraft tracks.';

@@ -35,6 +35,7 @@ const context=vm.createContext({console, AbortSignal, Date, Map, Set,
   sdrAdmissionTicket:'server-ticket',sessionStorage:{setItem(){},removeItem(){}},
   sdrSessionMutationBusy:false,sdrSessionEpoch:0,
   workflowViewRevision:{inm:0,ac:0,sat:0},
+  mapRequestRevision:{inm:0,ac:0},
   renderDecodePanels(){},sdrRenderDevicePanels(){},
 });
 function load(name) {
@@ -113,7 +114,7 @@ assert.equal(context.sdrplayDraftSeeded,false);
     bindTooltip(text){this.text=text;return this;},addTo(){return this;},
     setLatLng(coords){this.coords=coords;return this;},setIcon(options){this.options=options;return this;},
     setTooltipContent(text){this.text=text;return this;}})};
-  load('workflowSession');load('sessionView');load('fetchPagedView');load('aircraftMarkerIcon');load('loadInmarsatMap');
+  load('workflowSession');load('sessionView');load('fetchPagedView');load('beginMapRefresh');load('aircraftMarkerIcon');load('loadInmarsatMap');
   elements.inmSessionId.value='qa-a';
   assert.equal(context.sessionView('inmarsat','inm','map','default'),'api/sdr-town/inmarsat-sessions?sessionId=qa-a&view=map');
   context.fetch=async()=>({json:async()=>{elements.inmSessionId.value='qa-b';return {ok:true,positions:[{aesId:7,latDeg:1,lonDeg:2}]};}});
@@ -163,6 +164,101 @@ assert.equal(context.sdrplayDraftSeeded,false);
   assert.equal(continued,1,'changed session must stop requesting continuation pages');
   context.fetch=async()=>({ok:true,json:async()=>({ok:true,positions:[]})});
   await context.loadInmarsatMap();assert.equal(context.inmMarkers.size,0,'complete empty snapshot removes old markers');
+  // Complete overlapping same-session requests in reverse order. Neither a
+  // stale success nor a stale failure may overwrite the newest map outcome.
+  context.acEnsureMap=()=>{};context.acMap=null;context.acLayer=null;
+  load('loadAircraft');
+  for(const [loader,statusId,success] of [
+    ['loadAircraft','acStatus',{ok:true,tracks:[{icao:'OLD'}]}],
+    ['loadInmarsatMap','inmMapStatus',{ok:true,positions:[{aesId:999,latDeg:1,lonDeg:2}],aircraft:[{}]}]
+  ])for(const olderSucceeds of [true,false]){
+    let finishOld;
+    context.fetch=()=>new Promise(resolve=>{finishOld=resolve;});
+    const older=context[loader]();
+    const newest=olderSucceeds?{ok:false,error:'Latest request rejected'}:{ok:true,tracks:[],positions:[],aircraft:[]};
+    context.fetch=async()=>({ok:true,json:async()=>newest});
+    await context[loader]();
+    const currentStatus=elements[statusId].textContent;
+    assert.equal(currentStatus.startsWith('Tracks '),!olderSucceeds);
+    finishOld({ok:true,json:async()=>olderSucceeds?success:{ok:false,error:'Old request rejected'}});
+    await older;
+    assert.equal(elements[statusId].textContent,currentStatus,loader+' must ignore older '+(olderSucceeds?'success':'failure'));
+    assert.equal(context.inmMarkers.size,0,'stale response must not change markers');
+  }
+  for(const loader of ['loadAircraft','loadInmarsatMap']){
+    let finishOld,fetches=0;
+    context.fetch=()=>{fetches++;return new Promise(resolve=>{finishOld=resolve;});};
+    const older=context[loader]();
+    context.fetch=async()=>{fetches++;return {ok:true,json:async()=>({ok:true,tracks:[],positions:[],aircraft:[]})};};
+    await context[loader]();
+    finishOld({ok:true,json:async()=>({ok:true,page:{snapshot:'old',offset:0,total:128,nextOffset:64},tracks:Array.from({length:64},()=>({}))})});
+    await older;
+    assert.equal(fetches,2,loader+' obsolete request must not fetch continuation pages');
+  }
+  // Exercise the complete Inmarsat status/messages/map pipeline, including
+  // errors and an A -> B -> A selection, not just the final map function.
+  load('inmSessionId');load('loadInmarsat');
+  context.inmPlansCache=[{}];context.inmWatchKey='';context.inmWatchDraft={};context.renderWatch=()=>{};
+  const inmSnapshot=()=>[elements.inmStatus.textContent,elements.inmMsgLog.textContent,
+    elements.inmMapStatus.textContent,JSON.stringify([...context.inmMarkers.keys()])];
+  const selectInm=id=>{elements.inmSessionId.value=id;context.workflowViewRevision.inm++;};
+  const inmResponse=(state,mapFails=false)=>async url=>({ok:true,json:async()=>{
+    if(url.includes('view=messages'))return {ok:true,messages:[{text:state}]};
+    if(url.includes('view=map'))return mapFails?{ok:false,error:'Current map rejected'}:{ok:true,aircraft:[],positions:[]};
+    return {ok:true,sessions:[{sessionId:elements.inmSessionId.value,state,messages:1}]};
+  }});
+  for(const ordering of ['error-to-b','a-b-a','same-session']){
+    const olderFails=ordering==='error-to-b';
+    selectInm('a');let finishOld;
+    context.fetch=()=>new Promise((resolve,reject)=>{finishOld=olderFails?()=>reject(new Error('Old receiver failed')):
+      ()=>resolve({ok:true,json:async()=>({ok:true,sessions:[{sessionId:'a',state:'OLD',messages:99}]})});});
+    const older=context.loadInmarsat();
+    if(ordering!=='same-session')selectInm('b');
+    context.fetch=inmResponse('NEW');await context.loadInmarsat();
+    if(ordering==='a-b-a'){selectInm('a');context.fetch=inmResponse('NEW A');await context.loadInmarsat();}
+    const latest=inmSnapshot();
+    finishOld();await older;
+    assert.deepEqual(inmSnapshot(),latest,ordering+' must not admit old status/error');
+  }
+  for(const paged of [false,true])for(const newestIsMapOnly of [false,true]){
+    selectInm('a');let finishMessages,entered;
+    const messageStarted=new Promise(resolve=>{entered=resolve;});
+    context.fetch=async url=>{
+      if(url.includes('view=messages'))return new Promise(resolve=>{finishMessages=resolve;entered();});
+      return inmResponse('OLD')(url);
+    };
+    const older=context.loadInmarsat();await messageStarted;
+    context.fetch=inmResponse('NEW',true);
+    if(newestIsMapOnly)await context.loadInmarsatMap();else await context.loadInmarsat();
+    const latest=inmSnapshot();let staleFetches=0;
+    context.fetch=async url=>{staleFetches++;return inmResponse('STALE')(url);};
+    finishMessages({ok:true,json:async()=>({ok:true,messages:[{text:'OLD'}],
+      ...(paged?{page:{snapshot:'obsolete',offset:0,total:2,nextOffset:1}}:{})})});
+    await older;
+    assert.deepEqual(inmSnapshot(),latest,'old messages must not overwrite current data or supersede a current map error');
+    assert.equal(staleFetches,0,'obsolete outer pipeline must not fetch messages continuation or start a map');
+  }
+  let finishOldMap,mapEntered;
+  const mapStarted=new Promise(resolve=>{mapEntered=resolve;});
+  context.fetch=async url=>{
+    if(url.includes('view=map'))return new Promise(resolve=>{finishOldMap=resolve;mapEntered();});
+    return inmResponse('OLD')(url);
+  };
+  const olderPipeline=context.loadInmarsat();await mapStarted;
+  context.fetch=async()=>{throw new Error('Newest status failed');};
+  await context.loadInmarsat();const failedStatus=inmSnapshot();
+  finishOldMap({ok:true,json:async()=>({ok:true,aircraft:[{}],positions:[]})});
+  await olderPipeline;
+  assert.deepEqual(inmSnapshot(),failedStatus,'outer refresh must invalidate an older map before reaching its own map phase');
+  let finishPlans;
+  context.inmPlansCache=[];
+  context.loadInmarsatPlans=()=>new Promise(resolve=>{finishPlans=resolve;});
+  const planning=context.loadInmarsat();
+  selectInm('b');context.inmPlansCache=[{}];context.fetch=inmResponse('NEW B');await context.loadInmarsat();
+  const afterPlans=inmSnapshot();let afterObsoletePlans=0;
+  context.fetch=async url=>{afterObsoletePlans++;return inmResponse('STALE')(url);};
+  finishPlans();await planning;
+  assert.deepEqual(inmSnapshot(),afterPlans);assert.equal(afterObsoletePlans,0,'obsolete bootstrap must not begin status fetch');
   load('populateWorkflowSessions');
   elements.inmSessionId.value='selected';
   context.populateWorkflowSessions('inm',[{sessionId:'other',label:'Other'}]);

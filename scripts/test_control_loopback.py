@@ -39,7 +39,7 @@ def main():
             url = urllib.parse.urlsplit(self.path)
             query = urllib.parse.parse_qs(url.query)
             if name.startswith('browser-'):
-                is_map = url.path.endswith('/map-status') or (url.path == '/v1/aircraft/sessions' and 'sessionId' in query and query.get('view') == ['map'])
+                is_map = url.path.endswith('/map-status') or (url.path in ('/v1/aircraft/sessions', '/v1/inmarsat/sessions') and 'sessionId' in query and query.get('view') == ['map'])
                 name = name.removeprefix('browser-') if is_map else 'ui'
                 if name.startswith('post-'): name = 'pages'
             if name == 'large': self.reply({'ok': True, 'messages': [{'text': 'x' * 90000}]})

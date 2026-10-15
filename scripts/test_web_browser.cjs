@@ -12,6 +12,19 @@ assert(/^http:\/\/127\.0\.0\.1:\d+\/$/.test(base));
     // tiles, directory entries and CDNs are excluded from this isolated test.
     await context.route('**/*',route=>route.request().url().startsWith(base)?route.continue():route.abort());
     const page=await context.newPage();
+    const nativeRequests=new Set(),nativeIdleWaiters=new Set();
+    page.on('request',request=>{if(request.url().startsWith(base+'api/sdr-town/'))nativeRequests.add(request);});
+    const requestDone=request=>{
+      nativeRequests.delete(request);
+      if(!nativeRequests.size)for(const resolve of nativeIdleWaiters)resolve();
+    };
+    page.on('requestfinished',requestDone);page.on('requestfailed',requestDone);
+    const drainNativeRequests=()=>new Promise((resolve,reject)=>{
+      if(!nativeRequests.size){resolve();return;}
+      const done=()=>{clearTimeout(timer);nativeIdleWaiters.delete(done);resolve();};
+      const timer=setTimeout(()=>{nativeIdleWaiters.delete(done);reject(new Error('Native requests did not drain'));},10000);
+      nativeIdleWaiters.add(done);
+    });
     const errors=[];page.on('pageerror',error=>errors.push(error.message));
     await page.goto(base,{waitUntil:'domcontentloaded'});
     await page.waitForFunction(()=>sdrTownConnected);
@@ -56,7 +69,46 @@ assert(/^http:\/\/127\.0\.0\.1:\d+\/$/.test(base));
           body:name?JSON.stringify({name}):undefined});
         assert(response.ok);return response.json();
       };
-      await page.locator('#siteTabs [data-tab="aircraft"]').click();
+      // Keep periodic map polls inactive while deliberately reversing response
+      // completion order. The held response still comes from the real DLL.
+      await page.locator('#siteTabs [data-tab="control"]').click();
+      for(const [loader,statusId,workflow] of [
+        ['loadAircraft','acStatus','aircraft'],['loadInmarsatMap','inmMapStatus','inmarsat']
+      ])for(const olderSucceeds of [true,false]){
+        await scenario(olderSucceeds?'ui':'browser-invalid-ok');
+        // Complete a newer pipeline, then drain all superseded network reads.
+        // With map tabs inactive, only the explicit fixture call can hit the gate.
+        await page.evaluate(async()=>{await Promise.all([loadInmarsat(),loadAircraft()]);});
+        await drainNativeRequests();
+        let release,held;
+        const gate=new Promise(resolve=>{release=resolve;});
+        const ready=new Promise(resolve=>{held=resolve;});
+        const match=url=>url.pathname.endsWith('/'+workflow+'-map-status')||
+          (url.pathname.endsWith('/'+workflow+'-sessions')&&url.searchParams.get('view')==='map');
+        let first=true;
+        const handler=async route=>{
+          if(!first){await route.continue();return;}
+          first=false;
+          const response=await route.fetch({timeout:10000});
+          held();await gate;await route.fulfill({response});
+        };
+        await page.route(match,handler);
+        try{
+          await page.evaluate(name=>{
+            globalThis.fixtureOlderSettled=false;
+            globalThis.fixtureOlderMap=globalThis[name]().finally(()=>{globalThis.fixtureOlderSettled=true;});
+          },loader);
+          await ready;
+          await scenario(olderSucceeds?'browser-invalid-ok':'ui');
+          await page.evaluate(name=>globalThis[name](),loader);
+          const latest=await page.locator('#'+statusId).textContent();
+          assert.equal(latest.startsWith('Tracks '),!olderSucceeds,loader+' newest response');
+          assert.equal(await page.evaluate(()=>globalThis.fixtureOlderSettled),false,'gate must hold the explicit older call');
+          release();await page.evaluate(()=>globalThis.fixtureOlderMap);
+          assert.equal(await page.locator('#'+statusId).textContent(),latest,loader+' stale response must not overwrite latest');
+        }finally{release();await page.unroute(match,handler);}
+      }
+      console.log('PASS: delayed real-DLL responses, both maps, older success/newer failure and older failure/newer success');
       await scenario('browser-pages');
       await page.evaluate(()=>loadAircraft());
       assert.match(await page.locator('#acStatus').innerText(),/^Tracks 512/);
@@ -67,6 +119,7 @@ assert(/^http:\/\/127\.0\.0\.1:\d+\/$/.test(base));
         assert(!status.startsWith('Tracks '),failure+' must not display success');
         assert(status.length<512&&!status.includes('PRIVATE_RADIO_CONTENT'),failure+' bounded private error');
       }
+      await page.locator('#siteTabs [data-tab="aircraft"]').click();
       for(const failure of ['browser-post-too-large','browser-post-oversize']){
         const before=await scenario(failure);
         await page.locator('#acRefreshBtn').click();

@@ -1,5 +1,25 @@
 # Paired workspace usability qualification
 
+## 1.1.52 Request Freshness
+
+Release run 38730716546 for 1.1.51 failed the malformed-upstream browser check
+before publishing assets. A deterministic production-JavaScript regression
+reproduced older same-session success overwriting a newer failure. Both Aircraft
+and Inmarsat now reject obsolete request completions and continuation pages.
+The full Inmarsat pipeline shares one generation across status, messages, map
+and catch paths; deferred-function tests also cover A-B-A selection and obsolete
+outer requests attempting to overwrite a newer map error.
+Reverse success/failure order is tested with delayed real-DLL browser responses,
+after completing and draining prior native requests. No sleeps are used to order
+these regressions, and malformed-response assertions remain unchanged.
+Tag v1.1.51 remains unchanged; 1.1.52 Actions/public-pair verification is pending.
+Release/main tests 4/4 and production-object tests 2/2 pass. The final browser
+failure matrix passed at `D:\FUBAR-ReleaseQA\1.1.52\final-hardening`; the actual
+public Town + source-built 1.1.52 180-second browser pair passed at
+`D:\FUBAR-ReleaseQA\1.1.52\source-pair-180`. Town PID 15516 and FUBAR PID 49284
+both exited normally with code zero. No RF capture or operator GUI launch occurred.
+The earlier local evidence below is retained, not relabeled as 1.1.52 evidence.
+
 ## 1.1.51 Local Qualification (2026-10-15)
 
 DEC-0223 / audit F06-F07 companion scope: bounded admission and map transport,
