@@ -30,9 +30,10 @@ def main():
             '--gui-exit-after-ms','35000'],env=env,stdout=tl,stderr=tl,startupinfo=startup)
         f=subprocess.Popen([str(args.fubar.resolve()),'--cli','--web-only','--port',str(web),
             '--sdr-town-port',str(town),'--allow-radio-control','--duration','35'],env=env,stdout=fl,stderr=fl,startupinfo=startup)
+        ticket=''
         def request(path,body=None):
             req=urllib.request.Request(f'http://127.0.0.1:{web}/api/sdr-town/'+path,
-                data=None if body is None else json.dumps(dict(body,clientId='live_fixture')).encode(),
+                data=None if body is None else json.dumps(dict(body,admissionTicket=ticket)).encode(),
                 headers={'Content-Type':'application/json'})
             with urllib.request.urlopen(req,timeout=12) as r:return json.load(r)
         try:
@@ -45,7 +46,9 @@ def main():
                 assert time.monotonic()<deadline,'Pair did not connect'
                 time.sleep(.2)
             assert any(d['stableKey']==args.device_key for d in state['state']['devices']),'Requested radio unavailable'
-            assert request('control-session',{'action':'take','name':'Local radio test'})['session']['canControl']
+            lease=request('control-session',{'action':'take','name':'Local radio test'})
+            assert lease['session']['canControl']
+            ticket=lease['admissionTicket']
             tuned=request('tune',{'deviceKey':args.device_key,'frequencyMHz':args.frequency_mhz,
                 'mode':'WFM','bandwidthKHz':180,'lpfKHz':15,'audioLpfEnabled':True})
             assert tuned['ok'],tuned

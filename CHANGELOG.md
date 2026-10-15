@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.51 (source-qualified; release Actions pending)
+
+- Bound control admission to 32 waiting tickets, eight displayed queue names and
+  bounded request budgets. Use server-issued browser tickets; preserve active
+  ownership, expiry and the existing two extensions. This is not human identity.
+- Reject malformed, oversized and incomplete bridge responses without exposing
+  raw payloads. Success requires top-level boolean `ok: true`; retain recognized
+  native transport error codes.
+- Consume bounded immutable map/message snapshots, preserving the last complete
+  map when a continuation fails. Mutation failures are never automatically retried.
+- Add narrow-screen task selection, named-session lists and separate immediate
+  mode/draft mode controls. Keep drafts across polling and show rejected commands
+  as errors regardless of their wording.
+- Add production-code admission/bridge tests, real-DLL loopback failure fixtures,
+  and desktop/mobile production-browser checks to build/release CI.
+- Pin Town 0.2.139 to the verified public ZIP SHA256 and source commit; record
+  those identities in companion and release provenance.
+  No RF, DSP, audio routing or public-service changes; see the paired fix notes.
+
 ## 1.1.50
 
 - Add primary stable-radio selection to Tune, mode and Monitor P25 requests.

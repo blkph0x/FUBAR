@@ -16,10 +16,12 @@ assert(script.includes('inmarsat-sessions'),'Inmarsat named-session client must 
 assert(script.includes('sstvSessionId'),'SSTV named-session client must remain wired');
 assert(script.includes("captureBandwidthMHz:rate"),'1090 tune must use the selected sample rate');
 function element(id) {
+  const classes=new Set();
   return {id, value:'', textContent:'', checked:true, disabled:false, hidden:false, dataset:{},
     replaceChildren(){this.options=[];this.value='';},appendChild(o){this.options.push(o);},
     options:['AUTO','NFM','WFM','AM'].map(value=>({value})),
-    classList:{toggle(){},add(){},remove(){}}};
+    classList:{toggle(name,on){if(on)classes.add(name);else classes.delete(name);},
+      add(name){classes.add(name);},remove(name){classes.delete(name);},contains(name){return classes.has(name);}}};
 }
 const elements = Object.fromEntries(ids.map(id=>[id,element(id)]));
 const modes=['AUTO','NFM','WFM','P25'].map(mode=>({...element(mode),getAttribute:()=>mode}));
@@ -30,6 +32,9 @@ const context=vm.createContext({console, AbortSignal, Date, Map, Set,
   sdrCommandInFlight:false, sdrTownLiveState:{}, sdrControlSeededForLease:false,
   sdrControlWasActive:true,sdrplayDraftSeeded:true, sdrControlDeadlineMs:0,
   controlPollBusy:false,sdrDesiredMode:'',sdrControlClientId:'test',sdrControlName:'Test',
+  sdrAdmissionTicket:'server-ticket',sessionStorage:{setItem(){},removeItem(){}},
+  sdrSessionMutationBusy:false,sdrSessionEpoch:0,
+  workflowViewRevision:{inm:0,ac:0,sat:0},
   renderDecodePanels(){},sdrRenderDevicePanels(){},
 });
 function load(name) {
@@ -90,6 +95,7 @@ assert.equal(context.sdrplayDraftSeeded,false);
   context.fetch=async()=>({status:200,text:async()=>JSON.stringify({ok:false,error:'Test rejection'})});
   await context.postSdrTown('test',{});
   assert.equal(elements.commandFeedback.textContent,'Test rejection');
+  assert(elements.commandFeedback.classList.contains('error'),'rejection styling must not depend on message wording');
   assert.equal(context.sdrCommandInFlight,false,'command lock released');
   assert.equal(context.commandError(JSON.stringify({error:'RF disabled in GUI dry-run'}),400),'RF disabled in GUI dry-run');
   context.fetch=async()=>{throw new Error('timeout');};
@@ -107,7 +113,7 @@ assert.equal(context.sdrplayDraftSeeded,false);
     bindTooltip(text){this.text=text;return this;},addTo(){return this;},
     setLatLng(coords){this.coords=coords;return this;},setIcon(options){this.options=options;return this;},
     setTooltipContent(text){this.text=text;return this;}})};
-  load('workflowSession');load('sessionView');load('aircraftMarkerIcon');load('loadInmarsatMap');
+  load('workflowSession');load('sessionView');load('fetchPagedView');load('aircraftMarkerIcon');load('loadInmarsatMap');
   elements.inmSessionId.value='qa-a';
   assert.equal(context.sessionView('inmarsat','inm','map','default'),'api/sdr-town/inmarsat-sessions?sessionId=qa-a&view=map');
   context.fetch=async()=>({json:async()=>{elements.inmSessionId.value='qa-b';return {ok:true,positions:[{aesId:7,latDeg:1,lonDeg:2}]};}});
@@ -131,6 +137,76 @@ assert.equal(context.sdrplayDraftSeeded,false);
   await context.loadInmarsatMap();assert.equal(context.inmMarkers.size,0);
   mapData={ok:false,error:'Disconnected'};
   await context.loadInmarsatMap();assert.match(elements.inmMapStatus.textContent,/unavailable/);
+  // Real production paging: max supported Inmarsat population, atomic updates,
+  // immutable identity and bounded progress even with a hostile continuation.
+  const urls=[];
+  context.fetch=async url=>{
+    urls.push(url);const offset=Number(new URL(url,'http://localhost/').searchParams.get('offset'));
+    return {ok:true,json:async()=>({ok:true,page:{snapshot:'stable-1',offset,total:512,nextOffset:offset+32<512?offset+32:null},
+      aircraft:Array.from({length:32},(_,i)=>({aesId:offset+i+1,label:'\u822a'.repeat(200)})),
+      positions:offset<256?Array.from({length:32},(_,i)=>({aesId:offset+i+1,latDeg:1,lonDeg:2})):[]})};
+  };
+  const full=await context.fetchPagedView('api/sdr-town/inmarsat-map-status');
+  assert.equal(full.aircraft.length,512);assert.equal(full.positions.length,256);assert.equal(urls.length,16);
+  assert(urls[1].includes('snapshot=stable-1'));
+  await context.loadInmarsatMap();assert.equal(context.inmMarkers.size,256);
+  let pages=0;
+  context.fetch=async()=>({ok:true,json:async()=>({ok:true,page:{snapshot:++pages===1?'old':'new',offset:pages===1?0:32,total:64,nextOffset:pages===1?32:null},positions:Array.from({length:32},()=>({aesId:999,latDeg:2,lonDeg:3}))})});
+  await context.loadInmarsatMap();assert.equal(context.inmMarkers.size,256,'failed continuation preserves the complete previous snapshot');
+  context.fetch=async()=>({ok:true,json:async()=>({ok:true,page:{snapshot:'stuck',offset:0,total:64,nextOffset:0},positions:[]})});
+  await assert.rejects(context.fetchPagedView('map'),/continuation/);
+  context.fetch=async()=>({ok:true,json:async()=>({ok:true,page:{snapshot:'short',offset:0,total:64,nextOffset:null},positions:[]})});
+  await assert.rejects(context.fetchPagedView('map'),/Incomplete/);
+  let continued=0;
+  context.fetch=async()=>{continued++;return {ok:true,json:async()=>({ok:true,page:{snapshot:'current',offset:0,total:128,nextOffset:64},positions:Array.from({length:64},()=>({}))})};};
+  await assert.rejects(context.fetchPagedView('map',()=>continued===0),/View changed/);
+  assert.equal(continued,1,'changed session must stop requesting continuation pages');
+  context.fetch=async()=>({ok:true,json:async()=>({ok:true,positions:[]})});
+  await context.loadInmarsatMap();assert.equal(context.inmMarkers.size,0,'complete empty snapshot removes old markers');
+  load('populateWorkflowSessions');
+  elements.inmSessionId.value='selected';
+  context.populateWorkflowSessions('inm',[{sessionId:'other',label:'Other'}]);
+  assert.equal(elements.inmSessionId.value,'selected','session removal must not select another receiver');
+  assert.equal(elements.inmSessionId.options.at(-1).textContent,'Unavailable selected session');
+  for(const prefix of ['inm','sat','ac','sstv'])assert(page.includes('<select id="'+prefix+'SessionId"'),'session selector '+prefix);
+  let ticketBody;
+  context.fetch=async(p,options)=>{ticketBody=JSON.parse(options.body);return {json:async()=>({ok:true,admissionTicket:'issued',session:{canControl:true}})};};
+  await context.sdrControlAction('take');assert.equal(context.sdrAdmissionTicket,'issued');
+  await context.sdrControlAction('status');assert.equal(ticketBody.admissionTicket,'issued');assert(!('clientId' in ticketBody));
+  context.fetch=async()=>({json:async()=>({ok:false,code:'invalid_ticket',session:{canControl:false}})});
+  await context.sdrControlAction('status');assert.equal(context.sdrAdmissionTicket,'');
+  let resolveOld;
+  context.fetch=async()=>new Promise(resolve=>{resolveOld=resolve;});
+  const oldStatus=context.sdrControlAction('status');
+  context.fetch=async()=>({json:async()=>({ok:true,admissionTicket:'new-ticket',session:{canControl:true}})});
+  await context.sdrControlAction('take');
+  resolveOld({json:async()=>({ok:false,code:'invalid_ticket',session:{canControl:false}})});
+  await oldStatus;assert.equal(context.sdrAdmissionTicket,'new-ticket');assert(context.sdrControlSession.canControl,'late status cannot revoke a newer admission');
+  // A completed mutation can have a too-large acknowledgement. Read back the
+  // map, retain the refusal, and never repeat the mutation to obtain its data.
+  const refreshHandler=script.match(/getElementById\('acRefreshBtn'\)\.addEventListener\('click', (async \(\) => \{[\s\S]*?\n\})\);/);
+  assert(refreshHandler,'production aircraft refresh handler');
+  const refreshAircraft=vm.runInContext('('+refreshHandler[1]+')',context);
+  let mutations=0,readbacks=0;
+  load('aircraftCommand');
+  context.loadAircraft=async()=>{readbacks++;};
+  context.fetch=async()=>{mutations++;return {status:413,text:async()=>JSON.stringify({ok:false,errorCode:'response_too_large',error:'Response too large; read paged view'})};};
+  await refreshAircraft();
+  assert.equal(mutations,1);assert.equal(readbacks,1);
+  assert.equal(elements.commandFeedback.textContent,'Response too large; read paged view');
+  for(const ack of [{ok:true,refreshRequired:true},{ok:true,stateOmitted:true,status:200}])for(const session of ['', 'named']){
+    mutations=0;readbacks=0;elements.acSessionId.value=session;
+    context.fetch=async(p,options)=>{
+      if(p.endsWith('control-session'))return {json:async()=>({ok:true,session:{canControl:true}})};
+      mutations++;
+      assert.equal(p,session?'api/sdr-town/aircraft-sessions':'api/sdr-town/aircraft-map-control');
+      assert.equal(JSON.parse(options.body).sessionId,session||undefined);
+      return {status:200,text:async()=>JSON.stringify(ack)};
+    };
+    await refreshAircraft();
+    assert.equal(mutations,1);assert.equal(readbacks,1,'compact ack requires one readback');
+    assert.equal(elements.commandFeedback.textContent,'Command completed.');
+  }
   // A disconnected bootstrap must recover its channel list without a page reload.
   for (const id of ['inmPlan','inmChannel']) {
     const el=elements[id];el.options=[];el.value='';
@@ -150,6 +226,7 @@ assert.equal(context.sdrplayDraftSeeded,false);
   await context.loadInmarsatPlans();assert.equal(elements.inmChannel.value,'1546100000');
   assert(script.includes('if (!inmPlansCache.length) await loadInmarsatPlans();'));
   // Stop is a pure stop; a running radio must not be reconfigured first.
+  context.sdrControlSession={canControl:true};
   load('postSatcom');const savedPost=context.postSdrTown;
   const sent=[];context.postSdrTown=async(p,b)=>{sent.push({p,b});return {ok:true};};
   context.loadSatcom=async()=>{};elements.satSessionId.value='';

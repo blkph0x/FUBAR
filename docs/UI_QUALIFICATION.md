@@ -1,8 +1,28 @@
 # Paired workspace usability qualification
 
-## 1.1.47 pairing delta
+## 1.1.51 Local Qualification (2026-10-15)
 
-The current qualification target is FUBAR 1.1.47 with SDR Town
+DEC-0223 / audit F06-F07 companion scope: bounded admission and map transport,
+session selection, draft/immediate-mode clarity and narrow-screen task access.
+The final Town 0.2.139 executable/DLL and FUBAR 1.1.51 passed a 180-second authenticated no-RF
+pair run, including the production browser's eight tasks at 360, 390 and 1280
+pixels. Both applications exited normally with code 0. Browser checks cover
+draft retention, session lists, ticket reload/release, layout and page errors.
+Exact binary hashes, PIDs and exit results are retained under
+`D:\FUBAR-qa\20261015-v1.1.51-town0.2.139-final-pair`. Both PIDs are confirmed
+exited. The physical RTL tune was skipped because the existing script persists
+settings and does not satisfy the requested restore-all condition.
+
+See [paired hardening evidence and limits](PAIRED_HARDENING_20261015.md).
+This is local source qualification, not FUBAR published-package qualification.
+Town 0.2.139 is public and hash/source verified; FUBAR hosted CI and public-package
+pairing remain release gates.
+External map tiles/CDNs were blocked in the browser fixture; RF, audio listening,
+hardware ownership contention and physical device behavior are not qualified here.
+
+## Historical 1.1.47 Pairing Delta
+
+The qualification target for this historical pass was FUBAR 1.1.47 with SDR Town
 0.2.125-experimental. Automated coverage must include the named-session proxy
 routes, AES-only Inmarsat map identity, heading-aware Leaflet markers and the
 2.4 MS/s ADS-B default. The 1.1.44 / Town 0.2.120 evidence below remains a

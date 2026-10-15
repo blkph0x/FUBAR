@@ -10,6 +10,7 @@
 #include <ws2tcpip.h>
 #include <mstcpip.h>
 #include <windows.h>
+#include <bcrypt.h>
 
 #include <algorithm>
 #include <cctype>
@@ -72,6 +73,7 @@ label{display:block;color:var(--muted);font-size:13px}
 .tabs{display:flex;gap:0;border-bottom:1px solid var(--line);overflow-x:auto;margin:14px 0 0;scrollbar-width:thin}
 .tabs button{flex:none;border:0;border-bottom:3px solid transparent;border-radius:0;background:none;min-height:44px;color:var(--muted)}
 .tabs button.on{color:var(--green);border-bottom-color:var(--green);background:#202c25}
+.taskpicker{display:none;margin:10px 0}.taskpicker select{width:100%}
 .tabpanel{display:none;padding:18px 0}.tabpanel.on{display:block}
 .sdrlease{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--line)}
 .sdrlease .sdrstate{flex:1 1 240px}
@@ -119,6 +121,7 @@ details{border-top:1px solid var(--line);margin-top:18px;padding-top:12px}
 summary{cursor:pointer;color:var(--muted);min-height:36px}
 @media(max-width:820px){.sdrgrid,.sdrplaygrid,.satgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.sdrrow{grid-template-columns:1fr 1fr}.sdrrow button{grid-column:1/-1}.sdrlease .sdrstate{flex-basis:100%}}
 @media(max-width:520px){header,main{padding-left:14px;padding-right:14px}.player{padding:0 14px 20px}.sdrgrid,.sdrplaygrid,.satgrid,.sdrrow{grid-template-columns:1fr}.livebox .mix{flex-basis:100%}.level{display:none}.card{grid-template-columns:auto 1fr}.stats{grid-column:2}.satbtns{align-items:stretch}.tabs button{padding:8px 12px}.nowboard .title{font-size:18px}button{min-height:40px}}
+@media(max-width:520px){.tabs{display:none}.taskpicker{display:block}.nowboard{margin:6px 0;padding-bottom:6px}.livebox{gap:6px;padding:6px 0}.sdrlease{padding:6px 0}.sdrlease .sdrstate{font-size:12px}.satbtns>*{max-width:100%}}
 </style>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -152,6 +155,12 @@ summary{cursor:pointer;color:var(--muted);min-height:36px}
     <button type="button" data-tab="inmarsat">Inmarsat</button>
     <button type="button" data-tab="aircraft">Aircraft</button>
   </nav>
+  <label class="taskpicker" for="taskSelect">Task<select id="taskSelect">
+    <option value="control">Radio</option><option value="listen">Recordings</option>
+    <option value="fm">FM station</option><option value="tones">UHF tones</option>
+    <option value="sstv">SSTV pictures</option><option value="satcom">Satcom</option>
+    <option value="inmarsat">Inmarsat</option><option value="aircraft">Aircraft</option>
+  </select></label>
   <div class="livebox">
     <button id="liveBtn" type="button">Listen live</button>
     <div>
@@ -203,7 +212,7 @@ R"HTML(
           <select id="sstvRfMode"><option value="auto">Automatic RF</option><option>USB</option><option>LSB</option><option>NFM</option><option>AM</option></select>
         </label>
         <label class="hint">Session
-          <input id="sstvSessionId" value="fubar-sstv" maxlength="32" pattern="[A-Za-z0-9_-]+" title="Named SDR Town SSTV session">
+          <select id="sstvSessionId"><option value="fubar-sstv">Web SSTV</option></select>
         </label>
         <label class="hint">Image mode
           <select id="sstvModeSelect"><option value="auto">Automatic (VIS then line-sync)</option></select>
@@ -221,7 +230,7 @@ R"HTML(
     <div class="satcomneon" id="satcomPanel">
       <p class="kicker">SATCOM SCANNER</p>
       <div class="satgrid">
-        <div class="satbox"><label for="satSessionId">Session</label><input id="satSessionId" maxlength="32" placeholder="Primary workspace"></div>
+        <div class="satbox"><label for="satSessionId">Session</label><select id="satSessionId"><option value="">Primary workspace</option></select></div>
         <div class="satbox"><label for="satDevice">Radio</label><select id="satDevice"><option value="">Assigned radio</option></select></div>
         <div class="satbox"><label for="satLow">Low frequency MHz</label><input id="satLow" inputmode="decimal" value="420.000"></div>
         <div class="satbox"><label for="satHigh">High frequency MHz</label><input id="satHigh" inputmode="decimal" value="430.000"></div>
@@ -269,7 +278,7 @@ R"HTML(
       <p class="kicker">INMARSAT AERO / EGC</p>
       <p class="satstatus">Live Inmarsat status and received-aircraft map from SDR Town. Sources and ages are labelled; unknown calls are never assigned to a nearby aircraft.</p>
       <div class="satgrid">
-        <div class="satbox"><label for="inmSessionId">Workspace session (optional)</label><input id="inmSessionId" maxlength="32" pattern="[A-Za-z0-9_-]+" placeholder="Primary workspace"></div>
+        <div class="satbox"><label for="inmSessionId">Session</label><select id="inmSessionId"><option value="">Primary workspace</option></select></div>
         <div class="satbox"><label for="inmPlan">Band plan</label><select id="inmPlan"></select></div>
         <div class="satbox"><label for="inmChannel">Channel</label><select id="inmChannel"></select></div>
         <div class="satbox"><label for="inmDevice">Radio</label><select id="inmDevice"><option value="">Assigned radio</option></select></div>
@@ -303,7 +312,7 @@ R"HTML(
       <p class="satstatus" id="acStatus">ADS-B / OpenSky / Inmarsat ADS-C tracks from SDR Town. Green=local 1090, blue=OpenSky, orange=ADS-C.</p>
       <div id="acMap" style="height:420px;width:100%;border:1px solid #1f3d1f;border-radius:8px;background:#0a1014"></div>
       <div class="satbtns" style="margin-top:8px">
-        <label>Session<input id="acSessionId" maxlength="32" placeholder="Primary workspace"></label>
+        <label>Session<select id="acSessionId"><option value="">Primary workspace</option></select></label>
         <label>Radio<select id="acDevice"><option value="">Assigned radio</option></select></label>
         <button type="button" id="acOpenSession">Open session</button>
         <button type="button" id="acCloseSession">Close session</button>
@@ -333,7 +342,7 @@ R"HTML(
   <section class="sdrtown" id="sdrTownPanel">
     <p class="kicker">SDR Town control</p>
     <div class="modemenu">
-      <p class="lab"><b>Current mode</b></p>
+      <p class="lab"><b>Switch mode now</b></p>
       <div class="modebtns" id="sdrModeBtns">
         <button type="button" data-set-mode="AUTO" class="sdrModeAction" title="Automatic mode pick">AUTO</button>
         <button type="button" data-set-mode="NFM" class="sdrModeAction" title="Narrow FM — UHF/VHF, tones, SSTV">NFM</button>
@@ -349,7 +358,7 @@ R"HTML(
     <div class="sdrgrid">
       <div><label for="sdrDevice">Radio for tuning</label><select id="sdrDevice"><option value="">Select radio</option></select><small id="sdrDeviceStatus"></small></div>
       <div><label for="sdrFreq">Frequency MHz</label><input id="sdrFreq" inputmode="decimal" value="420.35000" placeholder="e.g. 7.10000 or 95.70000" title="0.1–6000 MHz. Take control, type the frequency, then Tune."></div>
-      <div><label for="sdrMode">Tune mode</label><select id="sdrMode"><option>AUTO</option><option>NFM</option><option>WFM</option><option>AM</option><option>USB</option><option>LSB</option><option>CW</option><option>P25</option></select></div>
+      <div><label for="sdrMode">Mode on Tune</label><select id="sdrMode"><option>AUTO</option><option>NFM</option><option>WFM</option><option>AM</option><option>USB</option><option>LSB</option><option>CW</option><option>P25</option></select></div>
       <div><label for="sdrBw">Bandwidth kHz</label><input id="sdrBw" inputmode="decimal" placeholder="auto"></div>
       <div><label><input id="sdrLpfEnabled" type="checkbox" checked>Audio low-pass filter</label><label for="sdrLpf">Cutoff kHz</label><input id="sdrLpf" inputmode="decimal" placeholder="unchanged"></div>
       <div><label for="sdrGain" id="sdrGainLabel">RF gain dB</label><input id="sdrGain" inputmode="decimal" placeholder="leave"></div>
@@ -439,6 +448,8 @@ let sdrControlSeededForLease = false;
 let sdrControlWasActive = false;
 let sdrCommandInFlight = false;
 let sdrDesiredMode = '';
+let sdrAdmissionTicket = sessionStorage.getItem('fubar.sdrTown.ticket') || '';
+let sdrSessionMutationBusy = false, sdrSessionEpoch = 0;
 const sdrControlClientId = (() => {
   const key = 'fubar.sdrTown.clientId';
   let id = localStorage.getItem(key);
@@ -1302,6 +1313,7 @@ function showP25Status(text){
 }
 function switchTab(name){
   currentTab = name;
+  document.getElementById('taskSelect').value = name;
   document.querySelectorAll('#siteTabs button').forEach(btn => {
     const selected = btn.getAttribute('data-tab') === name;
     btn.classList.toggle('on', selected);
@@ -1311,7 +1323,11 @@ function switchTab(name){
   document.querySelectorAll('.tabpanel').forEach(panel => {
     panel.classList.toggle('on', panel.id === ('tab-' + name));
   });
+  if(name==='aircraft') setTimeout(()=>{acEnsureMap();if(acMap)acMap.invalidateSize();},50);
+  if(name==='inmarsat') setTimeout(()=>{ensureInmarsatMap();if(inmMap)inmMap.invalidateSize();},50);
+  refreshWorkflowSessions();
 }
+document.getElementById('taskSelect').addEventListener('change',e=>switchTab(e.target.value));
 document.querySelectorAll('#siteTabs button').forEach(btn => {
   const tab = btn.dataset.tab;
   btn.id = 'nav-' + tab;
@@ -1454,14 +1470,14 @@ R"HTML(
     }).join('');
   }
 }
-function sdrTownMessage(text, routine = false){
+function sdrTownMessage(text, routine = false, failed = false){
   const el = document.getElementById('sdrTownStatus');
   if (el) el.textContent = text || '';
   if (!routine) {
     const feedback = document.getElementById('commandFeedback');
     feedback.textContent = text || '';
     feedback.hidden = !text;
-    feedback.classList.toggle('error', /failed|error|invalid|unavailable|not reachable|disabled/i.test(text || ''));
+    feedback.classList.toggle('error', failed || /failed|error|invalid|unavailable|not reachable|disabled/i.test(text || ''));
   }
 }
 function sdrControlMs(ms){
@@ -1691,19 +1707,31 @@ function sdrPopulateP25ControlChannels(channels){
   if (current && Array.from(select.options).some(o => o.value === current)) select.value = current;
 }
 async function sdrControlAction(action){
+  const mutation=action!=='status';
+  if(sdrSessionMutationBusy)return {ok:false};
+  const epoch=mutation?++sdrSessionEpoch:sdrSessionEpoch;
+  const requestedTicket=sdrAdmissionTicket;
+  if(mutation)sdrSessionMutationBusy=true;
   try {
     const res = await fetch('api/sdr-town/control-session', {
       method:'POST', signal:AbortSignal.timeout(15000),
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action, clientId:sdrControlClientId, name:sdrControlName})
+      body:JSON.stringify({action, admissionTicket:sdrAdmissionTicket, name:sdrControlName})
     });
     const data = await res.json();
+    if(epoch!==sdrSessionEpoch || (!mutation && requestedTicket!==sdrAdmissionTicket))return data;
+    if(data.admissionTicket) sdrAdmissionTicket=data.admissionTicket;
+    if(data.code==='invalid_ticket' || (action==='release' && data.ok)) sdrAdmissionTicket='';
+    if(sdrAdmissionTicket) sessionStorage.setItem('fubar.sdrTown.ticket',sdrAdmissionTicket);
+    else sessionStorage.removeItem('fubar.sdrTown.ticket');
     if (data.session) sdrAdoptSession(data.session);
     if (!data.ok && data.error) sdrTownMessage(data.error, action==='status');
     return data;
   } catch (error) {
     sdrTownMessage('Control session failed - ' + (error && error.message ? error.message : 'network error'), action==='status');
     return {ok:false};
+  } finally {
+    if(mutation)sdrSessionMutationBusy=false;
   }
 }
 function sdrSeedFields(state){
@@ -1804,7 +1832,7 @@ async function postSdrTown(path, payload){
   sdrCommandInFlight = true;
   sdrSetControlsEnabled();
   try {
-    payload = Object.assign({}, payload || {}, {clientId:sdrControlClientId, force:false});
+    payload = Object.assign({}, payload || {}, {admissionTicket:sdrAdmissionTicket, force:false});
     const res = await fetch(path, {
       method:'POST', signal:AbortSignal.timeout(20000),
       headers:{'Content-Type':'application/json'},
@@ -1839,7 +1867,7 @@ async function postSdrTown(path, payload){
       if (data.session) sdrAdoptSession(data.session);
       sdrDesiredMode = '';
       sdrHighlightMode(sdrEffectiveMode(sdrTownLiveState));
-      sdrTownMessage(commandError(data.error, res.status));
+      sdrTownMessage(commandError(data.error, res.status), false, true);
     }
   } catch (error) {
     sdrDesiredMode = '';
@@ -1925,6 +1953,11 @@ document.getElementById('sdrTuneBtn').addEventListener('click', () => {
   if (volumeText) payload.volume = Math.max(0, Math.min(1, Number(volumeText) / 100));
   postSdrTown('api/sdr-town/tune', payload);
 });
+for(const id of ['sdrDevice','sdrFreq','sdrMode','sdrBw','sdrLpf','sdrGain','sdrVolume','sdrSquelch','sdrLpfEnabled','sdrDirectSamp','sdrP25Freq','sdrP25Known']){
+  for(const event of ['input','change'])document.getElementById(id).addEventListener(event,()=>{
+    if(sdrControlSession.canControl)sdrControlSeededForLease=true;
+  });
+}
 document.getElementById('sdrFreq').addEventListener('keydown', e=>{
   if(e.key==='Enter'){e.preventDefault();document.getElementById('sdrTuneBtn').click();}
 });
@@ -1945,13 +1978,7 @@ async function sdrApplyMode(mode){
     sdrTownMessage('Click Take control first, then tap a demod/mode.');
     return;
   }
-  const select = document.getElementById('sdrMode');
-  if (select) {
-    const opt = Array.from(select.options).find(o => String(o.value).toUpperCase() === mode);
-    if (opt) select.value = opt.value;
-  }
   sdrDesiredMode = mode;
-  sdrHighlightMode(mode);
   if (mode === 'P25') {
     if (!sdrTownConfig.allowP25Control) {
       sdrDesiredMode = '';
@@ -2253,6 +2280,72 @@ function sessionView(workflow,prefix,view,fallback){
   const id=workflowSession(prefix);
   return id ? 'api/sdr-town/'+workflow+'-sessions?sessionId='+encodeURIComponent(id)+'&view='+view : fallback;
 }
+)HTML"
+R"HTML(
+async function fetchPagedView(path, isCurrent=()=>true){
+  let combined=null, snapshot='', offset=0, bytes=0;
+  const arrays=['aircraft','positions','tracks','messages'];
+  const signal=AbortSignal.timeout(20000);
+  for(let count=0;count<64;count++){
+    if(!isCurrent())throw new Error('View changed');
+    const url=path+(path.includes('?')?'&':'?')+'offset='+offset+
+      (snapshot?'&snapshot='+encodeURIComponent(snapshot):'');
+    const res=await fetch(url,{cache:'no-store',signal});
+    const data=await res.json();
+    if(!isCurrent())throw new Error('View changed');
+    if(!data || data.ok===false || res.ok===false)throw new Error(data?.error||'View unavailable');
+    bytes+=JSON.stringify(data).length;
+    if(bytes>4*1024*1024)throw new Error('View exceeds display budget');
+    for(const key of arrays)if(data[key]!=null && (!Array.isArray(data[key]) || data[key].length>4096))throw new Error('Invalid view collection');
+    const page=data.page;
+    if(!page){if(count)throw new Error('Missing snapshot continuation');return data;}
+    if(!/^[A-Za-z0-9_-]{1,96}$/.test(page.snapshot) || page.offset!==offset ||
+       !Number.isInteger(page.total) || page.total<0 || page.total>4096 ||
+       (snapshot && (page.snapshot!==snapshot || page.total!==combined.page.total)))throw new Error('View snapshot changed');
+    if(!combined){combined=Object.assign({},data);for(const key of arrays)if(Array.isArray(data[key]))combined[key]=[];snapshot=page.snapshot;}
+    for(const key of arrays)if(Array.isArray(data[key])){
+      if(!combined[key])combined[key]=[];
+      combined[key].push(...data[key]);
+      if(combined[key].length>4096)throw new Error('View exceeds row budget');
+    }
+    const rows=Math.max(0,...arrays.map(key=>Array.isArray(data[key])?data[key].length:0));
+    if(rows>64 || offset+rows>page.total)throw new Error('Invalid view page size');
+    if(page.nextOffset===null){
+      if(offset+rows!==page.total)throw new Error('Incomplete view snapshot');
+      return combined;
+    }
+    if(!Number.isInteger(page.nextOffset)||page.nextOffset<=offset||page.nextOffset>=page.total)throw new Error('Invalid view continuation');
+    if(page.nextOffset!==offset+rows)throw new Error('Incomplete view continuation');
+    offset=page.nextOffset;
+  }
+  throw new Error('View exceeds page budget');
+}
+const workflowViewRevision={inm:0,ac:0,sat:0};
+function populateWorkflowSessions(prefix,sessions){
+  const select=document.getElementById(prefix+'SessionId'), previous=select.value;
+  const entries=(sessions||[]).filter(s=>/^[A-Za-z0-9_-]{1,32}$/.test(s.sessionId||''))
+    .map(s=>({value:s.sessionId,label:(s.name||s.label||s.sessionId)+(s.state?' - '+s.state:'')}));
+  if(previous && !entries.some(s=>s.value===previous))entries.push({value:previous,label:prefix==='sstv'&&previous==='fubar-sstv'?'Web SSTV':'Unavailable selected session'});
+  const signature=JSON.stringify(entries);
+  if(select.dataset.signature===signature)return;
+  select.dataset.signature=signature;select.replaceChildren();
+  for(const item of [{value:'',label:'Primary workspace'},...entries]){
+    const option=document.createElement('option');option.value=item.value;option.textContent=item.label;select.appendChild(option);
+  }
+  select.value=previous;
+}
+let workflowSessionsBusy=false;
+async function refreshWorkflowSessions(){
+  const entry={sstv:['sstv','sstv'],satcom:['satcom','sat'],inmarsat:['inmarsat','inm'],aircraft:['aircraft','ac']}[currentTab];
+  if(!entry || workflowSessionsBusy || !sdrTownConfig.enabled)return;
+  workflowSessionsBusy=true;
+  try{
+    const res=await fetch('api/sdr-town/'+entry[0]+'-sessions',{cache:'no-store',signal:AbortSignal.timeout(10000)});
+    const data=await res.json();
+    if(data.ok!==false && Array.isArray(data.sessions))populateWorkflowSessions(entry[1],data.sessions);
+  }catch(e){/* Keep the selected session when native service is unavailable. */}
+  finally{workflowSessionsBusy=false;}
+}
 function populateWorkflowDevices(devices){
   for(const prefix of ['sdr','sstv','sat','inm','ac']){
     const select=document.getElementById(prefix+'Device');
@@ -2275,15 +2368,23 @@ function sdrRadioSelection(){
 }
 async function workflowAction(workflow,prefix,action){
   try{
-    const id=workflowSession(prefix);
-    if(!id){sdrTownMessage('Enter a named session first.');return;}
-    await postSdrTown('api/sdr-town/'+workflow+'-sessions',{sessionId:id,action});
+    const id=action==='open'?prefix+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6):workflowSession(prefix);
+    if(!id){sdrTownMessage('Select a named session first.');return;}
+    const result=await postSdrTown('api/sdr-town/'+workflow+'-sessions',{sessionId:id,action});
+    if(!result || !result.ok)return;
+    const select=document.getElementById(prefix+'SessionId');
+    if(action==='open'){
+      const option=document.createElement('option');option.value=id;option.textContent=id;select.appendChild(option);select.value=id;
+    }else if(action==='close')select.value='';
+    select.dispatchEvent(new Event('change'));await refreshWorkflowSessions();
   }catch(e){sdrTownMessage(e.message);}
 }
 for(const [prefix,workflow] of [['sat','satcom'],['inm','inmarsat'],['ac','aircraft']]){
+  document.getElementById(prefix+'OpenSession').textContent='New session';
   document.getElementById(prefix+'OpenSession').addEventListener('click',()=>workflowAction(workflow,prefix,'open'));
   document.getElementById(prefix+'CloseSession').addEventListener('click',()=>workflowAction(workflow,prefix,'close'));
   document.getElementById(prefix+'SessionId').addEventListener('change',()=>{
+    ++workflowViewRevision[prefix];
     if(prefix==='inm'){
       if(inmLayer)inmLayer.clearLayers();inmMarkers.clear();inmMapCentered=false;
       document.getElementById('inmMsgLog').textContent='';loadInmarsat();
@@ -2388,8 +2489,7 @@ async function loadInmarsat(){
       document.getElementById('inmWatchTogether').checked=inmWatchDraft.simultaneousInBand!==false;
       document.getElementById('inmWatchBudget').value=inmWatchDraft.maxConcurrentChannels||2;renderWatch();
     }
-    const msgRes = await fetch(sessionView('inmarsat','inm','messages','api/sdr-town/inmarsat-messages'), {cache:'no-store',signal:AbortSignal.timeout(10000)});
-    const msgData = await msgRes.json();
+    const msgData = await fetchPagedView(sessionView('inmarsat','inm','messages','api/sdr-town/inmarsat-messages'));
     if(selectedSession!==inmSessionId())return;
     if (log && msgData && msgData.messages) {
       log.textContent = (msgData.messages||[]).map(m =>
@@ -2415,12 +2515,12 @@ function ensureInmarsatMap(){
 async function loadInmarsatMap(){
   const st=document.getElementById('inmMapStatus');
   if(!sdrTownConfig || !sdrTownConfig.enabled){if(st)st.textContent='Enable SDR Town control to show the map.';return;}
+  const revision=workflowViewRevision.inm, selectedSession=workflowSession('inm');
+  const isCurrent=()=>revision===workflowViewRevision.inm && selectedSession===workflowSession('inm');
   try{
     ensureInmarsatMap();
-    const selectedSession=workflowSession('inm');
-    const res=await fetch(sessionView('inmarsat','inm','map','api/sdr-town/inmarsat-map-status'),{cache:'no-store',signal:AbortSignal.timeout(10000)});
-    const data=await res.json();
-    if(selectedSession!==workflowSession('inm'))return;
+    const data=await fetchPagedView(sessionView('inmarsat','inm','map','api/sdr-town/inmarsat-map-status'),isCurrent);
+    if(!isCurrent())return;
     if(!data.ok) throw new Error(data.error || 'Map unavailable');
     const positions=Array.isArray(data.positions)?data.positions:[];
     const aircraft=Array.isArray(data.aircraft)?data.aircraft:[];
@@ -2448,9 +2548,8 @@ async function loadInmarsatMap(){
     for(const [key,marker] of inmMarkers) if(!seen.has(key)){inmLayer.removeLayer(marker);inmMarkers.delete(key);}
     if(st && !inmMap) st.textContent+=' · Map library unavailable';
   }catch(e){
+    if(!isCurrent())return;
     if(st)st.textContent='Inmarsat map unavailable';
-    if(inmLayer)inmLayer.clearLayers();
-    inmMarkers.clear();
   }
 }
 function aircraftMarkerIcon(color, trackDeg, unknown){
@@ -2508,16 +2607,16 @@ function acEnsureMap(){
 }
 async function loadAircraft(){
   const st = document.getElementById('acStatus');
+  const revision=workflowViewRevision.ac, selectedSession=workflowSession('ac');
+  const isCurrent=()=>revision===workflowViewRevision.ac && selectedSession===workflowSession('ac');
   try {
     if (!sdrTownConfig || !sdrTownConfig.enabled) {
       if (st) st.textContent = 'Enable SDR Town control to show aircraft tracks.';
       return;
     }
     acEnsureMap();
-    const selectedSession=workflowSession('ac');
-    const res = await fetch(sessionView('aircraft','ac','status','api/sdr-town/aircraft-map-status'), {cache:'no-store',signal:AbortSignal.timeout(10000)});
-    const data = await res.json();
-    if(selectedSession!==workflowSession('ac'))return;
+    const data = await fetchPagedView(sessionView('aircraft','ac','map','api/sdr-town/aircraft-map-status'),isCurrent);
+    if(!isCurrent())return;
     if (!data.ok) {
       if (st) st.textContent = data.error || 'Aircraft status unavailable (need SDR Town 0.2.70+).';
       return;
@@ -2578,12 +2677,15 @@ async function loadAircraft(){
       });
     }
   } catch (e) {
+    if(!isCurrent())return;
     if (st) st.textContent = 'Aircraft poll failed';
   }
 }
 async function aircraftCommand(payload){
   const id=workflowSession('ac');
-  return postSdrTown(id?'api/sdr-town/aircraft-sessions':'api/sdr-town/aircraft-map-control',Object.assign({},payload,id?{sessionId:id}:{}));
+  const result=await postSdrTown(id?'api/sdr-town/aircraft-sessions':'api/sdr-town/aircraft-map-control',Object.assign({},payload,id?{sessionId:id}:{}));
+  await loadAircraft();
+  return result;
 }
 document.getElementById('acRefreshBtn').addEventListener('click', async () => {
   if (!sdrControlSession || !sdrControlSession.canControl) {
@@ -2591,7 +2693,6 @@ document.getElementById('acRefreshBtn').addEventListener('click', async () => {
     return;
   }
   await aircraftCommand({action:'refresh'});
-  await loadAircraft();
 });
 document.getElementById('acTuneBtn').addEventListener('click', async () => {
   if (!sdrControlSession || !sdrControlSession.canControl) {
@@ -2603,11 +2704,9 @@ document.getElementById('acTuneBtn').addEventListener('click', async () => {
 });
 document.getElementById('acStopBtn').addEventListener('click', async () => {
   await aircraftCommand({action:'stop'});
-  await loadAircraft();
 });
 document.getElementById('acLocalDecode').addEventListener('change', async e => {
   await aircraftCommand({action:'local', enabled:!!e.target.checked});
-  await loadAircraft();
 });
 document.getElementById('acInternetAircraft').addEventListener('change', async e => {
   if(e.target.checked) {
@@ -2616,7 +2715,6 @@ document.getElementById('acInternetAircraft').addEventListener('change', async e
     return;
   }
   await aircraftCommand({action:'network-off'});
-  await loadAircraft();
 });
 document.querySelectorAll('#siteTabs button').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -2662,6 +2760,7 @@ pollAfterCompletion(loadInmarsat, 2000, 'inmarsat');
 pollAfterCompletion(loadAircraft, 3000, 'aircraft');
 setInterval(sdrRenderControlSession, 1000);
 pollAfterCompletion(loadStations, 15000);
+pollAfterCompletion(refreshWorkflowSessions, 5000);
 </script>
 </body>
 </html>
@@ -2764,17 +2863,33 @@ constexpr std::uint64_t kSdrControlExtendMs = 3ull * 60ull * 1000ull;
 constexpr std::uint64_t kSdrControlWarningMs = 60ull * 1000ull;
 constexpr std::uint64_t kSdrControlQueueStaleMs = 90ull * 1000ull;
 constexpr int kSdrControlMaxExtensions = 2;
+constexpr std::size_t kSdrControlQueueCapacity = 32;
+constexpr std::size_t kSdrControlStatusNames = 8;
 
-std::string sanitizeSdrControlId(const std::string& value) {
-  std::string out;
-  out.reserve(std::min<std::size_t>(value.size(), 80));
-  for (unsigned char ch : value) {
-    if (std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.') {
-      out += static_cast<char>(ch);
-    }
-    if (out.size() >= 80) break;
+std::string sdrControlTicket(const nlohmann::json& body) {
+  if (!body.is_object() || !body.contains("admissionTicket") || !body["admissionTicket"].is_string()) return {};
+  const auto value = body["admissionTicket"].get<std::string>();
+  return value.size() == 32 && std::all_of(value.begin(), value.end(), [](unsigned char ch) {
+    return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f');
+  }) ? value : std::string{};
+}
+
+std::string newSdrControlTicket() {
+  // Dynamic system-only loading keeps both supported toolchains' link lists unchanged.
+  HMODULE module = LoadLibraryExW(L"bcrypt.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+  if (!module) return {};
+  using RandomFn = NTSTATUS (WINAPI*)(BCRYPT_ALG_HANDLE, PUCHAR, ULONG, ULONG);
+  const auto random = reinterpret_cast<RandomFn>(GetProcAddress(module, "BCryptGenRandom"));
+  unsigned char bytes[16]{};
+  const bool generated = random && random(nullptr, bytes, sizeof(bytes), BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0;
+  FreeLibrary(module);
+  if (!generated) return {};
+  constexpr char hex[] = "0123456789abcdef";
+  std::string result;
+  for (std::size_t i = 0; i < sizeof(bytes); ++i) {
+    result += hex[bytes[i] >> 4]; result += hex[bytes[i] & 15];
   }
-  return out;
+  return result;
 }
 
 std::string sanitizeSdrControlName(const std::string& value, const std::string& clientId) {
@@ -2793,9 +2908,8 @@ std::string sanitizeSdrControlName(const std::string& value, const std::string& 
     if (out.size() >= 48) break;
   }
   if (!out.empty()) return out;
-  const std::string suffix =
-      clientId.size() > 4 ? clientId.substr(clientId.size() - 4) : clientId;
-  return suffix.empty() ? "Operator" : std::string("Operator ") + suffix;
+  (void)clientId;
+  return "Operator";
 }
 
 std::uint64_t tickNow64() { return static_cast<std::uint64_t>(GetTickCount64()); }
@@ -2858,6 +2972,13 @@ bool sendSdrResponse(SOCKET socket, int status, const char* reason, const std::s
                      const std::string& body, const std::string& extra = {}) {
   return sendResponse(socket,status,reason,type,
     type=="application/json" ? publicSdr.response(body) : body,extra);
+}
+
+bool sendControlDenied(SOCKET socket, const std::string& body) {
+  const auto data = nlohmann::json::parse(body, nullptr, false);
+  const bool limited = data.is_object() && data.value("code", "") == "rate_limited";
+  return sendSdrResponse(socket, limited ? 429 : 423, limited ? "Too Many Requests" : "Locked",
+      "application/json", body, std::string(kCors) + (limited ? "Retry-After: 1\r\n" : ""));
 }
 
 bool sendFile(SOCKET socket, const std::filesystem::path& path, const std::string& rangeHeader, const char* mime="audio/wav") {
@@ -2984,6 +3105,10 @@ void CaptureWebServer::setMaxLiveListeners(int limit) { liveSlots_.setLimit(limi
 void CaptureWebServer::setSdrTownControlConfig(const SdrTownBridgeConfig& config) {
   EnterCriticalSection(&lock_);
   sdrTownControl_ = config;
+  if (!config.enabled) {
+    sdrControlActiveClient_.clear(); sdrControlActiveName_.clear(); sdrControlQueue_.clear();
+    sdrControlLeaseUntilTick_ = 0; sdrControlExtensionsUsed_ = 0; ++sdrControlRevision_;
+  }
   LeaveCriticalSection(&lock_);
 }
 int CaptureWebServer::maxLiveListeners() const { return liveSlots_.limit(); }
@@ -3030,13 +3155,28 @@ SdrTownBridgeConfig CaptureWebServer::sdrTownControlConfigLocked() const {
   return value;
 }
 
+bool CaptureWebServer::ControlBudget::consume(std::uint64_t now, double capacity, double perSecond) {
+  if (!updated) tokens = capacity;
+  else if (now > updated) tokens = std::min(capacity, tokens + (now - updated) * perSecond / 1000.0);
+  updated = now;
+  if (tokens < 1) return false;
+  tokens -= 1;
+  return true;
+}
+
 void CaptureWebServer::sdrTownControlPromoteLocked(std::uint64_t nowTick) {
+  const auto oldSize = sdrControlQueue_.size();
+  std::erase_if(sdrControlQueue_, [&](const SdrControlQueueEntry& entry) {
+    return nowTick > entry.lastSeenTick && nowTick - entry.lastSeenTick > kSdrControlQueueStaleMs;
+  });
+  if (oldSize != sdrControlQueue_.size()) ++sdrControlRevision_;
   if (!sdrControlActiveClient_.empty() && nowTick < sdrControlLeaseUntilTick_) return;
   if (!sdrControlActiveClient_.empty()) {
     sdrControlActiveClient_.clear();
     sdrControlActiveName_.clear();
     sdrControlLeaseUntilTick_ = 0;
     sdrControlExtensionsUsed_ = 0;
+    sdrControlActiveBudget_ = {};
     ++sdrControlRevision_;
   }
 
@@ -3049,6 +3189,7 @@ void CaptureWebServer::sdrTownControlPromoteLocked(std::uint64_t nowTick) {
     }
     sdrControlActiveClient_ = next.clientId;
     sdrControlActiveName_ = next.name;
+    sdrControlActiveBudget_ = next.budget;
     sdrControlLeaseUntilTick_ = nowTick + kSdrControlLeaseMs;
     sdrControlExtensionsUsed_ = 0;
     ++sdrControlRevision_;
@@ -3078,6 +3219,8 @@ std::string CaptureWebServer::sdrTownControlSessionStateJsonLocked(
        << ",\"remainingMs\":" << remaining
        << ",\"queuePosition\":" << queuePosition
        << ",\"queueLength\":" << sdrControlQueue_.size()
+       << ",\"queueCapacity\":" << kSdrControlQueueCapacity
+       << ",\"queueTruncated\":" << (sdrControlQueue_.size() > kSdrControlStatusNames ? "true" : "false")
        << ",\"extensionsUsed\":" << sdrControlExtensionsUsed_
        << ",\"maxExtensions\":" << kSdrControlMaxExtensions
        << ",\"leaseMs\":" << kSdrControlLeaseMs
@@ -3085,7 +3228,7 @@ std::string CaptureWebServer::sdrTownControlSessionStateJsonLocked(
        << ",\"warningMs\":" << kSdrControlWarningMs
        << ",\"revision\":" << sdrControlRevision_
        << ",\"queue\":[";
-  for (std::size_t i = 0; i < sdrControlQueue_.size(); ++i) {
+  for (std::size_t i = 0; i < std::min(sdrControlQueue_.size(), kSdrControlStatusNames); ++i) {
     if (i) json << ",";
     json << "{\"position\":" << (i + 1) << ",\"name\":\""
          << jsonEscape(sdrControlQueue_[i].name) << "\"}";
@@ -3094,30 +3237,51 @@ std::string CaptureWebServer::sdrTownControlSessionStateJsonLocked(
   return json.str();
 }
 
-std::string CaptureWebServer::sdrTownControlSessionActionJson(const std::string& body) {
-  const std::uint64_t now = tickNow64();
+std::string CaptureWebServer::sdrTownControlSessionActionJson(const std::string& body, int* status,
+                                                             std::uint64_t nowTick) {
+  const std::uint64_t now = nowTick ? nowTick : tickNow64();
   std::string action = FubarNetDirectory::jsonGetString(body, "action");
   if (action.empty()) action = "status";
   std::transform(action.begin(), action.end(), action.begin(),
                  [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
   const auto parsed=nlohmann::json::parse(body,nullptr,false);
-  const std::string clientId = sanitizeSdrControlId(parsed.is_object() && parsed.contains("clientId") && parsed["clientId"].is_string() ? parsed["clientId"].get<std::string>() : "");
+  std::string clientId = sdrControlTicket(parsed);
   const std::string name =
       sanitizeSdrControlName(FubarNetDirectory::jsonGetString(body, "name"), clientId);
 
   bool ok = true;
   std::string error;
   std::string state;
+  std::string code;
+  std::string issuedTicket;
+  int httpStatus = 200;
   EnterCriticalSection(&lock_);
   sdrTownControlPromoteLocked(now);
+  auto queuedEntry = std::find_if(sdrControlQueue_.begin(), sdrControlQueue_.end(),
+      [&](const SdrControlQueueEntry& entry) { return entry.clientId == clientId; });
+  const bool recognized = !clientId.empty() && (sdrControlActiveClient_ == clientId || queuedEntry != sdrControlQueue_.end());
+  ControlBudget& budget = recognized ? (sdrControlActiveClient_ == clientId ? sdrControlActiveBudget_ : queuedEntry->budget)
+                                    : sdrControlObserverBudget_;
+  const bool budgetOk = budget.consume(now, recognized ? 16 : 128, recognized ? 4 : 16);
   if (!sdrTownControl_.enabled) {
     ok = false;
+    httpStatus = 403;
     error = "SDR Town control is disabled in FUBAR.";
-  } else if (clientId.empty()) {
+  } else if (!budgetOk) {
     ok = false;
-    error = "Missing control client id.";
+    httpStatus = 429; code = "rate_limited";
+    error = "Control request limit reached. Try again shortly.";
+  } else if (parsed.contains("admissionTicket") && !parsed["admissionTicket"].is_null() &&
+             parsed["admissionTicket"] != "" && !recognized) {
+    ok = false;
+    httpStatus = 403; code = "invalid_ticket";
+    error = "Control admission expired. Take control again.";
+  } else if (action != "status" && action != "take" && !recognized) {
+    ok = false;
+    httpStatus = 403; code = "invalid_ticket";
+    error = "Take control before changing the control session.";
   } else {
-    if (sdrControlActiveClient_ == clientId) sdrControlActiveName_ = name;
+    if (recognized && sdrControlActiveClient_ == clientId) sdrControlActiveName_ = name;
     for (auto& queued : sdrControlQueue_) {
       if (queued.clientId == clientId) {
         queued.name = name;
@@ -3126,11 +3290,25 @@ std::string CaptureWebServer::sdrTownControlSessionActionJson(const std::string&
     }
 
     if (action == "take") {
-      if (sdrControlActiveClient_.empty()) {
+      if (!recognized && sdrControlQueue_.size() >= kSdrControlQueueCapacity) {
+        ok = false; httpStatus = 429; code = "queue_full";
+        error = "Control queue is full. Try again later.";
+      } else if (!recognized && !sdrControlAdmissionBudget_.consume(now, 33, 1)) {
+        ok = false; httpStatus = 429; code = "admission_limited";
+        error = "Control admission is busy. Try again shortly.";
+      } else if (!recognized) {
+        clientId = newSdrControlTicket();
+        if (clientId.empty()) {
+          ok = false; httpStatus = 503; code = "admission_unavailable";
+          error = "Control admission is unavailable.";
+        } else issuedTicket = clientId;
+      }
+      if (ok && sdrControlActiveClient_.empty()) {
         sdrControlActiveClient_ = clientId;
         sdrControlActiveName_ = name;
         sdrControlLeaseUntilTick_ = now + kSdrControlLeaseMs;
         sdrControlExtensionsUsed_ = 0;
+        sdrControlActiveBudget_ = {};
         sdrControlQueue_.erase(
             std::remove_if(sdrControlQueue_.begin(), sdrControlQueue_.end(),
                            [&](const SdrControlQueueEntry& entry) {
@@ -3138,7 +3316,7 @@ std::string CaptureWebServer::sdrTownControlSessionActionJson(const std::string&
                            }),
             sdrControlQueue_.end());
         ++sdrControlRevision_;
-      } else if (sdrControlActiveClient_ != clientId) {
+      } else if (ok && sdrControlActiveClient_ != clientId) {
         const auto found = std::find_if(
             sdrControlQueue_.begin(), sdrControlQueue_.end(),
             [&](const SdrControlQueueEntry& entry) { return entry.clientId == clientId; });
@@ -3150,9 +3328,11 @@ std::string CaptureWebServer::sdrTownControlSessionActionJson(const std::string&
     } else if (action == "extend") {
       if (sdrControlActiveClient_ != clientId) {
         ok = false;
+        httpStatus = 403; code = "not_owner";
         error = "Only the active controller can extend this SDR Town session.";
       } else if (sdrControlExtensionsUsed_ >= kSdrControlMaxExtensions) {
         ok = false;
+        httpStatus = 409; code = "extension_limit";
         error = "This control session has already used both extensions.";
       } else {
         const std::uint64_t base = std::max(now, sdrControlLeaseUntilTick_);
@@ -3180,6 +3360,7 @@ std::string CaptureWebServer::sdrTownControlSessionActionJson(const std::string&
       }
     } else if (action != "status") {
       ok = false;
+      httpStatus = 400; code = "invalid_action";
       error = "Unknown SDR Town control-session action.";
     }
   }
@@ -3189,6 +3370,10 @@ std::string CaptureWebServer::sdrTownControlSessionActionJson(const std::string&
   std::ostringstream json;
   json << "{\"ok\":" << (ok ? "true" : "false");
   if (!error.empty()) json << ",\"error\":\"" << jsonEscape(error) << "\"";
+  if (!code.empty()) json << ",\"code\":\"" << code << "\"";
+  if (httpStatus == 429) json << ",\"retryAfterMs\":1000";
+  if (!issuedTicket.empty()) json << ",\"admissionTicket\":\"" << issuedTicket << "\"";
+  if (status) *status = httpStatus;
   json << ",\"session\":" << state << "}";
   return json.str();
 }
@@ -3198,10 +3383,11 @@ bool CaptureWebServer::sdrTownControlCommandAllowed(const std::string& body,
                                                     const char* capability) {
   const std::uint64_t now = tickNow64();
   const auto parsed=nlohmann::json::parse(body,nullptr,false);
-  const std::string clientId = sanitizeSdrControlId(parsed.is_object() && parsed.contains("clientId") && parsed["clientId"].is_string() ? parsed["clientId"].get<std::string>() : "");
+  const std::string clientId = sdrControlTicket(parsed);
   std::string state;
   std::string error;
   bool allowed = false;
+  bool rateLimited = false;
   EnterCriticalSection(&lock_);
   sdrTownControlPromoteLocked(now);
   if (!sdrTownControl_.enabled) {
@@ -3217,7 +3403,9 @@ bool CaptureWebServer::sdrTownControlCommandAllowed(const std::string& body,
   } else if (clientId.empty()) {
     error = "Take control before sending SDR Town commands.";
   } else if (sdrControlActiveClient_ == clientId && now < sdrControlLeaseUntilTick_) {
-    allowed = true;
+    allowed = sdrControlActiveBudget_.consume(now, 16, 4);
+    rateLimited = !allowed;
+    if (!allowed) error = "Control command limit reached. Try again shortly.";
   } else {
     error = "SDR Town control is locked by another operator. Click Take control to join the queue.";
   }
@@ -3225,8 +3413,9 @@ bool CaptureWebServer::sdrTownControlCommandAllowed(const std::string& body,
   LeaveCriticalSection(&lock_);
 
   if (!allowed && response) {
-    *response = std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) +
-                "\",\"session\":" + state + "}";
+    auto result = nlohmann::json{{"ok",false},{"error",error},{"session",nlohmann::json::parse(state)}};
+    if (rateLimited) { result["code"] = "rate_limited"; result["retryAfterMs"] = 1000; }
+    *response = result.dump();
   }
   return allowed;
 }
@@ -3488,6 +3677,11 @@ std::string CaptureWebServer::capturesJson() const {
 
 bool CaptureWebServer::start(std::uint16_t port, bool loopbackOnly) {
   stop();
+  EnterCriticalSection(&lock_);
+  sdrControlActiveClient_.clear(); sdrControlActiveName_.clear(); sdrControlQueue_.clear();
+  sdrControlLeaseUntilTick_ = 0; sdrControlExtensionsUsed_ = 0; ++sdrControlRevision_;
+  sdrControlActiveBudget_ = {}; sdrControlAdmissionBudget_ = {}; sdrControlObserverBudget_ = {};
+  LeaveCriticalSection(&lock_);
   port_ = port ? port : 80;
   const SOCKET listener = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (listener == INVALID_SOCKET) {
@@ -3803,6 +3997,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
   path = urlDecode(path);
 
   std::string sessionQuery;
+  std::string pagingQuery;
   std::string radioDeviceKey;
   if (path.rfind("/api/sdr-town/",0)==0) {
     if (method=="POST") {
@@ -3822,22 +4017,41 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
         }
       }
     }
-    if (method=="GET" && path.ends_with("-sessions") && !queryString.empty()) {
+    if (method=="GET" && (path.ends_with("-sessions") || path.ends_with("-map-status") || path.ends_with("-messages")) && !queryString.empty()) {
       std::string id,view;
+      std::string snapshotId, offset, pageSize;
+      bool valid=true;
+      std::vector<std::string> keys;
       std::istringstream params(queryString);
       for(std::string item;std::getline(params,item,'&');) {
         const auto eq=item.find('=');
         const auto key=item.substr(0,eq);
         const auto value=eq==std::string::npos?"":urlDecode(item.substr(eq+1));
+        if(std::find(keys.begin(),keys.end(),key)!=keys.end())valid=false;
+        keys.push_back(key);
         if(key=="sessionId")id=value;
         else if(key=="view")view=value;
+        else if(key=="snapshot")snapshotId=value;
+        else if(key=="offset")offset=value;
+        else if(key=="pageSize")pageSize=value;
+        else valid=false;
       }
-      if(id.size()>32 || !std::all_of(id.begin(),id.end(),[](unsigned char c){return std::isalnum(c)||c=='_'||c=='-';}) ||
-         (view!="map" && view!="messages" && view!="status")) {
+      const auto safeId=[](const std::string& value){return std::all_of(value.begin(),value.end(),[](unsigned char c){return std::isalnum(c)||c=='_'||c=='-';});};
+      const auto number=[](const std::string& value, unsigned max){return !value.empty() && value.size()<=4 &&
+        std::all_of(value.begin(),value.end(),[](unsigned char c){return c>='0'&&c<='9';}) && std::stoul(value)<=max;};
+      if(!valid || id.size()>32 || !safeId(id) || snapshotId.size()>96 || !safeId(snapshotId) ||
+         (path.ends_with("-sessions") && (id.empty() || (view!="map" && view!="messages" && view!="status"))) ||
+         (!path.ends_with("-sessions") && (!id.empty() || !view.empty())) ||
+         (!offset.empty() && !number(offset,4096)) || (!pageSize.empty() && (!number(pageSize,64) || std::stoul(pageSize)==0)) ||
+         (!snapshotId.empty() && (offset.empty() || offset=="0")) || (!offset.empty() && std::stoul(offset)>0 && snapshotId.empty())) {
         sendResponse(client,400,"Bad Request","application/json",R"({"ok":false,"error":"Invalid session view"})",kCors);
         return;
       }
-      sessionQuery="?sessionId="+id+"&view="+view;
+      if(!pageSize.empty())pagingQuery="pageSize="+pageSize;
+      if(!offset.empty())pagingQuery+=(pagingQuery.empty()?"":"&")+std::string("offset=")+offset;
+      if(!snapshotId.empty())pagingQuery+=(pagingQuery.empty()?"":"&")+std::string("snapshot=")+snapshotId;
+      if(path.ends_with("-sessions"))sessionQuery="?sessionId="+id+"&view="+view+(pagingQuery.empty()?"":"&"+pagingQuery);
+      if(!pagingQuery.empty())pagingQuery="?"+pagingQuery;
     }
   }
 
@@ -3900,8 +4114,10 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     return;
   }
   if (path == "/api/sdr-town/control-session") {
-    sendSdrResponse(client, 200, "OK", "application/json", sdrTownControlSessionActionJson(body),
-                 kCors);
+    int resultStatus = 200;
+    const auto response = sdrTownControlSessionActionJson(body, &resultStatus);
+    sendSdrResponse(client, resultStatus, resultStatus == 429 ? "Too Many Requests" : "Control Session",
+                    "application/json", response, std::string(kCors) + (resultStatus == 429 ? "Retry-After: 1\r\n" : ""));
     return;
   }
   if (path == "/api/sdr-town/status") {
@@ -3917,8 +4133,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
         bridge.request(sdrTownControlConfigLocked(), "GET", "/v1/satcom/status", "{}", &error);
     sendSdrResponse(client, error.empty() ? 200 : 502, error.empty() ? "OK" : "Bad Gateway",
                  "application/json",
-                 error.empty() ? response
-                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 response,
                  kCors);
     return;
   }
@@ -3929,8 +4144,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
         bridge.request(sdrTownControlConfigLocked(), "GET", "/v1/aircraft/status", "{}", &error);
     sendSdrResponse(client, error.empty() ? 200 : 502, error.empty() ? "OK" : "Bad Gateway",
                  "application/json",
-                 error.empty() ? response
-                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 response,
                  kCors);
     return;
   }
@@ -3938,16 +4152,15 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     SdrTownBridge bridge;
     std::string error;
     const std::string response = bridge.request(sdrTownControlConfigLocked(), "GET",
-                                                "/v1/aircraft/map-status", "{}", &error);
+                                                "/v1/aircraft/map-status" + pagingQuery, "{}", &error);
     sendSdrResponse(client, error.empty() ? 200 : 502, error.empty() ? "OK" : "Bad Gateway",
-                 "application/json", error.empty() ? response
-                 : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"), kCors);
+                 "application/json", response, kCors);
     return;
   }
   if (path == "/api/sdr-town/aircraft-refresh") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "tune")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     SdrTownBridge bridge;
@@ -3956,15 +4169,14 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
                                                 "/v1/aircraft/refresh", body.empty() ? "{}" : body, &error);
     sendSdrResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json",
-                 error.empty() ? response
-                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 response,
                  kCors);
     return;
   }
   if (path == "/api/sdr-town/aircraft-map-control") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "tune")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     SdrTownBridge bridge;
@@ -3972,8 +4184,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     const std::string response = bridge.request(sdrTownControlConfigLocked(), "POST",
                                                 "/v1/aircraft/map-control", body, &error);
     sendSdrResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
-                 "application/json", error.empty() ? response
-                 : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"), kCors);
+                 "application/json", response, kCors);
     return;
   }
   if (path == "/api/sdr-town/inmarsat-status") {
@@ -3983,8 +4194,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
         bridge.request(sdrTownControlConfigLocked(), "GET", "/v1/inmarsat/status", "{}", &error);
     sendSdrResponse(client, error.empty() ? 200 : 502, error.empty() ? "OK" : "Bad Gateway",
                  "application/json",
-                 error.empty() ? response
-                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 response,
                  kCors);
     return;
   }
@@ -3992,10 +4202,9 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     SdrTownBridge bridge;
     std::string error;
     const std::string response = bridge.request(sdrTownControlConfigLocked(), "GET",
-                                                "/v1/inmarsat/map-status", "{}", &error);
+                                                "/v1/inmarsat/map-status" + pagingQuery, "{}", &error);
     sendSdrResponse(client, error.empty() ? 200 : 502, error.empty() ? "OK" : "Bad Gateway",
-                 "application/json", error.empty() ? response
-                 : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"), kCors);
+                 "application/json", response, kCors);
     return;
   }
   if (path == "/api/sdr-town/inmarsat-bandplans") {
@@ -4005,8 +4214,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
         bridge.request(sdrTownControlConfigLocked(), "GET", "/v1/inmarsat/bandplans", "{}", &error);
     sendSdrResponse(client, error.empty() ? 200 : 502, error.empty() ? "OK" : "Bad Gateway",
                  "application/json",
-                 error.empty() ? response
-                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 response,
                  kCors);
     return;
   }
@@ -4014,11 +4222,10 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     SdrTownBridge bridge;
     std::string error;
     const std::string response =
-        bridge.request(sdrTownControlConfigLocked(), "GET", "/v1/inmarsat/messages", "{}", &error);
+        bridge.request(sdrTownControlConfigLocked(), "GET", "/v1/inmarsat/messages" + pagingQuery, "{}", &error);
     sendSdrResponse(client, error.empty() ? 200 : 502, error.empty() ? "OK" : "Bad Gateway",
                  "application/json",
-                 error.empty() ? response
-                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 response,
                  kCors);
     return;
   }
@@ -4028,7 +4235,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     if (write) {
       std::string controlError;
       if (!sdrTownControlCommandAllowed(body, &controlError, "tune")) {
-        sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+        sendControlDenied(client, controlError);
         return;
       }
     }
@@ -4043,15 +4250,14 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
     sendSdrResponse(client, error.empty() ? 200 : (write ? 400 : 502),
                  error.empty() ? "OK" : (write ? "Bad Request" : "Bad Gateway"),
                  "application/json",
-                 error.empty() ? response
-                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 response,
                  kCors);
     return;
   }
   if (path == "/api/sdr-town/inmarsat-control") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "tune")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     SdrTownBridge bridge;
@@ -4060,15 +4266,14 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
                                                 "/v1/inmarsat/control", body.empty() ? "{}" : body, &error);
     sendSdrResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json",
-                 error.empty() ? response
-                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 response,
                  kCors);
     return;
   }
   if (path == "/api/sdr-town/satcom-control") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "tune")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     SdrTownBridge bridge;
@@ -4077,15 +4282,14 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
                                                 "/v1/satcom/control", body.empty() ? "{}" : body, &error);
     sendSdrResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json",
-                 error.empty() ? response
-                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 response,
                  kCors);
     return;
   }
   if (path == "/api/sdr-town/satcom-catalogue") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "tune")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     SdrTownBridge bridge;
@@ -4094,15 +4298,14 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
                                                 "/v1/satcom/catalogue", body.empty() ? "{}" : body, &error);
     sendSdrResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json",
-                 error.empty() ? response
-                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 response,
                  kCors);
     return;
   }
   if (path == "/api/sdr-town/satcom-arm") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "tune")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     SdrTownBridge bridge;
@@ -4111,8 +4314,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
                                                 "/v1/satcom/pass-control", body.empty() ? "{}" : body, &error);
     sendSdrResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json",
-                 error.empty() ? response
-                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 response,
                  kCors);
     return;
   }
@@ -4120,7 +4322,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
       path == "/api/sdr-town/sstv-cancel") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "tune")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     const char* townPath = "/v1/sstv/live";
@@ -4132,15 +4334,14 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
                                                 townPath, body.empty() ? "{}" : body, &error);
     sendSdrResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json",
-                 error.empty() ? response
-                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 response,
                  kCors);
     return;
   }
   if (path == "/api/sdr-town/satcom-tle-refresh") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "tune")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     SdrTownBridge bridge;
@@ -4149,15 +4350,14 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
                                                 "/v1/satcom/tle/refresh", body.empty() ? "{}" : body, &error);
     sendSdrResponse(client, error.empty() ? 200 : 400, error.empty() ? "OK" : "Bad Request",
                  "application/json",
-                 error.empty() ? response
-                               : (std::string("{\"ok\":false,\"error\":\"") + jsonEscape(error) + "\"}"),
+                 response,
                  kCors);
     return;
   }
   if (path == "/api/sdr-town/tune") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "tune")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     const auto cfg = sdrTownControlConfigLocked();
@@ -4189,7 +4389,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
   if (path == "/api/sdr-town/mode") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "mode")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     const auto cfg = sdrTownControlConfigLocked();
@@ -4204,7 +4404,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
   if (path == "/api/sdr-town/rf-gain") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "rf-gain")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     const auto cfg = sdrTownControlConfigLocked();
@@ -4219,7 +4419,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
   if (path == "/api/sdr-town/volume") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "tune")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     const auto cfg = sdrTownControlConfigLocked();
@@ -4234,7 +4434,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
   if (path == "/api/sdr-town/direct-sampling") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "tune")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     const auto cfg = sdrTownControlConfigLocked();
@@ -4249,7 +4449,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
   if (path == "/api/sdr-town/sdrplay") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "tune")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     const auto cfg = sdrTownControlConfigLocked();
@@ -4263,7 +4463,7 @@ void CaptureWebServer::handleClient(std::uintptr_t clientHandle) {
   if (path == "/api/sdr-town/p25-control") {
     std::string controlError;
     if (!sdrTownControlCommandAllowed(body, &controlError, "p25")) {
-      sendSdrResponse(client, 423, "Locked", "application/json", controlError, kCors);
+      sendControlDenied(client, controlError);
       return;
     }
     const auto cfg = sdrTownControlConfigLocked();

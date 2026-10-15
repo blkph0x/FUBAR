@@ -25,6 +25,7 @@ def main():
     parser.add_argument('--duration', type=int, default=45)
     parser.add_argument('--dll', type=Path, help='Packaged DLL to verify (default: beside Town)')
     parser.add_argument('--automatic-pairing', action='store_true', help='Use default protected local pairing without supplied tokens')
+    parser.add_argument('--browser', action='store_true', help='Exercise production browser safe controls before closing test sessions')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     town, web = port(), port()
@@ -37,6 +38,7 @@ def main():
     base = f'http://127.0.0.1:{web}'
     startup = subprocess.STARTUPINFO()
     startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    result={'ok':False,'url':base,'cases':[],'browser':False,'functionalChecksPassed':False,'exitCodes':{}}
     with (args.output/'town.log').open('w') as tlog, (args.output/'fubar.log').open('w') as flog:
         auth=[] if args.automatic_pairing else ['--control-token',token]
         t = subprocess.Popen([str(args.town.resolve()), '--allow-multiple', '--no-remote-diagnostics',
@@ -45,6 +47,9 @@ def main():
         f = subprocess.Popen([str(args.fubar.resolve()), '--cli', '--web-only', '--port', str(web),
             '--sdr-town-port', str(town), '--allow-radio-control', '--duration', str(args.duration)],
             env=env, stdout=flog, stderr=flog, startupinfo=startup)
+        result['processIds']={'town':t.pid,'fubar':f.pid}
+        result['controlPort']=town
+        print('PAIR_PROCESSES='+json.dumps(result['processIds']),flush=True)
         def request(path, body=None):
             req=urllib.request.Request(base+'/api/sdr-town/'+path,
                 data=None if body is None else json.dumps(body).encode(), headers={'Content-Type':'application/json'})
@@ -71,13 +76,14 @@ def main():
                 assert e.code==401,e.code
             assert request('sstv-file?path=C%3A%2FUsers%2Fprivate.png')[0]==404
             assert request('satcom-arm',{'action':'disarm'})[0]==423
-            status,lease=request('control-session',{'action':'take','clientId':'qa_owner','name':'Pair QA'})
+            status,lease=request('control-session',{'action':'take','name':'Pair QA'})
             assert status==200 and lease['session']['canControl'],lease
             def post(path,body):
-                return request(path,dict(body,clientId='qa_owner'))
+                time.sleep(.26)  # Respect the production per-ticket command budget.
+                return request(path,dict(body,admissionTicket=lease['admissionTicket']))
             for body in ({'outputDirectory':'C:/private'}, {'config':{'sstvSaveDir':'C:/private'}}, {'force':True}):
                 assert post('sstv-live',body)[0]==400
-            cases=[]
+            cases=result['cases']
             for workflow in ('satcom','inmarsat','aircraft'):
                 for suffix in ('a','b'):
                     name='pair_'+suffix
@@ -99,9 +105,9 @@ def main():
                     name='pair_'+suffix
                     views=('map','messages') if workflow=='inmarsat' else ('status',)
                     for view in views:
-                        code,result=request(workflow+'-sessions?sessionId='+name+'&view='+view)
-                        assert code==200 and result['ok'],(workflow,view,result)
-                        assert 'outputDirectory' not in json.dumps(result)
+                        code,view_result=request(workflow+'-sessions?sessionId='+name+'&view='+view)
+                        assert code==200 and view_result['ok'],(workflow,view,view_result)
+                        assert 'outputDirectory' not in json.dumps(view_result)
                         cases.append(workflow+'/'+name+'/'+view)
                 assert not request(workflow+'-sessions?sessionId=missing&view=status')[1]['ok']
             sat=request('satcom-status')[1]['satcom']
@@ -143,16 +149,35 @@ def main():
             assert not any(d.get('streaming') for d in applied['devices']), 'Dry-run opened RF'
             assert post('tune',{'frequencyMHz':145.8,'squelchDb':-200})[0]==400
             assert post('satcom-control',{'action':'stop'})[1]['ok']
+            if args.browser:
+                assert post('control-session',{'action':'release'})[1]['ok']
+                browser=subprocess.run(['node',str(Path(__file__).with_name('test_web_browser.cjs')),
+                    base+'/',str(args.output.resolve()),'pair_a','paired'],env=env,stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,text=True,timeout=65)
+                (args.output/'browser.log').write_text(browser.stdout,encoding='utf-8')
+                print(browser.stdout,flush=True)
+                assert browser.returncode==0,('Browser checks failed',browser.returncode)
+                result['browser']=True
+                status,lease=request('control-session',{'action':'take','name':'Pair QA cleanup'})
+                assert status==200 and lease['session']['canControl'],lease
+                final_state=request('status')[1]['state']
+                assert not any(d.get('streaming') for d in final_state['devices']), 'Browser opened RF'
             for workflow in ('satcom','inmarsat','aircraft'):
                 for suffix in ('a','b'):
                     assert post(workflow+'-sessions',{'sessionId':'pair_'+suffix,'action':'close'})[1]['ok']
-            (args.output/'result.json').write_text(json.dumps({'ok':True,'url':base,'cases':cases},indent=2))
+            result['functionalChecksPassed']=True
+            (args.output/'result.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
+            print('FUNCTIONAL_CHECKS_PASS; waiting for normal process exits',flush=True)
             # Keep available for browser checks, then let both apps shut down normally.
             f.wait(timeout=args.duration+15); t.wait(timeout=20)
             assert f.returncode==0 and t.returncode==0,(f.returncode,t.returncode)
+            result['ok']=True
         finally:
             for process in (f,t):
                 if process.poll() is None: process.kill(); process.wait(timeout=15)
+            result['exitCodes']={'town':t.returncode,'fubar':f.returncode}
+            (args.output/'result.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
+            print('EXIT_CODES='+json.dumps(result['exitCodes']),flush=True)
             for name in ('town','fubar'):
                 content=(args.output/(name+'.log')).read_text(errors='replace').replace(token,'[test-token]')
                 (args.output/(name+'.sanitized.log')).write_text(content,encoding='utf-8')

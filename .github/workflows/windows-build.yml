@@ -9,6 +9,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Configure
         run: cmake -S . -B build -A x64
@@ -22,22 +25,35 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/test_web_ui.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake -S scripts/control-tests -B build/control-tests -A x64 "-DFUBAR_BUILD=$pwd/build"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build/control-tests --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir build/control-tests -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Prepare browser tests
+        run: npm install --prefix build/browser-deps --no-save --package-lock=false playwright@1.62.1
 
       - name: Assemble portable package
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          NODE_PATH: ${{ github.workspace }}/build/browser-deps/node_modules
         run: |
           & ./scripts/stage_town_pair.ps1 -Package package
           Copy-Item build/Release/FUBAR.exe package/FUBAR.exe
           python scripts/test_bridge_payload.py --fubar package/FUBAR.exe --dll package/SdrTownControl.dll
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python scripts/test_town_pair.py --town town/SDR_Town.exe --fubar package/FUBAR.exe --dll package/SdrTownControl.dll --output build/pair-test
+          python scripts/test_control_loopback.py --fubar package/FUBAR.exe --dll package/SdrTownControl.dll --browser --output build/hardening-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/test_town_pair.py --town town/SDR_Town.exe --fubar package/FUBAR.exe --dll package/SdrTownControl.dll --duration 180 --browser --output build/pair-test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/test_town_pair.py --town town/SDR_Town.exe --fubar package/FUBAR.exe --dll package/SdrTownControl.dll --output build/pair-auto --automatic-pairing
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item README.md package/README.md
           Copy-Item CHANGELOG.md package/CHANGELOG.md
+          Copy-Item docs package/docs -Recurse
           Compress-Archive -Path package/* -DestinationPath FUBAR-Windows-x64.zip -Force
 
       - name: Upload build artifact
@@ -54,4 +70,12 @@ jobs:
           path: |
             build/pair-test/*.sanitized.log
             build/pair-test/result.json
+            build/pair-test/browser.log
+            build/pair-test/*.png
+            build/pair-auto/*.sanitized.log
+            build/pair-auto/result.json
+            build/hardening-test/*.sanitized.log
+            build/hardening-test/result.json
+            build/hardening-test/browser.log
+            build/hardening-test/*.png
           if-no-files-found: ignore

@@ -68,6 +68,7 @@ class CaptureWebServer {
                                 std::string* contentType);
 
  private:
+  friend struct ControlAdmissionTest;
   void acceptLoop();
   void handleClient(std::uintptr_t client);
   void streamLive(std::uintptr_t client, bool wavContainer);
@@ -77,15 +78,23 @@ class CaptureWebServer {
   std::string capturesJson() const;
   std::string sdrTownControlConfigJson() const;
   SdrTownBridgeConfig sdrTownControlConfigLocked() const;
-  std::string sdrTownControlSessionActionJson(const std::string& body);
+  std::string sdrTownControlSessionActionJson(const std::string& body, int* status = nullptr,
+                                               std::uint64_t nowTick = 0);
   bool sdrTownControlCommandAllowed(const std::string& body, std::string* response,
                                     const char* capability = nullptr);
 
+  struct ControlBudget {
+    std::uint64_t updated = 0;
+    double tokens = 0;
+    bool consume(std::uint64_t now, double capacity, double perSecond);
+  };
   struct SdrControlQueueEntry {
+    // This is a server-issued bearer ticket, never a caller-chosen identity.
     std::string clientId;
     std::string name;
     std::uint64_t requestedTick = 0;
     std::uint64_t lastSeenTick = 0;
+    ControlBudget budget;
   };
 
   void sdrTownControlPromoteLocked(std::uint64_t nowTick);
@@ -113,6 +122,9 @@ class CaptureWebServer {
   std::uint64_t sdrControlRevision_ = 0;
   int sdrControlExtensionsUsed_ = 0;
   std::deque<SdrControlQueueEntry> sdrControlQueue_;
+  ControlBudget sdrControlAdmissionBudget_;
+  ControlBudget sdrControlObserverBudget_;
+  ControlBudget sdrControlActiveBudget_;
   std::wstring liveStatus_ = L"Idle";
   std::string nowPlaying_;
   std::string p25Status_;

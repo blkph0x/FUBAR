@@ -127,6 +127,44 @@ std::string disabledJson(const char* reason) {
 
 bool okResult(int result) { return result == 0; }
 
+std::string boundedResponse(const char* response, std::size_t capacity, int result,
+                            const std::string& token, std::string* error) {
+  const auto length = strnlen(response, capacity);
+  const auto parsed = nlohmann::json::parse(response, response + length, nullptr, false);
+  const bool full = length >= capacity - 1;
+  const bool validOk = parsed.is_object() && parsed.contains("ok") && parsed["ok"].is_boolean();
+  if (!full && validOk && okResult(result) && parsed["ok"].get<bool>())
+    return std::string(response, length);
+  std::string code = full ? "response_too_large" : !validOk ? "invalid_response" : "native_request_failed";
+  std::string reason = full ? "SDR Town response exceeded the transport limit. Use paged views."
+                           : !validOk ? "SDR Town returned an incomplete or invalid response."
+                                                : "SDR Town request failed.";
+  std::string nativeErrorCode;
+  if (!full && parsed.is_object()) {
+    for (const char* key : {"errorCode", "code"}) {
+      if (!parsed.contains(key) || !parsed[key].is_string()) continue;
+      const auto nativeCode = parsed[key].get<std::string>();
+      if (nativeCode == "snapshot_expired" || nativeCode == "response_too_large" ||
+          nativeCode == "response_truncated" || nativeCode == "incomplete_response" || nativeCode == "invalid_json") {
+        code = nativeCode;
+        if (std::string_view(key) == "errorCode") nativeErrorCode = nativeCode;
+        break;
+      }
+    }
+    // Preserve short actionable native refusals, never a body or an embedded object.
+    if (parsed.contains("error") && parsed["error"].is_string()) {
+      const auto message = parsed["error"].get<std::string>();
+      if (!message.empty() && message.size() <= 256 && message.find_first_of("{}\r\n") == std::string::npos &&
+          message.find(":\\") == std::string::npos && message.find(":/") == std::string::npos &&
+          message.find("\\\\") == std::string::npos && (token.empty() || message.find(token) == std::string::npos)) reason = message;
+    }
+  }
+  if (error) *error = reason;
+  nlohmann::json failure{{"ok", false}, {"code", code}, {"error", reason}};
+  if (!nativeErrorCode.empty()) failure["errorCode"] = nativeErrorCode;
+  return failure.dump();
+}
+
 void bridgeTrace(const char* operation, const std::string& method = {},
                  const std::string& path = {}, int result = 0, std::size_t bytes = 0) {
   // Diagnostics identify bridge failures without copying tokens, request bodies, or
@@ -216,9 +254,8 @@ std::string SdrTownBridge::status(const SdrTownBridgeConfig& config) {
   char response[32768]{};
   auto cfg = controlConfig(config);
   const int result = reinterpret_cast<StatusFn>(fnStatus_)(&cfg, response, sizeof(response));
-  bridgeTrace("status", "GET", "/v1/status", result, std::strlen(response));
-  if (!okResult(result) && response[0] == '\0') return disabledJson("SDR Town status request failed");
-  return response;
+  bridgeTrace("status", "GET", "/v1/status", result, strnlen(response, sizeof(response)));
+  return boundedResponse(response, sizeof(response), result, config.token, nullptr);
 }
 
 std::string SdrTownBridge::tune(const SdrTownBridgeConfig& config,
@@ -269,23 +306,19 @@ std::string SdrTownBridge::tune(const SdrTownBridgeConfig& config,
   req.p25AutoFollow = 0;
   req.force = 1;
   const int result = reinterpret_cast<TuneFn>(fnTune_)(&cfg, &req, response, sizeof(response));
-  if (!okResult(result) && error) *error = response[0] ? response : "SDR Town tune failed";
-  if (okResult(result) && std::isfinite(volume)) {
+  std::string failure;
+  const auto validated = boundedResponse(response, sizeof(response), result, config.token, &failure);
+  if (!failure.empty()) { if (error) *error = failure; return validated; }
+  if (std::isfinite(volume)) {
     char volumeResponse[32768]{};
     const int volumeResult =
         fnSetVolume_
             ? reinterpret_cast<SetVolumeFn>(fnSetVolume_)(&cfg, volume, volumeResponse,
                                                           sizeof(volumeResponse))
             : -4;
-    if (!okResult(volumeResult)) {
-      if (error) {
-        *error = volumeResponse[0] ? volumeResponse : "SDR Town volume control is unavailable";
-      }
-      return volumeResponse[0] ? volumeResponse : disabledJson("SDR Town volume control is unavailable");
-    }
-    if (volumeResponse[0]) return volumeResponse;
+    return boundedResponse(volumeResponse, sizeof(volumeResponse), volumeResult, config.token, error);
   }
-  return response;
+  return validated;
 }
 
 std::string SdrTownBridge::setMode(const SdrTownBridgeConfig& config,
@@ -317,8 +350,7 @@ std::string SdrTownBridge::setMode(const SdrTownBridgeConfig& config,
   auto cfg = controlConfig(config);
   const int result =
       reinterpret_cast<SetModeFn>(fnSetMode_)(&cfg, mode.c_str(), response, sizeof(response));
-  if (!okResult(result) && error) *error = response[0] ? response : "SDR Town mode change failed";
-  return response;
+  return boundedResponse(response, sizeof(response), result, config.token, error);
 }
 
 std::string SdrTownBridge::setRfGain(const SdrTownBridgeConfig& config,
@@ -333,8 +365,7 @@ std::string SdrTownBridge::setRfGain(const SdrTownBridgeConfig& config,
   auto cfg = controlConfig(config);
   const int result =
       reinterpret_cast<SetRfGainFn>(fnSetRfGain_)(&cfg, rfGainDb, response, sizeof(response));
-  if (!okResult(result) && error) *error = response[0] ? response : "SDR Town RF gain failed";
-  return response;
+  return boundedResponse(response, sizeof(response), result, config.token, error);
 }
 
 std::string SdrTownBridge::setVolume(const SdrTownBridgeConfig& config,
@@ -357,8 +388,7 @@ std::string SdrTownBridge::setVolume(const SdrTownBridgeConfig& config,
   auto cfg = controlConfig(config);
   const int result =
       reinterpret_cast<SetVolumeFn>(fnSetVolume_)(&cfg, volume, response, sizeof(response));
-  if (!okResult(result) && error) *error = response[0] ? response : "SDR Town volume failed";
-  return response;
+  return boundedResponse(response, sizeof(response), result, config.token, error);
 }
 
 std::string SdrTownBridge::setDirectSampling(const SdrTownBridgeConfig& config,
@@ -382,10 +412,7 @@ std::string SdrTownBridge::setDirectSampling(const SdrTownBridgeConfig& config,
   const int result =
       reinterpret_cast<SetDirectSamplingFn>(fnSetDirectSampling_)(&cfg, mode, response,
                                                                   sizeof(response));
-  if (!okResult(result) && error) {
-    *error = response[0] ? response : "SDR Town direct sampling failed";
-  }
-  return response;
+  return boundedResponse(response, sizeof(response), result, config.token, error);
 }
 
 std::string SdrTownBridge::setSdrplay(const SdrTownBridgeConfig& config,
@@ -431,10 +458,19 @@ std::string SdrTownBridge::request(const SdrTownBridgeConfig& config,
   // Health/status polling and the dedicated radio/P25 calls retain their budget.
   cfg.timeoutMs = 10000;
   const auto started = std::chrono::steady_clock::now();
+  std::string nativeBody = bodyJson.empty() ? "{}" : bodyJson;
+  if (method == "POST") {
+    auto parsedBody = nlohmann::json::parse(nativeBody, nullptr, false);
+    if (parsedBody.is_object()) {
+      parsedBody.erase("admissionTicket");
+      parsedBody.erase("clientId");
+      nativeBody = parsedBody.dump();
+    }
+  }
   const int result = reinterpret_cast<RequestFn>(fnRequest_)(
-      &cfg, method.c_str(), path.c_str(), bodyJson.empty() ? "{}" : bodyJson.c_str(), response.data(),
+      &cfg, method.c_str(), path.c_str(), nativeBody.c_str(), response.data(),
       response.size());
-  bridgeTrace("request", method, path, result, std::strlen(response.data()));
+  bridgeTrace("request", method, path.substr(0, path.find('?')), result, strnlen(response.data(), response.size()));
   const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - started).count();
   if (elapsed >= 2500 || !okResult(result)) {
@@ -442,8 +478,7 @@ std::string SdrTownBridge::request(const SdrTownBridgeConfig& config,
     std::fprintf(stderr, "SDR Town workspace request: %s elapsedMs=%lld result=%d\n",
                  method.c_str(), static_cast<long long>(elapsed), result);
   }
-  if (!okResult(result) && error) *error = response[0] ? response.data() : "SDR Town request failed";
-  return response.data();
+  return boundedResponse(response.data(), response.size(), result, config.token, error);
 }
 
 std::string SdrTownBridge::startP25Control(const SdrTownBridgeConfig& config,
@@ -467,8 +502,7 @@ std::string SdrTownBridge::startP25Control(const SdrTownBridgeConfig& config,
   auto cfg = controlConfig(config);
   const int result = reinterpret_cast<StartP25Fn>(fnStartP25Control_)(
       &cfg, frequencyHz, autoFollow ? 1 : 0, response, sizeof(response));
-  if (!okResult(result) && error) *error = response[0] ? response : "SDR Town P25 control failed";
-  return response;
+  return boundedResponse(response, sizeof(response), result, config.token, error);
 }
 
 namespace {
